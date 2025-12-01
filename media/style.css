@@ -1,0 +1,204 @@
+body {
+    margin: 0;
+    padding: 0;
+    background-color: #1e1e1e;
+    color: #cccccc;
+    font-family: sans-serif;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.app-container {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+.main-area {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-width: 200px;
+    /* Prevent collapse */
+}
+
+.sidebar {
+    width: 250px;
+    background-color: #252526;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    overflow-y: auto;
+    min-width: 150px;
+}
+
+.resizer {
+    width: 5px;
+    background-color: #333;
+    cursor: col-resize;
+    transition: background-color 0.2s;
+}
+
+.resizer:hover,
+.resizer.resizing {
+    background-color: #007acc;
+}
+
+.sidebar h3 {
+    margin-top: 0;
+    margin-bottom: 10px;
+    font-size: 14px;
+    text-transform: uppercase;
+    color: #888;
+}
+
+#shapeList {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+#shapeList li {
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 3px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-left: 3px solid transparent;
+    margin-bottom: 2px;
+}
+
+#shapeList li:hover {
+    background-color: #2a2d2e;
+}
+
+#shapeList li.active {
+    background-color: #37373d;
+}
+
+.delete-btn {
+    color: #888;
+    cursor: pointer;
+    font-weight: bold;
+    margin-left: 10px;
+}
+
+.delete-btn:hover {
+    color: #ff5555;
+}
+
+.toolbar {
+    height: 40px;
+    background-color: #252526;
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    border-bottom: 1px solid #333;
+    flex-shrink: 0;
+}
+
+button {
+    background-color: #3c3c3c;
+    color: white;
+    border: none;
+    padding: 5px 10px;
+    margin-right: 10px;
+    cursor: pointer;
+    border-radius: 2px;
+}
+
+button:hover {
+    background-color: #505050;
+}
+
+button.active {
+    background-color: #007acc;
+}
+
+.separator {
+    color: #555;
+    margin: 0 10px;
+}
+
+.canvas-container {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    /* Changed from auto to hidden for custom pan/zoom */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background-color: #1e1e1e;
+}
+
+canvas {
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    /* cursor is handled in JS */
+}
+
+/* Modal Styles */
+.modal {
+    display: none;
+    position: fixed;
+    z-index: 1000;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.5);
+    justify-content: center;
+    align-items: center;
+}
+
+.modal-content {
+    background-color: #252526;
+    padding: 20px;
+    border: 1px solid #454545;
+    border-radius: 5px;
+    width: 300px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+}
+
+.modal-content h3 {
+    margin-top: 0;
+}
+
+.modal-content input {
+    width: 100%;
+    padding: 8px;
+    margin: 10px 0;
+    background-color: #3c3c3c;
+    border: 1px solid #555;
+    color: white;
+    box-sizing: border-box;
+}
+
+.modal-buttons {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 15px;
+}
+
+#recentLabels {
+    margin-top: 10px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 5px;
+}
+
+.label-chip {
+    background-color: #3c3c3c;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    cursor: pointer;
+    border: 1px solid #555;
+}
+
+.label-chip:hover {
+    background-color: #505050;
+}

@@ -1,0 +1,41 @@
+{
+  "name": "labelme-vscode",
+  "displayName": "LabelMe for VS Code",
+  "description": "LabelMe annotation tool for VS Code",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "labelme-vscode.openLabelMe",
+        "title": "LabelMe: Open Editor"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "command": "labelme-vscode.openLabelMe",
+          "when": "resourceExtname =~ /\\.(jpg|jpeg|png|bmp)$/i",
+          "group": "navigation"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.80.0",
+    "@types/node": "18.x",
+    "typescript": "^5.1.3"
+  }
+}
