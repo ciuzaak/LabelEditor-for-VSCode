@@ -17,6 +17,7 @@ let currentPoints = [];
 let isDrawing = false;
 let scale = 1;
 let selectedShapeIndex = -1;
+let editingShapeIndex = -1;
 let recentLabels = ["object", "person", "car", "background"];
 
 // Dirty State
@@ -240,15 +241,23 @@ canvas.addEventListener('mousemove', (e) => {
 canvas.addEventListener('wheel', (e) => {
     if (e.ctrlKey) { // Zoom on Ctrl+Wheel
         e.preventDefault();
+        const container = document.querySelector('.canvas-container');
         const zoomIntensity = 0.1;
 
-        // Calculate mouse position relative to image before zoom
-        const rect = canvas.getBoundingClientRect();
-        const mx = e.clientX - rect.left;
-        const my = e.clientY - rect.top;
-        const ix = mx / zoomLevel;
-        const iy = my / zoomLevel;
+        // Get mouse position relative to container
+        const rect = container.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
 
+        // Get scroll position
+        const scrollLeft = container.scrollLeft;
+        const scrollTop = container.scrollTop;
+
+        // Calculate mouse position in image coordinates before zoom
+        const imageX = (scrollLeft + mouseX) / zoomLevel;
+        const imageY = (scrollTop + mouseY) / zoomLevel;
+
+        // Apply zoom
         if (e.deltaY < 0) {
             zoomLevel += zoomIntensity;
         } else {
@@ -256,7 +265,16 @@ canvas.addEventListener('wheel', (e) => {
             if (zoomLevel < 0.1) zoomLevel = 0.1;
         }
 
+        // Update canvas size
         updateCanvasSize();
+
+        // Calculate new scroll position to keep the same image point under the mouse
+        const newScrollLeft = imageX * zoomLevel - mouseX;
+        const newScrollTop = imageY * zoomLevel - mouseY;
+
+        // Apply new scroll position
+        container.scrollLeft = newScrollLeft;
+        container.scrollTop = newScrollTop;
     }
 });
 
@@ -318,10 +336,19 @@ function finishPolygon() {
 }
 
 // --- Modal Logic ---
-function showLabelModal() {
+
+function showLabelModal(editIndex = -1) {
+    editingShapeIndex = editIndex;
     labelModal.style.display = 'flex';
-    labelInput.value = '';
+
+    if (editIndex !== -1) {
+        labelInput.value = shapes[editIndex].label;
+    } else {
+        labelInput.value = '';
+    }
+
     labelInput.focus();
+    labelInput.select();
     renderRecentLabels();
 }
 
@@ -352,17 +379,23 @@ function confirmLabel() {
         if (recentLabels.length > 10) recentLabels.pop();
     }
 
-    shapes.push({
-        label: label,
-        points: currentPoints,
-        group_id: null,
-        shape_type: "polygon",
-        shape_type: "polygon",
-        flags: {},
-        visible: true
-    });
+    if (editingShapeIndex !== -1) {
+        // Editing existing shape
+        shapes[editingShapeIndex].label = label;
+        editingShapeIndex = -1;
+    } else {
+        // Creating new shape
+        shapes.push({
+            label: label,
+            points: currentPoints,
+            group_id: null,
+            shape_type: "polygon",
+            flags: {},
+            visible: true
+        });
+        currentPoints = [];
+    }
 
-    currentPoints = [];
     hideLabelModal();
     markDirty();
     renderShapeList();
@@ -372,6 +405,7 @@ function confirmLabel() {
 modalOkBtn.onclick = confirmLabel;
 modalCancelBtn.onclick = () => {
     hideLabelModal();
+    editingShapeIndex = -1;
     currentPoints = [];
     draw();
 };
@@ -380,6 +414,7 @@ labelInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') confirmLabel();
     if (e.key === 'Escape') {
         hideLabelModal();
+        editingShapeIndex = -1;
         currentPoints = [];
         draw();
     }
@@ -419,6 +454,14 @@ function renderShapeList() {
             draw();
         };
 
+        const editBtn = document.createElement('span');
+        editBtn.className = 'edit-btn';
+        editBtn.innerHTML = '&#9998;'; // Pencil icon
+        editBtn.onclick = (e) => {
+            e.stopPropagation();
+            showLabelModal(index);
+        };
+
         const delBtn = document.createElement('span');
         delBtn.className = 'delete-btn';
         delBtn.textContent = '×';
@@ -428,6 +471,7 @@ function renderShapeList() {
         };
 
         li.appendChild(visibleBtn);
+        li.appendChild(editBtn);
         li.appendChild(delBtn);
         shapeList.appendChild(li);
     });
@@ -467,12 +511,12 @@ function draw(mouseEvent) {
             fillColor = 'rgba(255, 255, 0, 0.4)';
         }
 
-        drawPolygon(shape.points, strokeColor, fillColor);
+        drawPolygon(shape.points, strokeColor, fillColor, false);
     });
 
     // Draw current polygon
     if (isDrawing) {
-        drawPolygon(currentPoints, 'rgba(255, 0, 0, 0.8)', 'rgba(255, 0, 0, 0.1)');
+        drawPolygon(currentPoints, 'rgba(255, 0, 0, 0.8)', 'rgba(255, 0, 0, 0.1)', true);
 
         // Draw line to mouse cursor
         if (mouseEvent) {
@@ -491,7 +535,7 @@ function draw(mouseEvent) {
     }
 }
 
-function drawPolygon(points, strokeColor, fillColor) {
+function drawPolygon(points, strokeColor, fillColor, showVertices = false) {
     if (points.length === 0) return;
 
     ctx.beginPath();
@@ -512,14 +556,16 @@ function drawPolygon(points, strokeColor, fillColor) {
         ctx.fill();
     }
 
-    // Draw vertices
-    ctx.fillStyle = strokeColor;
-    const pointRadius = 3;
-    points.forEach(p => {
-        ctx.beginPath();
-        ctx.arc(p[0] * zoomLevel, p[1] * zoomLevel, pointRadius, 0, 2 * Math.PI);
-        ctx.fill();
-    });
+    // Draw vertices only if requested (for current drawing)
+    if (showVertices) {
+        ctx.fillStyle = strokeColor;
+        const pointRadius = 3;
+        points.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p[0] * zoomLevel, p[1] * zoomLevel, pointRadius, 0, 2 * Math.PI);
+            ctx.fill();
+        });
+    }
 }
 
 function save() {
