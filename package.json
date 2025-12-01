@@ -4,6 +4,7 @@
   "description": "Image annotation tool with polygon drawing for machine learning datasets",
   "version": "0.1.0",
   "publisher": "ciuzaak",
+  "icon": "icon.png",
   "author": {
     "name": "Ciuzaak Wong"
   },
