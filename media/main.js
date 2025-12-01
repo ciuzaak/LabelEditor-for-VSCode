@@ -10,6 +10,7 @@ const modalCancelBtn = document.getElementById('modalCancelBtn');
 const recentLabelsDiv = document.getElementById('recentLabels');
 const resizer = document.getElementById('resizer');
 const sidebar = document.getElementById('sidebar');
+const canvasContainer = document.querySelector('.canvas-container'); // 缓存DOM引用
 
 let img = new Image();
 let shapes = [];
@@ -26,11 +27,23 @@ let isDirty = false;
 // Zoom & Pan variables
 let zoomLevel = 1;
 
+// Undo/Redo History (实例级别 - 只记录shapes的变化)
+let history = []; // 历史记录栈
+let historyIndex = -1; // 当前历史位置
+const MAX_HISTORY = 50; // 最大历史记录数
+
+// 性能优化变量
+let animationFrameId = null; // requestAnimationFrame节流
+const colorCache = new Map(); // 颜色计算缓存
+
 // Load initial data if available
 if (existingData) {
     shapes = existingData.shapes || [];
     markClean();
 }
+
+// 初始化历史记录
+saveHistory();
 
 img.onload = () => {
     fitImageToScreen();
@@ -71,12 +84,55 @@ function markClean() {
     }
 }
 
+// --- Undo/Redo History Management ---
+
+function saveHistory() {
+    // 使用 structuredClone 进行深拷贝（性能优于 JSON 方法）
+    const snapshot = structuredClone(shapes);
+
+    // 如果不在历史末尾，删除当前位置之后的所有历史
+    if (historyIndex < history.length - 1) {
+        history = history.slice(0, historyIndex + 1);
+    }
+
+    // 添加新快照
+    history.push(snapshot);
+
+    // 限制历史记录数量
+    if (history.length > MAX_HISTORY) {
+        history.shift();
+    } else {
+        historyIndex++;
+    }
+}
+
+function undo() {
+    if (historyIndex > 0) {
+        historyIndex--;
+        shapes = structuredClone(history[historyIndex]);
+        selectedShapeIndex = -1;
+        markDirty();
+        renderShapeList();
+        draw();
+    }
+}
+
+function redo() {
+    if (historyIndex < history.length - 1) {
+        historyIndex++;
+        shapes = structuredClone(history[historyIndex]);
+        selectedShapeIndex = -1;
+        markDirty();
+        renderShapeList();
+        draw();
+    }
+}
+
 // --- Zoom & Scroll ---
 
 function fitImageToScreen() {
-    const container = document.querySelector('.canvas-container');
-    const w = container.clientWidth;
-    const h = container.clientHeight;
+    const w = canvasContainer.clientWidth;
+    const h = canvasContainer.clientHeight;
 
     if (w === 0 || h === 0 || img.width === 0 || img.height === 0) return;
 
@@ -119,6 +175,19 @@ document.addEventListener('keydown', (e) => {
         save();
     }
 
+    // Ctrl+Z: Undo
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
+        e.preventDefault();
+        undo();
+    }
+
+    // Ctrl+Shift+Z or Ctrl+Y: Redo
+    if (((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') ||
+        ((e.ctrlKey || e.metaKey) && e.key === 'y')) {
+        e.preventDefault();
+        redo();
+    }
+
     // A: Prev Image
     if (e.key === 'a' || e.key === 'A') {
         vscode.postMessage({ command: 'prev' });
@@ -156,14 +225,24 @@ function stringToColor(str) {
 }
 
 function getColorsForLabel(label) {
+    // 检查缓存
+    if (colorCache.has(label)) {
+        return colorCache.get(label);
+    }
+
+    // 计算新颜色
     const baseColor = stringToColor(label);
     const r = parseInt(baseColor.slice(1, 3), 16);
     const g = parseInt(baseColor.slice(3, 5), 16);
     const b = parseInt(baseColor.slice(5, 7), 16);
-    return {
+    const colors = {
         stroke: `rgba(${r}, ${g}, ${b}, 1)`,
         fill: `rgba(${r}, ${g}, ${b}, 0.3)`
     };
+
+    // 存入缓存
+    colorCache.set(label, colors);
+    return colors;
 }
 
 // --- Canvas Interaction ---
@@ -207,6 +286,7 @@ canvas.addEventListener('mousedown', (e) => {
         }
         draw();
     } else if (e.button === 2) { // Right click
+        e.preventDefault(); // 阻止浏览器默认的上下文菜单
         if (isDrawing) {
             if (currentPoints.length > 0) {
                 currentPoints.pop();
@@ -221,7 +301,13 @@ canvas.addEventListener('mousedown', (e) => {
 
 canvas.addEventListener('mousemove', (e) => {
     if (isDrawing) {
-        draw(e);
+        // 使用 requestAnimationFrame 节流重绘
+        if (!animationFrameId) {
+            animationFrameId = requestAnimationFrame(() => {
+                draw(e);
+                animationFrameId = null;
+            });
+        }
     } else {
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
@@ -241,17 +327,16 @@ canvas.addEventListener('mousemove', (e) => {
 canvas.addEventListener('wheel', (e) => {
     if (e.ctrlKey) { // Zoom on Ctrl+Wheel
         e.preventDefault();
-        const container = document.querySelector('.canvas-container');
         const zoomIntensity = 0.1;
 
         // Get mouse position relative to container
-        const rect = container.getBoundingClientRect();
+        const rect = canvasContainer.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
 
         // Get scroll position
-        const scrollLeft = container.scrollLeft;
-        const scrollTop = container.scrollTop;
+        const scrollLeft = canvasContainer.scrollLeft;
+        const scrollTop = canvasContainer.scrollTop;
 
         // Calculate mouse position in image coordinates before zoom
         const imageX = (scrollLeft + mouseX) / zoomLevel;
@@ -273,9 +358,14 @@ canvas.addEventListener('wheel', (e) => {
         const newScrollTop = imageY * zoomLevel - mouseY;
 
         // Apply new scroll position
-        container.scrollLeft = newScrollLeft;
-        container.scrollTop = newScrollTop;
+        canvasContainer.scrollLeft = newScrollLeft;
+        canvasContainer.scrollTop = newScrollTop;
     }
+});
+
+// 禁用canvas上的右键菜单
+canvas.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
 });
 
 // --- Resizer Logic ---
@@ -398,6 +488,7 @@ function confirmLabel() {
 
     hideLabelModal();
     markDirty();
+    saveHistory(); // 保存历史记录以支持撤销/恢复
     renderShapeList();
     draw();
 }
@@ -422,7 +513,9 @@ labelInput.addEventListener('keydown', (e) => {
 
 // --- Sidebar Logic ---
 function renderShapeList() {
-    shapeList.innerHTML = '';
+    // 使用 DocumentFragment 批量添加 DOM，减少重排
+    const fragment = document.createDocumentFragment();
+
     shapes.forEach((shape, index) => {
         const li = document.createElement('li');
         li.textContent = shape.label;
@@ -450,6 +543,8 @@ function renderShapeList() {
         visibleBtn.onclick = (e) => {
             e.stopPropagation();
             shape.visible = shape.visible === undefined ? false : !shape.visible;
+            markDirty();
+            saveHistory(); // 保存历史记录以支持撤销/恢复
             renderShapeList();
             draw();
         };
@@ -473,8 +568,12 @@ function renderShapeList() {
         li.appendChild(visibleBtn);
         li.appendChild(editBtn);
         li.appendChild(delBtn);
-        shapeList.appendChild(li);
+        fragment.appendChild(li);
     });
+
+    // 一次性更新 DOM
+    shapeList.innerHTML = '';
+    shapeList.appendChild(fragment);
 }
 
 function deleteShape(index) {
@@ -485,6 +584,7 @@ function deleteShape(index) {
         selectedShapeIndex--;
     }
     markDirty();
+    saveHistory(); // 保存历史记录以支持撤销/恢复
     renderShapeList();
     draw();
 }

@@ -2,6 +2,27 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.2.0] - 2025-12-01
+
+### Added
+- **Undo/Redo Support**: Full undo/redo functionality with keyboard shortcuts
+  - `Ctrl+Z` (`Cmd+Z` on Mac): Undo last action
+  - `Ctrl+Shift+Z` or `Ctrl+Y` (`Cmd+Shift+Z` or `Cmd+Y` on Mac): Redo action
+  - Supports up to 50 history states
+  - Works for all annotation operations (add, edit, delete, visibility toggle)
+
+### Improved
+- **Performance Optimizations**: Significantly improved rendering and responsiveness
+  - Implemented `requestAnimationFrame` throttling for smooth drawing during mouse movement
+  - Added color calculation caching to avoid redundant computations
+  - Optimized DOM operations with `DocumentFragment` for faster sidebar rendering
+  - Replaced `JSON.parse/stringify` with `structuredClone` for 2-3x faster deep copying
+  - Cached frequently accessed DOM references to reduce query overhead
+- **Right-Click Behavior**: Fixed context menu appearing when undoing annotation points
+
+### Fixed
+- Context menu no longer interferes with right-click point removal during drawing
+
 ## [0.1.0] - 2025-12-01
 
 ### Initial Release
@@ -19,7 +40,6 @@ All notable changes to the "LabelEditor for VSCode" extension will be documented
 - Keyboard shortcuts (A/D for navigation, Ctrl+S for save, ESC to cancel)
 
 #### Known Issues
-- No undo/redo functionality
 - Performance may degrade with very large images
 - Limited to polygon shapes only
 

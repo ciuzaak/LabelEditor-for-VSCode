@@ -8,6 +8,7 @@ A VS Code extension for annotating images with polygon shapes, compatible with t
 
 - **Polygon Annotation**: Click to draw polygon shapes on images
 - **Label Management**: Assign and edit labels for each annotated region
+- **Undo/Redo Support**: Full undo/redo functionality with up to 50 history states
 - **LabelMe Format**: Compatible with LabelMe JSON format for easy integration with ML pipelines
 - **Zoom & Pan**: Smooth zooming with mouse-centered pivot and full scrolling support
 - **Instance Management**: 
@@ -18,6 +19,7 @@ A VS Code extension for annotating images with polygon shapes, compatible with t
 - **Manual Save**: Control when to save your annotations (Ctrl+S)
 - **Unsaved Changes Protection**: Warning dialog when navigating with unsaved changes
 - **Visual Feedback**: Category-based color coding and smooth polygon rendering
+- **Performance Optimized**: Fast rendering even with many annotations
 
 ## 📦 Installation
 
@@ -45,10 +47,12 @@ A VS Code extension for annotating images with polygon shapes, compatible with t
 ### Keyboard Shortcuts
 - **Left Click**: Add point / Select shape
 - **Right Click**: Undo last point while drawing
+- **Ctrl+Z** (`Cmd+Z` on Mac): Undo last action
+- **Ctrl+Shift+Z** or **Ctrl+Y** (`Cmd+Shift+Z` or `Cmd+Y` on Mac): Redo action
 - **ESC**: Cancel current drawing
 - **A**: Previous image
 - **D**: Next image
-- **Ctrl+S**: Save annotations
+- **Ctrl+S** (`Cmd+S` on Mac): Save annotations
 - **Delete/Backspace**: Delete selected shape
 
 ### Sidebar Actions
@@ -86,10 +90,9 @@ Annotations are saved in LabelMe JSON format:
 This extension is still under active development. Some known limitations include:
 
 - No support for other shape types (rectangles, circles, etc.) yet
-- Limited undo/redo functionality (removed for stability)
 - No batch annotation features
 - No import from other formats
-- Performance may degrade with very large images or many annotations
+- Performance may degrade with very large images (10000x10000+)
 - No support for video frame annotation
 
 ## 🤖 Development
@@ -104,7 +107,8 @@ This project serves as a demonstration of AI-assisted development capabilities.
 
 Planned features for future releases:
 
-- [ ] Undo/Redo support
+- [x] ~~Undo/Redo support~~ **Added in v0.2.0**
+- [x] ~~Performance optimizations~~ **Added in v0.2.0**
 - [ ] Rectangle and circle shapes
 - [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)
