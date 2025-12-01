@@ -1,27 +1,51 @@
 {
-  "name": "labelme-vscode",
-  "displayName": "LabelMe for VS Code",
-  "description": "LabelMe annotation tool for VS Code",
-  "version": "0.0.1",
+  "name": "labeleditor-vscode",
+  "displayName": "LabelEditor for VSCode",
+  "description": "Image annotation tool with polygon drawing for machine learning datasets",
+  "version": "0.1.0",
+  "publisher": "ciuzaak",
+  "author": {
+    "name": "Ciuzaak Wong"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ciuzaak/LabelEditor-for-VSCode.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ciuzaak/LabelEditor-for-VSCode/issues"
+  },
+  "homepage": "https://github.com/ciuzaak/LabelEditor-for-VSCode#readme",
+  "keywords": [
+    "annotation",
+    "labeling",
+    "machine learning",
+    "computer vision",
+    "polygon",
+    "image",
+    "labelme"
+  ],
   "engines": {
     "vscode": "^1.80.0"
   },
   "categories": [
-    "Other"
+    "Other",
+    "Data Science",
+    "Visualization"
   ],
   "activationEvents": [],
   "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
-        "command": "labelme-vscode.openLabelMe",
-        "title": "LabelMe: Open Editor"
+        "command": "labeleditor-vscode.openEditor",
+        "title": "LabelEditor: Open Image Annotator"
       }
     ],
     "menus": {
       "explorer/context": [
         {
-          "command": "labelme-vscode.openLabelMe",
+          "command": "labeleditor-vscode.openEditor",
           "when": "resourceExtname =~ /\\.(jpg|jpeg|png|bmp)$/i",
           "group": "navigation"
         }
@@ -31,7 +55,8 @@
   "scripts": {
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./"
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package"
   },
   "devDependencies": {
     "@types/vscode": "^1.80.0",
