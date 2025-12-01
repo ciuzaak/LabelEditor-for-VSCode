@@ -98,7 +98,7 @@ This extension is still under active development. Some known limitations include
 ## 🤖 Development
 
 **All code in this extension was written by AI:**
-- **Gemini 2.0 Flash Thinking Experimental**
+- **Gemini 3.0 pro**
 - **Claude Sonnet 4.5**
 
 This project serves as a demonstration of AI-assisted development capabilities.
