@@ -22,7 +22,6 @@ body {
     flex-direction: column;
     overflow: hidden;
     min-width: 200px;
-    /* Prevent collapse */
 }
 
 .sidebar {
@@ -84,11 +83,29 @@ body {
     color: #888;
     cursor: pointer;
     font-weight: bold;
-    margin-left: 10px;
+    margin-left: 5px;
 }
 
 .delete-btn:hover {
     color: #ff5555;
+}
+
+.visible-btn {
+    color: #888;
+    cursor: pointer;
+    font-weight: bold;
+    margin-left: auto;
+    margin-right: 0;
+    font-size: 14px;
+}
+
+.visible-btn:hover {
+    color: #cccccc;
+}
+
+.visible-btn.hidden-shape {
+    color: #555;
+    text-decoration: line-through;
 }
 
 .toolbar {
@@ -115,29 +132,31 @@ button:hover {
     background-color: #505050;
 }
 
-button.active {
-    background-color: #007acc;
+button:disabled {
+    background-color: #2a2a2a;
+    color: #666;
+    cursor: default;
 }
 
-.separator {
-    color: #555;
-    margin: 0 10px;
+button.dirty {
+    background-color: #007acc;
+    color: white;
 }
 
 .canvas-container {
     flex: 1;
     position: relative;
-    overflow: hidden;
-    /* Changed from auto to hidden for custom pan/zoom */
+    overflow: auto;
+    background-color: #1e1e1e;
     display: flex;
     justify-content: center;
     align-items: center;
-    background-color: #1e1e1e;
 }
 
 canvas {
     box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
-    /* cursor is handled in JS */
+    display: block;
+    flex-shrink: 0;
 }
 
 /* Modal Styles */

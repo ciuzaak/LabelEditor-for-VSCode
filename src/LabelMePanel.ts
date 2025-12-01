@@ -10,6 +10,8 @@ export class LabelMePanel {
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
     private _imageUri: vscode.Uri;
+    private _isDirty = false;
+    private _pendingNavigation: number | undefined;
 
     public static createOrShow(extensionUri: vscode.Uri, imageUri: vscode.Uri) {
         const column = vscode.window.activeTextEditor
@@ -49,7 +51,6 @@ export class LabelMePanel {
         this._update();
 
         // Listen for when the panel is disposed
-        // This happens when the user closes the panel or when the panel is closed programmatically
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
         // Update the content based on view changes
@@ -70,6 +71,9 @@ export class LabelMePanel {
                     case 'save':
                         this.saveAnnotation(message.data);
                         return;
+                    case 'dirty':
+                        this._isDirty = message.value;
+                        return;
                     case 'alert':
                         vscode.window.showErrorMessage(message.text);
                         return;
@@ -87,6 +91,31 @@ export class LabelMePanel {
     }
 
     private async navigateImage(direction: number) {
+        if (this._isDirty) {
+            const selection = await vscode.window.showWarningMessage(
+                'You have unsaved changes. Do you want to save them?',
+                'Save',
+                'Discard',
+                'Cancel'
+            );
+
+            if (selection === 'Cancel' || selection === undefined) {
+                return;
+            }
+
+            if (selection === 'Save') {
+                this._pendingNavigation = direction;
+                this._panel.webview.postMessage({ command: 'requestSave' });
+                return;
+            }
+
+            this._isDirty = false;
+        }
+
+        this._performNavigation(direction);
+    }
+
+    private async _performNavigation(direction: number) {
         const dirPath = path.dirname(this._imageUri.fsPath);
         const files = await fs.promises.readdir(dirPath);
         const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp'];
@@ -172,10 +201,8 @@ export class LabelMePanel {
                 <div class="app-container">
                     <div class="main-area">
                         <div class="toolbar">
-                            <button id="prevBtn">&lt; Prev</button>
-                            <button id="nextBtn">Next &gt;</button>
-                            <span class="separator">|</span>
-                            <button id="polygonBtn" class="active">Polygon</button>
+                            <span id="fileName" style="margin-right: auto; font-weight: bold;">${path.basename(this._imageUri.fsPath)}</span>
+                            <button id="saveBtn" disabled>Save (Ctrl+S)</button>
                             <span id="status"></span>
                         </div>
                         <div class="canvas-container">
@@ -232,8 +259,13 @@ export class LabelMePanel {
             if (err) {
                 vscode.window.showErrorMessage('Failed to save annotation: ' + err.message);
             } else {
-                // Silent save for auto-save
-                // vscode.window.showInformationMessage('Annotation saved to ' + path.basename(jsonPath));
+                vscode.window.showInformationMessage('Annotation saved to ' + path.basename(jsonPath));
+                this._isDirty = false;
+
+                if (this._pendingNavigation !== undefined) {
+                    this._performNavigation(this._pendingNavigation);
+                    this._pendingNavigation = undefined;
+                }
             }
         });
     }

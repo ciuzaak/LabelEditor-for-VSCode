@@ -8,8 +8,6 @@ const labelInput = document.getElementById('labelInput');
 const modalOkBtn = document.getElementById('modalOkBtn');
 const modalCancelBtn = document.getElementById('modalCancelBtn');
 const recentLabelsDiv = document.getElementById('recentLabels');
-const prevBtn = document.getElementById('prevBtn');
-const nextBtn = document.getElementById('nextBtn');
 const resizer = document.getElementById('resizer');
 const sidebar = document.getElementById('sidebar');
 
@@ -21,24 +19,22 @@ let scale = 1;
 let selectedShapeIndex = -1;
 let recentLabels = ["object", "person", "car", "background"];
 
+// Dirty State
+let isDirty = false;
+
 // Zoom & Pan variables
 let zoomLevel = 1;
-let panX = 0;
-let panY = 0;
-let isPanning = false;
-let startPanX = 0;
-let startPanY = 0;
 
 // Load initial data if available
 if (existingData) {
     shapes = existingData.shapes || [];
+    markClean();
 }
 
 img.onload = () => {
-    resizeCanvas();
     fitImageToScreen();
-    renderShapeList();
     draw();
+    renderShapeList();
 };
 
 img.onerror = () => {
@@ -48,12 +44,33 @@ img.onerror = () => {
 
 img.src = imageUrl;
 
-function resizeCanvas() {
-    const container = document.querySelector('.canvas-container');
-    canvas.width = container.clientWidth;
-    canvas.height = container.clientHeight;
-    draw();
+// --- Dirty State Management ---
+
+function markDirty() {
+    if (!isDirty) {
+        isDirty = true;
+        vscode.postMessage({ command: 'dirty', value: true });
+    }
+    if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.classList.add('dirty');
+        saveBtn.textContent = 'Save (Ctrl+S) *';
+    }
 }
+
+function markClean() {
+    if (isDirty) {
+        isDirty = false;
+        vscode.postMessage({ command: 'dirty', value: false });
+    }
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.classList.remove('dirty');
+        saveBtn.textContent = 'Save (Ctrl+S)';
+    }
+}
+
+// --- Zoom & Scroll ---
 
 function fitImageToScreen() {
     const container = document.querySelector('.canvas-container');
@@ -67,26 +84,67 @@ function fitImageToScreen() {
 
     zoomLevel = Math.min(scaleX, scaleY) * 0.9; // 90% fit
 
-    // Center it
-    const scaledW = img.width * zoomLevel;
-    const scaledH = img.height * zoomLevel;
-
-    panX = (w - scaledW) / 2;
-    panY = (h - scaledH) / 2;
+    updateCanvasSize();
 }
 
-window.addEventListener('resize', resizeCanvas);
+function updateCanvasSize() {
+    canvas.width = img.width * zoomLevel;
+    canvas.height = img.height * zoomLevel;
+    draw();
+}
 
-// Navigation
-prevBtn.addEventListener('click', () => {
-    vscode.postMessage({ command: 'prev' });
+window.addEventListener('resize', () => {
+    // Optional: re-fit on resize? Or just keep zoom?
 });
 
-nextBtn.addEventListener('click', () => {
-    vscode.postMessage({ command: 'next' });
+window.addEventListener('message', event => {
+    const message = event.data;
+    switch (message.command) {
+        case 'requestSave':
+            save();
+            break;
+    }
 });
 
-// Color Generation
+// --- Shortcuts ---
+
+document.addEventListener('keydown', (e) => {
+    // Ignore shortcuts if modal is open (except Enter/Esc handled in input)
+    if (labelModal.style.display === 'flex') return;
+
+    // Ctrl+S: Save
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        save();
+    }
+
+    // A: Prev Image
+    if (e.key === 'a' || e.key === 'A') {
+        vscode.postMessage({ command: 'prev' });
+    }
+
+    // D: Next Image
+    if (e.key === 'd' || e.key === 'D') {
+        vscode.postMessage({ command: 'next' });
+    }
+
+    // Delete/Backspace: Delete selected shape
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeIndex !== -1) {
+        deleteShape(selectedShapeIndex);
+    }
+
+    // ESC: Cancel drawing
+    if (e.key === 'Escape') {
+        if (isDrawing) {
+            isDrawing = false;
+            currentPoints = [];
+            draw();
+        }
+    }
+});
+
+
+// --- Color Generation ---
 function stringToColor(str) {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -98,32 +156,27 @@ function stringToColor(str) {
 
 function getColorsForLabel(label) {
     const baseColor = stringToColor(label);
-    // Convert hex to rgba
     const r = parseInt(baseColor.slice(1, 3), 16);
     const g = parseInt(baseColor.slice(3, 5), 16);
     const b = parseInt(baseColor.slice(5, 7), 16);
-
     return {
         stroke: `rgba(${r}, ${g}, ${b}, 1)`,
         fill: `rgba(${r}, ${g}, ${b}, 0.3)`
     };
 }
 
-// Canvas Interaction
-canvas.addEventListener('mousedown', (e) => {
-    if (e.button === 1 || (e.button === 0 && e.altKey)) { // Middle click or Alt+Left click for Pan
-        isPanning = true;
-        startPanX = e.clientX - panX;
-        startPanY = e.clientY - panY;
-        canvas.style.cursor = 'grabbing';
-        return;
-    }
+// --- Canvas Interaction ---
 
+canvas.addEventListener('mousedown', (e) => {
     if (e.button === 0) { // Left click
         const rect = canvas.getBoundingClientRect();
-        // Transform mouse coordinates to image coordinates
-        const x = (e.clientX - rect.left - panX) / zoomLevel;
-        const y = (e.clientY - rect.top - panY) / zoomLevel;
+        // Mouse pos relative to canvas
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+
+        // Convert to image coordinates
+        const x = mx / zoomLevel;
+        const y = my / zoomLevel;
 
         if (!isDrawing) {
             const clickedShapeIndex = findShapeIndexAt(x, y);
@@ -144,6 +197,7 @@ canvas.addEventListener('mousedown', (e) => {
             const dx = x - firstPoint[0];
             const dy = y - firstPoint[1];
 
+            // Check close distance (scaled)
             if (currentPoints.length > 2 && (dx * dx + dy * dy) < (100 / (zoomLevel * zoomLevel))) {
                 finishPolygon();
             } else {
@@ -165,62 +219,48 @@ canvas.addEventListener('mousedown', (e) => {
 });
 
 canvas.addEventListener('mousemove', (e) => {
-    if (isPanning) {
-        panX = e.clientX - startPanX;
-        panY = e.clientY - startPanY;
-        draw();
-        return;
-    }
-
     if (isDrawing) {
         draw(e);
     } else {
         const rect = canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left - panX) / zoomLevel;
-        const y = (e.clientY - rect.top - panY) / zoomLevel;
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const x = mx / zoomLevel;
+        const y = my / zoomLevel;
 
         const hoveredIndex = findShapeIndexAt(x, y);
         if (hoveredIndex !== -1) {
             canvas.style.cursor = 'pointer';
         } else {
-            canvas.style.cursor = e.altKey ? 'grab' : 'crosshair';
+            canvas.style.cursor = 'crosshair';
         }
     }
 });
 
-canvas.addEventListener('mouseup', () => {
-    if (isPanning) {
-        isPanning = false;
-        canvas.style.cursor = 'grab';
-    }
-});
-
 canvas.addEventListener('wheel', (e) => {
-    e.preventDefault();
-    const zoomIntensity = 0.1;
-    const rect = canvas.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left;
-    const mouseY = e.clientY - rect.top;
+    if (e.ctrlKey) { // Zoom on Ctrl+Wheel
+        e.preventDefault();
+        const zoomIntensity = 0.1;
 
-    // Get mouse pos in image coords before zoom
-    const imageX = (mouseX - panX) / zoomLevel;
-    const imageY = (mouseY - panY) / zoomLevel;
+        // Calculate mouse position relative to image before zoom
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const ix = mx / zoomLevel;
+        const iy = my / zoomLevel;
 
-    if (e.deltaY < 0) {
-        zoomLevel += zoomIntensity;
-    } else {
-        zoomLevel -= zoomIntensity;
-        if (zoomLevel < 0.1) zoomLevel = 0.1;
+        if (e.deltaY < 0) {
+            zoomLevel += zoomIntensity;
+        } else {
+            zoomLevel -= zoomIntensity;
+            if (zoomLevel < 0.1) zoomLevel = 0.1;
+        }
+
+        updateCanvasSize();
     }
-
-    // Adjust pan so mouse stays on same image point
-    panX = mouseX - imageX * zoomLevel;
-    panY = mouseY - imageY * zoomLevel;
-
-    draw();
 });
 
-// Resizer Logic
+// --- Resizer Logic ---
 let isResizing = false;
 
 if (resizer) {
@@ -237,7 +277,6 @@ document.addEventListener('mousemove', (e) => {
     const newSidebarWidth = containerWidth - e.clientX;
     if (newSidebarWidth > 150 && newSidebarWidth < 600) {
         sidebar.style.width = newSidebarWidth + 'px';
-        resizeCanvas();
     }
 });
 
@@ -278,7 +317,7 @@ function finishPolygon() {
     showLabelModal();
 }
 
-// Modal Logic
+// --- Modal Logic ---
 function showLabelModal() {
     labelModal.style.display = 'flex';
     labelInput.value = '';
@@ -318,14 +357,16 @@ function confirmLabel() {
         points: currentPoints,
         group_id: null,
         shape_type: "polygon",
-        flags: {}
+        shape_type: "polygon",
+        flags: {},
+        visible: true
     });
 
     currentPoints = [];
     hideLabelModal();
+    markDirty();
     renderShapeList();
     draw();
-    save();
 }
 
 modalOkBtn.onclick = confirmLabel;
@@ -344,14 +385,13 @@ labelInput.addEventListener('keydown', (e) => {
     }
 });
 
-// Sidebar Logic
+// --- Sidebar Logic ---
 function renderShapeList() {
     shapeList.innerHTML = '';
     shapes.forEach((shape, index) => {
         const li = document.createElement('li');
         li.textContent = shape.label;
 
-        // Color indicator
         const colors = getColorsForLabel(shape.label);
         li.style.borderLeftColor = colors.stroke;
 
@@ -365,6 +405,20 @@ function renderShapeList() {
             draw();
         };
 
+        const visibleBtn = document.createElement('span');
+        visibleBtn.className = 'visible-btn';
+        visibleBtn.innerHTML = shape.visible === false ? '&#128065;' : '&#128065;'; // Eye icon
+        if (shape.visible === false) {
+            visibleBtn.classList.add('hidden-shape');
+            visibleBtn.style.opacity = '0.5';
+        }
+        visibleBtn.onclick = (e) => {
+            e.stopPropagation();
+            shape.visible = shape.visible === undefined ? false : !shape.visible;
+            renderShapeList();
+            draw();
+        };
+
         const delBtn = document.createElement('span');
         delBtn.className = 'delete-btn';
         delBtn.textContent = '×';
@@ -373,6 +427,7 @@ function renderShapeList() {
             deleteShape(index);
         };
 
+        li.appendChild(visibleBtn);
         li.appendChild(delBtn);
         shapeList.appendChild(li);
     });
@@ -385,24 +440,22 @@ function deleteShape(index) {
     } else if (selectedShapeIndex > index) {
         selectedShapeIndex--;
     }
+    markDirty();
     renderShapeList();
     draw();
-    save();
 }
 
-// Drawing Logic
+// --- Drawing Logic ---
 function draw(mouseEvent) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    ctx.save();
-    ctx.translate(panX, panY);
-    ctx.scale(zoomLevel, zoomLevel);
-
-    // Draw image
-    ctx.drawImage(img, 0, 0);
+    // Draw image scaled
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
     // Draw existing shapes
     shapes.forEach((shape, index) => {
+        if (shape.visible === false) return; // Skip hidden shapes
+
         const isSelected = index === selectedShapeIndex;
         const colors = getColorsForLabel(shape.label);
 
@@ -424,37 +477,34 @@ function draw(mouseEvent) {
         // Draw line to mouse cursor
         if (mouseEvent) {
             const rect = canvas.getBoundingClientRect();
-            // Need to inverse transform mouse coords
-            const mx = (mouseEvent.clientX - rect.left - panX) / zoomLevel;
-            const my = (mouseEvent.clientY - rect.top - panY) / zoomLevel;
+            const mx = (mouseEvent.clientX - rect.left);
+            const my = (mouseEvent.clientY - rect.top);
             const lastPoint = currentPoints[currentPoints.length - 1];
 
             ctx.beginPath();
-            ctx.moveTo(lastPoint[0], lastPoint[1]);
+            ctx.moveTo(lastPoint[0] * zoomLevel, lastPoint[1] * zoomLevel);
             ctx.lineTo(mx, my);
             ctx.strokeStyle = 'red';
-            ctx.lineWidth = 2 / zoomLevel; // Keep line width constant on screen
+            ctx.lineWidth = 2;
             ctx.stroke();
         }
     }
-
-    ctx.restore();
 }
 
 function drawPolygon(points, strokeColor, fillColor) {
     if (points.length === 0) return;
 
     ctx.beginPath();
-    ctx.moveTo(points[0][0], points[0][1]);
+    ctx.moveTo(points[0][0] * zoomLevel, points[0][1] * zoomLevel);
     for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i][0], points[i][1]);
+        ctx.lineTo(points[i][0] * zoomLevel, points[i][1] * zoomLevel);
     }
     if (!isDrawing || points !== currentPoints) {
         ctx.closePath();
     }
 
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 2 / zoomLevel; // Keep line width constant on screen
+    ctx.lineWidth = 2;
     ctx.stroke();
 
     if (!isDrawing || points !== currentPoints) {
@@ -464,15 +514,17 @@ function drawPolygon(points, strokeColor, fillColor) {
 
     // Draw vertices
     ctx.fillStyle = strokeColor;
-    const pointRadius = 3 / zoomLevel; // Keep point size constant
+    const pointRadius = 3;
     points.forEach(p => {
         ctx.beginPath();
-        ctx.arc(p[0], p[1], pointRadius, 0, 2 * Math.PI);
+        ctx.arc(p[0] * zoomLevel, p[1] * zoomLevel, pointRadius, 0, 2 * Math.PI);
         ctx.fill();
     });
 }
 
 function save() {
+    if (!isDirty) return;
+
     vscode.postMessage({
         command: 'save',
         data: {
@@ -481,6 +533,7 @@ function save() {
             imageWidth: img.width
         }
     });
+    markClean();
 }
 
 if (saveBtn) {
