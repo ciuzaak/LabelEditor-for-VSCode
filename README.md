@@ -10,7 +10,8 @@ A VS Code extension for annotating images with polygon shapes, compatible with t
 - **Polygon Annotation**: Click to draw polygon shapes on images
 - **View/Polygon Mode**: Toggle between viewing and editing modes
   - 👁️ **View Mode**: Browse and select without accidental edits (default)
-  - ✏️ **Polygon Mode**: Create new annotations
+  - ✏️ **Polygon Mode**: Create new polygon annotations
+  - ▭ **Rectangle Mode**: Create new rectangle annotations
 - **Label Management**: Assign and edit labels for each annotated region
 - **Undo/Redo Support**: Full undo/redo functionality with up to 50 history states
 
@@ -92,7 +93,7 @@ A VS Code extension for annotating images with polygon shapes, compatible with t
 
 ### Toolbar Buttons
 - **◀ / ▶**: Navigate between images
-- **👁️ / ✏️**: Switch between View and Polygon modes
+- **👁️ / ⬠ / ▭**: Switch between View, Polygon, and Rectangle modes
 - **⚙️**: Open advanced rendering options
 - **Save**: Save current annotations
 
@@ -135,8 +136,8 @@ This extension is still under active development. Some known limitations include
 ## 🤖 Development
 
 **All code in this extension was written by AI:**
-- **Gemini 2.0 Flash Experimental**
-- **Claude Sonnet 3.5**
+- **Gemini 3 Pro**
+- **Claude Sonnet 4.5**
 
 This project serves as a demonstration of AI-assisted development capabilities.
 
@@ -150,7 +151,8 @@ Planned features for future releases:
 - [x] ~~Custom label colors~~ **Added in v0.3.0**
 - [x] ~~View/Edit mode toggle~~ **Added in v0.3.0**
 - [x] ~~Advanced rendering options~~ **Added in v0.3.0**
-- [ ] Rectangle and circle shapes
+- [x] ~~Rectangle shapes~~ **Added in v0.4.0**
+- [ ] Circle shapes
 - [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)
 - [ ] Image pre-processing (brightness, contrast)

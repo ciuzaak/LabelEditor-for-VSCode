@@ -2,6 +2,23 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.4.0] - 2025-12-02
+
+### Added
+- **Rectangle Mode**: New drawing mode for rectangle annotations
+  - Click-to-start, move-to-size, click-to-finish interaction
+  - Automatically saves as 2 points (LabelMe format)
+  - Dedicated toolbar button (▭) and keyboard shortcut (R)
+- **View Mode Refinements**:
+  - Default cursor (arrow) in View Mode
+  - Default browser context menu allowed in View Mode
+- **UI Polish**:
+  - Updated icons for Polygon (⬠) and Rectangle (▭) modes
+
+### Improved
+- **Performance**: Optimized slider state saving (debounce) to reduce IPC traffic
+- **Bug Fixes**: Fixed rendering issue where only 3 sides of a rectangle were visible during drawing
+
 ## [0.3.0] - 2025-12-02
 
 ### Added

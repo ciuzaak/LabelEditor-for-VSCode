@@ -20,6 +20,7 @@ const nextImageBtn = document.getElementById('nextImageBtn');
 // Mode toggle buttons
 const viewModeBtn = document.getElementById('viewModeBtn');
 const polygonModeBtn = document.getElementById('polygonModeBtn');
+const rectangleModeBtn = document.getElementById('rectangleModeBtn');
 
 
 // Labels management elements
@@ -123,13 +124,17 @@ if (vscodeState && vscodeState.currentMode) {
 }
 
 // 初始化模式按钮UI
-if (viewModeBtn && polygonModeBtn) {
+if (viewModeBtn && polygonModeBtn && rectangleModeBtn) {
+    viewModeBtn.classList.remove('active');
+    polygonModeBtn.classList.remove('active');
+    rectangleModeBtn.classList.remove('active');
+
     if (currentMode === 'view') {
         viewModeBtn.classList.add('active');
-        polygonModeBtn.classList.remove('active');
-    } else {
-        viewModeBtn.classList.remove('active');
+    } else if (currentMode === 'polygon') {
         polygonModeBtn.classList.add('active');
+    } else if (currentMode === 'rectangle') {
+        rectangleModeBtn.classList.add('active');
     }
 }
 
@@ -342,6 +347,21 @@ document.addEventListener('keydown', (e) => {
             draw();
         }
     }
+
+    // V: View Mode
+    if (e.key === 'v' || e.key === 'V') {
+        setMode('view');
+    }
+
+    // P: Polygon Mode
+    if (e.key === 'p' || e.key === 'P') {
+        setMode('polygon');
+    }
+
+    // R: Rectangle Mode
+    if (e.key === 'r' || e.key === 'R') {
+        setMode('rectangle');
+    }
 });
 
 
@@ -408,32 +428,48 @@ canvas.addEventListener('mousedown', (e) => {
                 renderShapeList();
             }
 
-            // 只在polygon模式下允许开始绘制
+            // 只在polygon或rectangle模式下允许开始绘制
             if (currentMode === 'polygon') {
                 isDrawing = true;
                 currentPoints = [[x, y]];
+            } else if (currentMode === 'rectangle') {
+                isDrawing = true;
+                // Rectangle starts with one point, we'll expand it in mousemove
+                currentPoints = [[x, y]];
             }
         } else {
-            const firstPoint = currentPoints[0];
-            const dx = x - firstPoint[0];
-            const dy = y - firstPoint[1];
+            if (currentMode === 'polygon') {
+                const firstPoint = currentPoints[0];
+                const dx = x - firstPoint[0];
+                const dy = y - firstPoint[1];
 
-            // Check close distance (scaled)
-            if (currentPoints.length > 2 && (dx * dx + dy * dy) < (100 / (zoomLevel * zoomLevel))) {
+                // Check close distance (scaled)
+                if (currentPoints.length > 2 && (dx * dx + dy * dy) < (100 / (zoomLevel * zoomLevel))) {
+                    finishPolygon();
+                } else {
+                    currentPoints.push([x, y]);
+                }
+            } else if (currentMode === 'rectangle') {
+                // Second click to finish rectangle
                 finishPolygon();
-            } else {
-                currentPoints.push([x, y]);
             }
         }
         draw();
     } else if (e.button === 2) { // Right click
         e.preventDefault(); // 阻止浏览器默认的上下文菜单
         if (isDrawing) {
-            if (currentPoints.length > 0) {
-                currentPoints.pop();
-                if (currentPoints.length === 0) {
-                    isDrawing = false;
+            if (currentMode === 'polygon') {
+                if (currentPoints.length > 0) {
+                    currentPoints.pop();
+                    if (currentPoints.length === 0) {
+                        isDrawing = false;
+                    }
+                    draw();
                 }
+            } else if (currentMode === 'rectangle') {
+                // Cancel rectangle drawing
+                isDrawing = false;
+                currentPoints = [];
                 draw();
             }
         }
@@ -442,9 +478,19 @@ canvas.addEventListener('mousedown', (e) => {
 
 canvas.addEventListener('mousemove', (e) => {
     if (isDrawing) {
-        // 使用 requestAnimationFrame 节流重绘
         if (!animationFrameId) {
             animationFrameId = requestAnimationFrame(() => {
+                if (currentMode === 'rectangle' && currentPoints.length > 0) {
+                    const rect = canvas.getBoundingClientRect();
+                    const mx = e.clientX - rect.left;
+                    const my = e.clientY - rect.top;
+                    const x = mx / zoomLevel;
+                    const y = my / zoomLevel;
+
+                    const startPoint = currentPoints[0];
+                    // Update currentPoints to be just the start and end points (2 points)
+                    currentPoints = [startPoint, [x, y]];
+                }
                 draw(e);
                 animationFrameId = null;
             });
@@ -460,7 +506,8 @@ canvas.addEventListener('mousemove', (e) => {
         if (hoveredIndex !== -1) {
             canvas.style.cursor = 'pointer';
         } else {
-            canvas.style.cursor = 'crosshair';
+            // View mode uses default cursor, others use crosshair
+            canvas.style.cursor = currentMode === 'view' ? 'default' : 'crosshair';
         }
     }
 });
@@ -504,9 +551,11 @@ canvas.addEventListener('wheel', (e) => {
     }
 });
 
-// 禁用canvas上的右键菜单
+// 禁用canvas上的右键菜单 (except in View Mode)
 canvas.addEventListener('contextmenu', (e) => {
-    e.preventDefault();
+    if (currentMode !== 'view') {
+        e.preventDefault();
+    }
 });
 
 // --- Resizer Logic ---
@@ -540,7 +589,11 @@ document.addEventListener('mouseup', () => {
 
 function findShapeIndexAt(x, y) {
     for (let i = shapes.length - 1; i >= 0; i--) {
-        if (isPointInPolygon([x, y], shapes[i].points)) {
+        let points = shapes[i].points;
+        if (shapes[i].shape_type === 'rectangle') {
+            points = getRectPoints(points);
+        }
+        if (isPointInPolygon([x, y], points)) {
             return i;
         }
     }
@@ -620,7 +673,7 @@ function confirmLabel() {
             label: label,
             points: currentPoints,
             group_id: null,
-            shape_type: "polygon",
+            shape_type: currentMode === 'rectangle' ? "rectangle" : "polygon",
             flags: {},
             visible: true
         });
@@ -841,7 +894,7 @@ function toggleLabelVisibility(label) {
     labelVisibilityState.set(label, newVisibility);
 
     // 保存到vscode state
-    saveLabelVisibilityState();
+    saveState();
 
     renderLabelsList();
     renderShapeList();
@@ -897,23 +950,16 @@ function hideColorPicker() {
     currentEditingLabel = null;
 }
 
-// 保存customColors到vscode state
-function saveCustomColorsState() {
+// Unified state saving
+function saveState() {
     const customColorsObj = Object.fromEntries(customColors);
     const labelVisibilityObj = Object.fromEntries(labelVisibilityState);
     vscode.setState({
         customColors: customColorsObj,
-        labelVisibility: labelVisibilityObj
-    });
-}
-
-// 保存labelVisibilityState到vscode state
-function saveLabelVisibilityState() {
-    const customColorsObj = Object.fromEntries(customColors);
-    const labelVisibilityObj = Object.fromEntries(labelVisibilityState);
-    vscode.setState({
-        customColors: customColorsObj,
-        labelVisibility: labelVisibilityObj
+        labelVisibility: labelVisibilityObj,
+        borderWidth: borderWidth,
+        fillOpacity: fillOpacity,
+        currentMode: currentMode
     });
 }
 
@@ -938,7 +984,7 @@ function confirmColorPicker() {
     customColors.set(currentEditingLabel, color.toUpperCase());
 
     // 保存到vscode state以实现持久化
-    saveCustomColorsState();
+    saveState();
 
     // 清除颜色缓存以强制重新计算
     colorCache.delete(currentEditingLabel);
@@ -954,7 +1000,7 @@ function resetLabelColor(label) {
     customColors.delete(label);
 
     // 保存到vscode state
-    saveCustomColorsState();
+    saveState();
 
     colorCache.delete(label);
     renderLabelsList();
@@ -978,7 +1024,7 @@ function updateBorderWidth(value) {
     if (borderWidthValue) {
         borderWidthValue.textContent = borderWidth;
     }
-    saveAdvancedOptionsState();
+    // saveState(); // Removed: Don't save on every pixel of drag
     draw();
 }
 
@@ -990,7 +1036,7 @@ function updateFillOpacity(value) {
     }
     // 清除颜色缓存以使新透明度生效
     colorCache.clear();
-    saveAdvancedOptionsState();
+    // saveState(); // Removed: Don't save on every pixel of drag
     draw();
 }
 
@@ -1008,21 +1054,11 @@ function resetAdvancedOptions() {
         fillOpacityValue.textContent = Math.round(fillOpacity * 100);
     }
 
-    saveAdvancedOptionsState();
+    saveState();
     draw();
 }
 
-// 保存高级选项到vscode state
-function saveAdvancedOptionsState() {
-    const customColorsObj = Object.fromEntries(customColors);
-    const labelVisibilityObj = Object.fromEntries(labelVisibilityState);
-    vscode.setState({
-        customColors: customColorsObj,
-        labelVisibility: labelVisibilityObj,
-        borderWidth: borderWidth,
-        fillOpacity: fillOpacity
-    });
-}
+
 
 // --- Mode Switching ---
 
@@ -1031,30 +1067,26 @@ function setMode(mode) {
     currentMode = mode;
 
     // 保存到vscode state
-    const customColorsObj = Object.fromEntries(customColors);
-    const labelVisibilityObj = Object.fromEntries(labelVisibilityState);
-    vscode.setState({
-        customColors: customColorsObj,
-        labelVisibility: labelVisibilityObj,
-        borderWidth: borderWidth,
-        fillOpacity: fillOpacity,
-        currentMode: currentMode
-    });
+    saveState();
 
     // 更新按钮状态
-    if (viewModeBtn && polygonModeBtn) {
+    if (viewModeBtn && polygonModeBtn && rectangleModeBtn) {
+        viewModeBtn.classList.remove('active');
+        polygonModeBtn.classList.remove('active');
+        rectangleModeBtn.classList.remove('active');
+
         if (mode === 'view') {
             viewModeBtn.classList.add('active');
-            polygonModeBtn.classList.remove('active');
             // 如果正在绘制，取消绘制
             if (isDrawing) {
                 isDrawing = false;
                 currentPoints = [];
                 draw();
             }
-        } else {
-            viewModeBtn.classList.remove('active');
+        } else if (mode === 'polygon') {
             polygonModeBtn.classList.add('active');
+        } else if (mode === 'rectangle') {
+            rectangleModeBtn.classList.add('active');
         }
     }
 }
@@ -1082,15 +1114,24 @@ function draw(mouseEvent) {
             fillColor = 'rgba(255, 255, 0, 0.4)';
         }
 
-        drawPolygon(shape.points, strokeColor, fillColor, false);
+        let points = shape.points;
+        if (shape.shape_type === 'rectangle') {
+            points = getRectPoints(points);
+        }
+
+        drawPolygon(points, strokeColor, fillColor, false);
     });
 
     // Draw current polygon
     if (isDrawing) {
-        drawPolygon(currentPoints, 'rgba(255, 0, 0, 0.8)', 'rgba(255, 0, 0, 0.1)', true);
+        let points = currentPoints;
+        if (currentMode === 'rectangle' && points.length === 2) {
+            points = getRectPoints(points);
+        }
+        drawPolygon(points, 'rgba(255, 0, 0, 0.8)', 'rgba(255, 0, 0, 0.1)', true);
 
-        // Draw line to mouse cursor
-        if (mouseEvent) {
+        // Draw line to mouse cursor (only for polygon mode)
+        if (mouseEvent && currentMode === 'polygon') {
             const rect = canvas.getBoundingClientRect();
             const mx = (mouseEvent.clientX - rect.left);
             const my = (mouseEvent.clientY - rect.top);
@@ -1114,7 +1155,10 @@ function drawPolygon(points, strokeColor, fillColor, showVertices = false) {
     for (let i = 1; i < points.length; i++) {
         ctx.lineTo(points[i][0] * zoomLevel, points[i][1] * zoomLevel);
     }
-    if (!isDrawing || points !== currentPoints) {
+
+    // Close path if not drawing polygon (drawing rectangle should always be closed)
+    // Or if it is a finished shape
+    if (!isDrawing || points !== currentPoints || currentMode === 'rectangle') {
         ctx.closePath();
     }
 
@@ -1137,6 +1181,17 @@ function drawPolygon(points, strokeColor, fillColor, showVertices = false) {
             ctx.fill();
         });
     }
+}
+
+function getRectPoints(points) {
+    if (points.length !== 2) return points;
+    const [p1, p2] = points;
+    return [
+        p1,
+        [p2[0], p1[1]],
+        p2,
+        [p1[0], p2[1]]
+    ];
 }
 
 function save() {
@@ -1193,11 +1248,13 @@ if (advancedOptionsBtn) {
 // Border Width slider
 if (borderWidthSlider) {
     borderWidthSlider.oninput = (e) => updateBorderWidth(e.target.value);
+    borderWidthSlider.onchange = (e) => saveState(); // Save only on release
 }
 
 // Fill Opacity slider
 if (fillOpacitySlider) {
     fillOpacitySlider.oninput = (e) => updateFillOpacity(e.target.value);
+    fillOpacitySlider.onchange = (e) => saveState(); // Save only on release
 }
 
 // Reset Advanced Options button
@@ -1231,5 +1288,10 @@ if (viewModeBtn) {
 // Polygon Mode button
 if (polygonModeBtn) {
     polygonModeBtn.onclick = () => setMode('polygon');
+}
+
+// Rectangle Mode button
+if (rectangleModeBtn) {
+    rectangleModeBtn.onclick = () => setMode('rectangle');
 }
 

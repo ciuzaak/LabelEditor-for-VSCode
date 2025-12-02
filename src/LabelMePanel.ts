@@ -206,7 +206,8 @@ export class LabelMePanel {
                             <span id="fileName" style="margin-right: auto; font-weight: bold;">${path.basename(this._imageUri.fsPath)}</span>
                             <div class="mode-toggle-group">
                                 <button id="viewModeBtn" class="mode-btn active" title="View Mode (V)">👁️</button>
-                                <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)">✏️</button>
+                                <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)">⬠</button>
+                                <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)">▭</button>
                             </div>
                             <button id="saveBtn" disabled>Save (Ctrl+S)</button>
                             <span id="status"></span>
