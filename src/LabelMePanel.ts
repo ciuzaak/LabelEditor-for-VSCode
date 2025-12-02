@@ -142,6 +142,20 @@ export class LabelMePanel {
 
     public updateImage(imageUri: vscode.Uri) {
         this._imageUri = imageUri;
+
+        // Update localResourceRoots to include the new image directory
+        // This ensures images from different folders can be accessed
+        const newOptions = {
+            enableScripts: true,
+            localResourceRoots: [
+                vscode.Uri.joinPath(this._extensionUri, 'media'),
+                vscode.Uri.file(path.dirname(imageUri.fsPath))
+            ]
+        };
+
+        // Apply the updated options to the webview
+        (this._panel.webview as any).options = newOptions;
+
         this._update();
     }
 

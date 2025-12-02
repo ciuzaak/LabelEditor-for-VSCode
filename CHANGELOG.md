@@ -2,6 +2,17 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.4.1] - 2025-12-02
+
+### Fixed
+- **Cross-Folder Image Loading**: Fixed critical bug where opening images from different folders would fail with "Error loading image" unless the plugin interface was reopened
+  - Root cause: Webview `localResourceRoots` permissions were not updated when switching to images in different directories
+  - Solution: Now automatically updates webview permissions when loading images from new folders
+  - Impact: Users can now seamlessly browse and annotate images across multiple folders in a single session
+
+### Improved
+- **Zoom Default**: Adjusted initial zoom level from 90% to 98% for better screen utilization
+
 ## [0.4.0] - 2025-12-02
 
 ### Added

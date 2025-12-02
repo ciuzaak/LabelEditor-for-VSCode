@@ -275,7 +275,7 @@ function fitImageToScreen() {
     const scaleX = w / img.width;
     const scaleY = h / img.height;
 
-    zoomLevel = Math.min(scaleX, scaleY) * 0.9; // 90% fit
+    zoomLevel = Math.min(scaleX, scaleY) * 0.98; // 98% fit
 
     updateCanvasSize();
 }
