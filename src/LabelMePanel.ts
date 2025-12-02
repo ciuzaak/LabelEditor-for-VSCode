@@ -201,7 +201,13 @@ export class LabelMePanel {
                 <div class="app-container">
                     <div class="main-area">
                         <div class="toolbar">
+                            <button id="prevImageBtn" class="nav-btn" title="Previous Image (A)">◀</button>
+                            <button id="nextImageBtn" class="nav-btn" title="Next Image (D)">▶</button>
                             <span id="fileName" style="margin-right: auto; font-weight: bold;">${path.basename(this._imageUri.fsPath)}</span>
+                            <div class="mode-toggle-group">
+                                <button id="viewModeBtn" class="mode-btn active" title="View Mode (V)">👁️</button>
+                                <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)">✏️</button>
+                            </div>
                             <button id="saveBtn" disabled>Save (Ctrl+S)</button>
                             <span id="status"></span>
                         </div>
@@ -211,6 +217,24 @@ export class LabelMePanel {
                     </div>
                     <div id="resizer" class="resizer"></div>
                     <div class="sidebar" id="sidebar">
+                        <div class="labels-section">
+                            <div class="labels-header-row">
+                                <h3>Labels</h3>
+                                <button id="advancedOptionsBtn" class="advanced-options-btn" title="Advanced Options">⚙️</button>
+                            </div>
+                            <div id="advancedOptionsDropdown" class="advanced-options-dropdown" style="display: none;">
+                                <div class="slider-control">
+                                    <label>Border Width: <span id="borderWidthValue">2</span>px</label>
+                                    <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
+                                </div>
+                                <div class="slider-control">
+                                    <label>Fill Opacity: <span id="fillOpacityValue">30</span>%</label>
+                                    <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
+                                </div>
+                                <button id="resetAdvancedBtn" class="reset-advanced-btn">Reset</button>
+                            </div>
+                            <ul id="labelsList"></ul>
+                        </div>
                         <h3>Instances</h3>
                         <ul id="shapeList"></ul>
                     </div>
@@ -225,6 +249,22 @@ export class LabelMePanel {
                         <div class="modal-buttons">
                             <button id="modalOkBtn">OK</button>
                             <button id="modalCancelBtn">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal for Color Picker -->
+                <div id="colorPickerModal" class="modal">
+                    <div class="modal-content color-picker-content">
+                        <h3>Choose Color</h3>
+                        <div class="color-palette"></div>
+                        <div class="custom-color-input">
+                            <label>Custom Color:</label>
+                            <input type="text" id="customColorInput" placeholder="#xxxxxx" maxlength="7">
+                        </div>
+                        <div class="modal-buttons">
+                            <button id="colorOkBtn">OK</button>
+                            <button id="colorCancelBtn">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -255,7 +295,7 @@ export class LabelMePanel {
             imageWidth: data.imageWidth
         };
 
-        fs.writeFile(jsonPath, JSON.stringify(labelMeData, null, 2), err => {
+        fs.writeFile(jsonPath, JSON.stringify(labelMeData, null, 2), 'utf8', err => {
             if (err) {
                 vscode.window.showErrorMessage('Failed to save annotation: ' + err.message);
             } else {

@@ -12,6 +12,33 @@ const resizer = document.getElementById('resizer');
 const sidebar = document.getElementById('sidebar');
 const canvasContainer = document.querySelector('.canvas-container'); // 缓存DOM引用
 
+
+// Navigation buttons
+const prevImageBtn = document.getElementById('prevImageBtn');
+const nextImageBtn = document.getElementById('nextImageBtn');
+
+// Mode toggle buttons
+const viewModeBtn = document.getElementById('viewModeBtn');
+const polygonModeBtn = document.getElementById('polygonModeBtn');
+
+
+// Labels management elements
+const labelsList = document.getElementById('labelsList');
+const colorPickerModal = document.getElementById('colorPickerModal');
+const customColorInput = document.getElementById('customColorInput');
+const colorOkBtn = document.getElementById('colorOkBtn');
+const colorCancelBtn = document.getElementById('colorCancelBtn');
+
+// Advanced Options elements
+const advancedOptionsBtn = document.getElementById('advancedOptionsBtn');
+const advancedOptionsDropdown = document.getElementById('advancedOptionsDropdown');
+const borderWidthSlider = document.getElementById('borderWidthSlider');
+const borderWidthValue = document.getElementById('borderWidthValue');
+const fillOpacitySlider = document.getElementById('fillOpacitySlider');
+const fillOpacityValue = document.getElementById('fillOpacityValue');
+const resetAdvancedBtn = document.getElementById('resetAdvancedBtn');
+
+
 let img = new Image();
 let shapes = [];
 let currentPoints = [];
@@ -23,6 +50,9 @@ let recentLabels = ["object", "person", "car", "background"];
 
 // Dirty State
 let isDirty = false;
+
+// Current interaction mode ('view' or 'polygon')
+let currentMode = 'view'; // 默认为view模式
 
 // Zoom & Pan variables
 let zoomLevel = 1;
@@ -36,9 +66,85 @@ const MAX_HISTORY = 50; // 最大历史记录数
 let animationFrameId = null; // requestAnimationFrame节流
 const colorCache = new Map(); // 颜色计算缓存
 
+// Labels管理 - 全局颜色自定义（会话级别，切换图片保留，关闭插件重置）
+let customColors = new Map(); // 存储用户自定义的标签颜色
+let currentEditingLabel = null; // 当前正在编辑颜色的标签
+
+// 预设调色板（3行 x 8列 = 24个颜色）
+const PRESET_COLORS = [
+    '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A',
+    '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
+    '#52C41A', '#FA8C16', '#EB2F96', '#722ED1',
+    '#13C2C2', '#52C41A', '#FAAD14', '#F5222D',
+    '#FA541C', '#FADB14', '#A0D911', '#52C41A',
+    '#13C2C2', '#1890FF', '#2F54EB', '#722ED1'
+];
+
+
+// 从vscode state恢复customColors
+const vscodeState = vscode.getState();
+if (vscodeState && vscodeState.customColors) {
+    customColors = new Map(Object.entries(vscodeState.customColors));
+}
+
+// Labels可见性管理 - 全局状态（会话级别，切换图片保留，关闭插件重置）
+let labelVisibilityState = new Map(); // 存储每个label的可见性状态 (true=visible, false=hidden)
+
+// 从vscode state恢复labelVisibilityState
+if (vscodeState && vscodeState.labelVisibility) {
+    labelVisibilityState = new Map(Object.entries(vscodeState.labelVisibility).map(([k, v]) => [k, v === 'true' || v === true]));
+}
+
+// 高级选项 - 全局渲染设置（会话级别，切换图片保留，关闭插件重置）
+let borderWidth = 2; // 边界粗细，默认2px
+let fillOpacity = 0.3; // 填充透明度，默认30%
+
+// 从vscode state恢复高级选项设置
+if (vscodeState && vscodeState.borderWidth !== undefined) {
+    borderWidth = vscodeState.borderWidth;
+}
+if (vscodeState && vscodeState.fillOpacity !== undefined) {
+    fillOpacity = vscodeState.fillOpacity;
+}
+
+// 初始化UI显示值
+if (borderWidthSlider && borderWidthValue) {
+    borderWidthSlider.value = borderWidth;
+    borderWidthValue.textContent = borderWidth;
+}
+if (fillOpacitySlider && fillOpacityValue) {
+    fillOpacitySlider.value = fillOpacity * 100;
+    fillOpacityValue.textContent = Math.round(fillOpacity * 100);
+}
+
+// 从vscode state恢复currentMode
+if (vscodeState && vscodeState.currentMode) {
+    currentMode = vscodeState.currentMode;
+}
+
+// 初始化模式按钮UI
+if (viewModeBtn && polygonModeBtn) {
+    if (currentMode === 'view') {
+        viewModeBtn.classList.add('active');
+        polygonModeBtn.classList.remove('active');
+    } else {
+        viewModeBtn.classList.remove('active');
+        polygonModeBtn.classList.add('active');
+    }
+}
+
 // Load initial data if available
 if (existingData) {
-    shapes = existingData.shapes || [];
+    shapes = (existingData.shapes || []).map(shape => {
+        // 如果该label有全局可见性状态，应用它；否则默认为可见
+        const visible = labelVisibilityState.has(shape.label)
+            ? labelVisibilityState.get(shape.label)
+            : true;
+        return {
+            ...shape,
+            visible: visible
+        };
+    });
     markClean();
 }
 
@@ -49,6 +155,7 @@ img.onload = () => {
     fitImageToScreen();
     draw();
     renderShapeList();
+    renderLabelsList();
 };
 
 img.onerror = () => {
@@ -87,8 +194,12 @@ function markClean() {
 // --- Undo/Redo History Management ---
 
 function saveHistory() {
-    // 使用 structuredClone 进行深拷贝（性能优于 JSON 方法）
-    const snapshot = structuredClone(shapes);
+    // 使用 structuredClone 进行深拷贝,并过滤掉visible字段
+    const shapesWithoutVisible = shapes.map(shape => {
+        const { visible, ...shapeWithoutVisible } = shape;
+        return shapeWithoutVisible;
+    });
+    const snapshot = structuredClone(shapesWithoutVisible);
 
     // 如果不在历史末尾，删除当前位置之后的所有历史
     if (historyIndex < history.length - 1) {
@@ -108,22 +219,42 @@ function saveHistory() {
 
 function undo() {
     if (historyIndex > 0) {
+        // 保存当前的visible状态
+        const visibleStates = new Map(shapes.map((shape, index) => [index, shape.visible]));
+
         historyIndex--;
         shapes = structuredClone(history[historyIndex]);
+
+        // 恢复visible状态
+        shapes.forEach((shape, index) => {
+            shape.visible = visibleStates.get(index) !== false; // 默认为true
+        });
+
         selectedShapeIndex = -1;
         markDirty();
         renderShapeList();
+        renderLabelsList();
         draw();
     }
 }
 
 function redo() {
     if (historyIndex < history.length - 1) {
+        // 保存当前的visible状态
+        const visibleStates = new Map(shapes.map((shape, index) => [index, shape.visible]));
+
         historyIndex++;
         shapes = structuredClone(history[historyIndex]);
+
+        // 恢复visible状态
+        shapes.forEach((shape, index) => {
+            shape.visible = visibleStates.get(index) !== false; // 默认为true
+        });
+
         selectedShapeIndex = -1;
         markDirty();
         renderShapeList();
+        renderLabelsList();
         draw();
     }
 }
@@ -230,14 +361,21 @@ function getColorsForLabel(label) {
         return colorCache.get(label);
     }
 
+    // 首先检查是否有自定义颜色
+    let baseColor;
+    if (customColors.has(label)) {
+        baseColor = customColors.get(label);
+    } else {
+        baseColor = stringToColor(label);
+    }
+
     // 计算新颜色
-    const baseColor = stringToColor(label);
     const r = parseInt(baseColor.slice(1, 3), 16);
     const g = parseInt(baseColor.slice(3, 5), 16);
     const b = parseInt(baseColor.slice(5, 7), 16);
     const colors = {
         stroke: `rgba(${r}, ${g}, ${b}, 1)`,
-        fill: `rgba(${r}, ${g}, ${b}, 0.3)`
+        fill: `rgba(${r}, ${g}, ${b}, ${fillOpacity})` // 使用全局fillOpacity
     };
 
     // 存入缓存
@@ -270,8 +408,11 @@ canvas.addEventListener('mousedown', (e) => {
                 renderShapeList();
             }
 
-            isDrawing = true;
-            currentPoints = [[x, y]];
+            // 只在polygon模式下允许开始绘制
+            if (currentMode === 'polygon') {
+                isDrawing = true;
+                currentPoints = [[x, y]];
+            }
         } else {
             const firstPoint = currentPoints[0];
             const dx = x - firstPoint[0];
@@ -490,6 +631,7 @@ function confirmLabel() {
     markDirty();
     saveHistory(); // 保存历史记录以支持撤销/恢复
     renderShapeList();
+    renderLabelsList();
     draw();
 }
 
@@ -543,8 +685,7 @@ function renderShapeList() {
         visibleBtn.onclick = (e) => {
             e.stopPropagation();
             shape.visible = shape.visible === undefined ? false : !shape.visible;
-            markDirty();
-            saveHistory(); // 保存历史记录以支持撤销/恢复
+            // 可见性切换不记录到历史和dirty状态,只作用于当前显示
             renderShapeList();
             draw();
         };
@@ -586,8 +727,338 @@ function deleteShape(index) {
     markDirty();
     saveHistory(); // 保存历史记录以支持撤销/恢复
     renderShapeList();
+    renderLabelsList(); // 更新Labels列表
     draw();
 }
+
+// --- Labels Management ---
+
+// 获取所有唯一标签及其统计信息
+function getLabelsStats() {
+    const stats = new Map();
+    shapes.forEach(shape => {
+        const label = shape.label;
+        if (!stats.has(label)) {
+            stats.set(label, { count: 0, allHidden: true });
+        }
+        const stat = stats.get(label);
+        stat.count++;
+        if (shape.visible !== false) {
+            stat.allHidden = false;
+        }
+    });
+    return stats;
+}
+
+// 渲染Labels列表
+function renderLabelsList() {
+    if (!labelsList) return;
+
+    const labelsStats = getLabelsStats();
+    const fragment = document.createDocumentFragment();
+
+    // 按标签名称排序
+    const sortedLabels = Array.from(labelsStats.keys()).sort();
+
+    sortedLabels.forEach(label => {
+        const stat = labelsStats.get(label);
+        const li = document.createElement('li');
+
+        // 颜色指示器
+        const colorIndicator = document.createElement('div');
+        colorIndicator.className = 'label-color-indicator';
+        const colors = getColorsForLabel(label);
+        colorIndicator.style.backgroundColor = colors.stroke;
+        colorIndicator.title = 'Click to change color';
+        colorIndicator.onclick = (e) => {
+            e.stopPropagation();
+            showColorPicker(label);
+        };
+
+        // 标签名称
+        const labelName = document.createElement('span');
+        labelName.className = 'label-name';
+        labelName.textContent = label;
+
+        // 实例数量
+        const labelCount = document.createElement('span');
+        labelCount.className = 'label-count';
+        labelCount.textContent = `(${stat.count})`;
+
+        // 可见性切换按钮
+        const visibilityBtn = document.createElement('span');
+        visibilityBtn.className = 'label-visibility-btn';
+        visibilityBtn.innerHTML = '&#128065;'; // Eye icon
+        if (stat.allHidden) {
+            visibilityBtn.classList.add('all-hidden');
+        }
+        visibilityBtn.title = stat.allHidden ? 'Show all' : 'Hide all';
+        visibilityBtn.onclick = (e) => {
+            e.stopPropagation();
+            toggleLabelVisibility(label);
+        };
+
+        // Reset按钮（只在有自定义颜色时显示）
+        const resetBtn = document.createElement('span');
+        resetBtn.className = 'label-reset-btn';
+        resetBtn.innerHTML = '&#8634;'; // Circular arrow icon
+        resetBtn.title = 'Reset color';
+        if (customColors.has(label)) {
+            resetBtn.classList.add('visible');
+        }
+        resetBtn.onclick = (e) => {
+            e.stopPropagation();
+            resetLabelColor(label);
+        };
+
+        li.appendChild(colorIndicator);
+        li.appendChild(labelName);
+        li.appendChild(labelCount);
+        li.appendChild(visibilityBtn);
+        li.appendChild(resetBtn);
+        fragment.appendChild(li);
+    });
+
+    labelsList.innerHTML = '';
+    labelsList.appendChild(fragment);
+}
+
+// 切换指定标签的所有实例的可见性
+function toggleLabelVisibility(label) {
+    const labelsStats = getLabelsStats();
+    const stat = labelsStats.get(label);
+
+    // 如果全部隐藏，则显示；否则隐藏
+    const newVisibility = stat.allHidden;
+
+    shapes.forEach(shape => {
+        if (shape.label === label) {
+            shape.visible = newVisibility;
+        }
+    });
+
+    // 保存到全局状态
+    labelVisibilityState.set(label, newVisibility);
+
+    // 保存到vscode state
+    saveLabelVisibilityState();
+
+    renderLabelsList();
+    renderShapeList();
+    draw();
+}
+
+// 显示颜色选择器
+function showColorPicker(label) {
+    currentEditingLabel = label;
+
+    // 渲染调色板
+    const palette = colorPickerModal.querySelector('.color-palette');
+    palette.innerHTML = '';
+
+    PRESET_COLORS.forEach(color => {
+        const colorOption = document.createElement('div');
+        colorOption.className = 'color-option';
+        colorOption.style.backgroundColor = color;
+        colorOption.onclick = () => {
+            document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
+            colorOption.classList.add('selected');
+            customColorInput.value = color;
+        };
+        palette.appendChild(colorOption);
+    });
+
+    // 设置当前颜色 - 转换为#XXXXXX格式
+    const currentColors = getColorsForLabel(label);
+    // 如果有自定义颜色，直接使用；否则从rgba转换为hex
+    if (customColors.has(label)) {
+        customColorInput.value = customColors.get(label);
+    } else {
+        // 将rgba格式转换为#XXXXXX格式
+        const rgbaMatch = currentColors.stroke.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+        if (rgbaMatch) {
+            const r = parseInt(rgbaMatch[1]).toString(16).padStart(2, '0');
+            const g = parseInt(rgbaMatch[2]).toString(16).padStart(2, '0');
+            const b = parseInt(rgbaMatch[3]).toString(16).padStart(2, '0');
+            customColorInput.value = `#${r}${g}${b}`.toUpperCase();
+        } else {
+            customColorInput.value = '#000000';
+        }
+    }
+
+    // 显示模态框
+    colorPickerModal.style.display = 'flex';
+    customColorInput.focus();
+}
+
+// 隐藏颜色选择器
+function hideColorPicker() {
+    colorPickerModal.style.display = 'none';
+    currentEditingLabel = null;
+}
+
+// 保存customColors到vscode state
+function saveCustomColorsState() {
+    const customColorsObj = Object.fromEntries(customColors);
+    const labelVisibilityObj = Object.fromEntries(labelVisibilityState);
+    vscode.setState({
+        customColors: customColorsObj,
+        labelVisibility: labelVisibilityObj
+    });
+}
+
+// 保存labelVisibilityState到vscode state
+function saveLabelVisibilityState() {
+    const customColorsObj = Object.fromEntries(customColors);
+    const labelVisibilityObj = Object.fromEntries(labelVisibilityState);
+    vscode.setState({
+        customColors: customColorsObj,
+        labelVisibility: labelVisibilityObj
+    });
+}
+
+// 确认颜色选择
+function confirmColorPicker() {
+    if (!currentEditingLabel) return;
+
+    let color = customColorInput.value.trim();
+
+    // 验证颜色格式 - 只接受#XXXXXX格式
+    if (!color.startsWith('#')) {
+        alert('Invalid color format. Please use #RRGGBB format (e.g., #FF5733).');
+        return;
+    }
+
+    if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
+        alert('Invalid color format. Please use #RRGGBB format (e.g., #FF5733).');
+        return;
+    }
+
+    // 保存自定义颜色
+    customColors.set(currentEditingLabel, color.toUpperCase());
+
+    // 保存到vscode state以实现持久化
+    saveCustomColorsState();
+
+    // 清除颜色缓存以强制重新计算
+    colorCache.delete(currentEditingLabel);
+
+    hideColorPicker();
+    renderLabelsList();
+    renderShapeList();
+    draw();
+}
+
+// 重置单个标签的颜色
+function resetLabelColor(label) {
+    customColors.delete(label);
+
+    // 保存到vscode state
+    saveCustomColorsState();
+
+    colorCache.delete(label);
+    renderLabelsList();
+    renderShapeList();
+    draw();
+}
+
+// --- Advanced Options ---
+
+// 切换高级选项下拉菜单
+function toggleAdvancedOptions() {
+    if (advancedOptionsDropdown) {
+        const isVisible = advancedOptionsDropdown.style.display !== 'none';
+        advancedOptionsDropdown.style.display = isVisible ? 'none' : 'block';
+    }
+}
+
+// 更新边界宽度
+function updateBorderWidth(value) {
+    borderWidth = parseFloat(value);
+    if (borderWidthValue) {
+        borderWidthValue.textContent = borderWidth;
+    }
+    saveAdvancedOptionsState();
+    draw();
+}
+
+// 更新填充透明度
+function updateFillOpacity(value) {
+    fillOpacity = parseFloat(value) / 100;
+    if (fillOpacityValue) {
+        fillOpacityValue.textContent = Math.round(fillOpacity * 100);
+    }
+    // 清除颜色缓存以使新透明度生效
+    colorCache.clear();
+    saveAdvancedOptionsState();
+    draw();
+}
+
+// 重置高级选项到默认值
+function resetAdvancedOptions() {
+    borderWidth = 2;
+    fillOpacity = 0.3;
+
+    if (borderWidthSlider && borderWidthValue) {
+        borderWidthSlider.value = borderWidth;
+        borderWidthValue.textContent = borderWidth;
+    }
+    if (fillOpacitySlider && fillOpacityValue) {
+        fillOpacitySlider.value = fillOpacity * 100;
+        fillOpacityValue.textContent = Math.round(fillOpacity * 100);
+    }
+
+    saveAdvancedOptionsState();
+    draw();
+}
+
+// 保存高级选项到vscode state
+function saveAdvancedOptionsState() {
+    const customColorsObj = Object.fromEntries(customColors);
+    const labelVisibilityObj = Object.fromEntries(labelVisibilityState);
+    vscode.setState({
+        customColors: customColorsObj,
+        labelVisibility: labelVisibilityObj,
+        borderWidth: borderWidth,
+        fillOpacity: fillOpacity
+    });
+}
+
+// --- Mode Switching ---
+
+// 设置交互模式
+function setMode(mode) {
+    currentMode = mode;
+
+    // 保存到vscode state
+    const customColorsObj = Object.fromEntries(customColors);
+    const labelVisibilityObj = Object.fromEntries(labelVisibilityState);
+    vscode.setState({
+        customColors: customColorsObj,
+        labelVisibility: labelVisibilityObj,
+        borderWidth: borderWidth,
+        fillOpacity: fillOpacity,
+        currentMode: currentMode
+    });
+
+    // 更新按钮状态
+    if (viewModeBtn && polygonModeBtn) {
+        if (mode === 'view') {
+            viewModeBtn.classList.add('active');
+            polygonModeBtn.classList.remove('active');
+            // 如果正在绘制，取消绘制
+            if (isDrawing) {
+                isDrawing = false;
+                currentPoints = [];
+                draw();
+            }
+        } else {
+            viewModeBtn.classList.remove('active');
+            polygonModeBtn.classList.add('active');
+        }
+    }
+}
+
 
 // --- Drawing Logic ---
 function draw(mouseEvent) {
@@ -648,7 +1119,7 @@ function drawPolygon(points, strokeColor, fillColor, showVertices = false) {
     }
 
     ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = 2;
+    ctx.lineWidth = borderWidth; // 使用全局borderWidth
     ctx.stroke();
 
     if (!isDrawing || points !== currentPoints) {
@@ -671,10 +1142,16 @@ function drawPolygon(points, strokeColor, fillColor, showVertices = false) {
 function save() {
     if (!isDirty) return;
 
+    // 过滤掉visible字段,不保存到JSON中
+    const shapesToSave = shapes.map(shape => {
+        const { visible, ...shapeWithoutVisible } = shape;
+        return shapeWithoutVisible;
+    });
+
     vscode.postMessage({
         command: 'save',
         data: {
-            shapes: shapes,
+            shapes: shapesToSave,
             imageHeight: img.height,
             imageWidth: img.width
         }
@@ -685,3 +1162,74 @@ function save() {
 if (saveBtn) {
     saveBtn.addEventListener('click', save);
 }
+
+// --- Labels Management Event Listeners ---
+
+// Color picker OK button
+if (colorOkBtn) {
+    colorOkBtn.onclick = confirmColorPicker;
+}
+
+// Color picker Cancel button
+if (colorCancelBtn) {
+    colorCancelBtn.onclick = hideColorPicker;
+}
+
+// Color picker input - Enter to confirm
+if (customColorInput) {
+    customColorInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') confirmColorPicker();
+        if (e.key === 'Escape') hideColorPicker();
+    });
+}
+
+// --- Advanced Options Event Listeners ---
+
+// Advanced Options button
+if (advancedOptionsBtn) {
+    advancedOptionsBtn.onclick = toggleAdvancedOptions;
+}
+
+// Border Width slider
+if (borderWidthSlider) {
+    borderWidthSlider.oninput = (e) => updateBorderWidth(e.target.value);
+}
+
+// Fill Opacity slider
+if (fillOpacitySlider) {
+    fillOpacitySlider.oninput = (e) => updateFillOpacity(e.target.value);
+}
+
+// Reset Advanced Options button
+if (resetAdvancedBtn) {
+    resetAdvancedBtn.onclick = resetAdvancedOptions;
+}
+
+// --- Navigation Buttons Event Listeners ---
+
+// Previous Image button
+if (prevImageBtn) {
+    prevImageBtn.onclick = () => {
+        vscode.postMessage({ command: 'prev' });
+    };
+}
+
+// Next Image button
+if (nextImageBtn) {
+    nextImageBtn.onclick = () => {
+        vscode.postMessage({ command: 'next' });
+    };
+}
+
+// --- Mode Toggle Event Listeners ---
+
+// View Mode button
+if (viewModeBtn) {
+    viewModeBtn.onclick = () => setMode('view');
+}
+
+// Polygon Mode button
+if (polygonModeBtn) {
+    polygonModeBtn.onclick = () => setMode('polygon');
+}
+

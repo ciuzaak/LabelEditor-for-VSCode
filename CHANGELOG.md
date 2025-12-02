@@ -2,6 +2,45 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.3.0] - 2025-12-02
+
+### Added
+- **Labels Management Panel**: New sidebar section for label-level operations
+  - View all labels with instance counts
+  - Toggle visibility for all instances of a label category
+  - Customize label colors with color picker (24 presets + custom hex input)
+  - Per-label color reset button
+  - Session-level color persistence (resets when extension closes)
+  
+- **Advanced Options**: Rendering customization controls
+  - Adjustable border width (1-5px)
+  - Adjustable fill opacity (0-100%)
+  - Settings persist across image switches
+  - One-click reset to defaults
+  
+- **View/Polygon Mode Toggle**: Switch between viewing and editing modes
+  - View Mode (👁️): Browse and select annotations without accidental edits
+  - Polygon Mode (✏️): Create new polygon annotations
+  - Mode selection persists across sessions
+  - Default mode is View for safer navigation
+
+- **Image Navigation Buttons**: Quick navigation controls
+  - Previous/Next buttons (◀/▶) in toolbar
+  - Complement existing A/D keyboard shortcuts
+
+### Improved
+- **UTF-8 Encoding**: Proper UTF-8 support for JSON files with international characters
+- **Color Validation**: Strict #XXXXXX hex format validation for custom colors
+- **UI Polish**: 
+  - Color picker limited to 3 rows for better layout
+  - Improved placeholder text (#xxxxxx format)
+  - Better visual feedback for active/inactive modes
+
+### Technical
+- Session-level state persistence using vscode.setState API
+- Optimized color cache management
+- DocumentFragment for efficient DOM updates
+
 ## [0.2.0] - 2025-12-01
 
 ### Added

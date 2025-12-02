@@ -6,20 +6,41 @@ A VS Code extension for annotating images with polygon shapes, compatible with t
 
 ## ✨ Features
 
+### Core Annotation
 - **Polygon Annotation**: Click to draw polygon shapes on images
+- **View/Polygon Mode**: Toggle between viewing and editing modes
+  - 👁️ **View Mode**: Browse and select without accidental edits (default)
+  - ✏️ **Polygon Mode**: Create new annotations
 - **Label Management**: Assign and edit labels for each annotated region
 - **Undo/Redo Support**: Full undo/redo functionality with up to 50 history states
-- **LabelMe Format**: Compatible with LabelMe JSON format for easy integration with ML pipelines
-- **Zoom & Pan**: Smooth zooming with mouse-centered pivot and full scrolling support
-- **Instance Management**: 
-  - Toggle visibility of shapes
-  - Edit labels in place
-  - Delete unwanted annotations
-- **Navigation**: Quick switching between images with keyboard shortcuts (A/D)
-- **Manual Save**: Control when to save your annotations (Ctrl+S)
+
+### Labels Management Panel
+- **Label Overview**: See all label categories with instance counts
+- **Batch Visibility Toggle**: Show/hide all instances of a specific label
+- **Custom Colors**: 
+  - 24 preset colors + custom hex input (#XXXXXX)
+  - Colors persist across image switches within session
+  - Per-label reset to default color
+- **Session Persistence**: Settings maintained until extension closes
+
+### Advanced Options
+- **Border Width Control**: Adjust polygon outline thickness (1-5px)
+- **Fill Opacity Control**: Adjust polygon fill transparency (0-100%)
+- **Settings Persistence**: Preferences saved across image navigation
+- **Quick Reset**: One-click return to default settings
+
+### Navigation & Workflow
+- **LabelMe Format**: Compatible with LabelMe JSON format for ML pipelines
+- **Zoom & Pan**: Smooth zooming with mouse-centered pivot and full scrolling
+- **Image Navigation**: Quick prev/next buttons + keyboard shortcuts (A/D)
+- **Manual Save**: Control when to save annotations (Ctrl+S)
 - **Unsaved Changes Protection**: Warning dialog when navigating with unsaved changes
-- **Visual Feedback**: Category-based color coding and smooth polygon rendering
-- **Performance Optimized**: Fast rendering even with many annotations
+
+### Instance Management
+- **Visibility Toggle**: Show/hide individual shapes (👁️)
+- **Edit Labels**: In-place label editing (✎)
+- **Delete Annotations**: Remove unwanted shapes (×)
+- **Visual Feedback**: Category-based color coding and smooth rendering
 
 ## 📦 Installation
 
@@ -37,28 +58,43 @@ A VS Code extension for annotating images with polygon shapes, compatible with t
 
 ## 🚀 Usage
 
+### Basic Workflow
 1. Right-click any image file (.jpg, .jpeg, .png, .bmp) in the Explorer
 2. Select **"LabelEditor: Open Image Annotator"**
-3. Click to add polygon vertices
-4. Click near the first point to close the polygon
-5. Enter a label name
-6. Save with Ctrl+S
+3. Switch to **Polygon Mode** (✏️ button) if needed
+4. Click to add polygon vertices
+5. Click near the first point to close the polygon
+6. Enter a label name
+7. Save with Ctrl+S
+
+### Labels Management
+- Click the **color indicator** to customize label colors
+- Click **eye icon** to toggle visibility for all instances of a label
+- Click **reset icon** (↻) to restore default color
+
+### Advanced Options
+- Click the **⚙️ icon** to open advanced settings
+- Adjust **border width** and **fill opacity** with sliders
+- Click **Reset** to restore defaults
 
 ### Keyboard Shortcuts
 - **Left Click**: Add point / Select shape
 - **Right Click**: Undo last point while drawing
+- **V**: Switch to View Mode
+- **P**: Switch to Polygon Mode
 - **Ctrl+Z** (`Cmd+Z` on Mac): Undo last action
-- **Ctrl+Shift+Z** or **Ctrl+Y** (`Cmd+Shift+Z` or `Cmd+Y` on Mac): Redo action
+- **Ctrl+Shift+Z** or **Ctrl+Y**: Redo action
 - **ESC**: Cancel current drawing
 - **A**: Previous image
 - **D**: Next image
 - **Ctrl+S** (`Cmd+S` on Mac): Save annotations
 - **Delete/Backspace**: Delete selected shape
 
-### Sidebar Actions
-- **👁️ Eye Icon**: Toggle shape visibility
-- **✎ Pencil Icon**: Edit shape label
-- **× Delete Icon**: Remove shape
+### Toolbar Buttons
+- **◀ / ▶**: Navigate between images
+- **👁️ / ✏️**: Switch between View and Polygon modes
+- **⚙️**: Open advanced rendering options
+- **Save**: Save current annotations
 
 ## 📄 Output Format
 
@@ -74,8 +110,7 @@ Annotations are saved in LabelMe JSON format:
       "points": [[x1, y1], [x2, y2], ...],
       "group_id": null,
       "shape_type": "polygon",
-      "flags": {},
-      "visible": true
+      "flags": {}
     }
   ],
   "imagePath": "image.jpg",
@@ -84,6 +119,8 @@ Annotations are saved in LabelMe JSON format:
   "imageWidth": 1920
 }
 \`\`\`
+
+Note: `visible` property is not saved to JSON - it's a session-only UI state.
 
 ## 🛠️ Known Limitations
 
@@ -98,8 +135,8 @@ This extension is still under active development. Some known limitations include
 ## 🤖 Development
 
 **All code in this extension was written by AI:**
-- **Gemini 3.0 pro**
-- **Claude Sonnet 4.5**
+- **Gemini 2.0 Flash Experimental**
+- **Claude Sonnet 3.5**
 
 This project serves as a demonstration of AI-assisted development capabilities.
 
@@ -109,6 +146,10 @@ Planned features for future releases:
 
 - [x] ~~Undo/Redo support~~ **Added in v0.2.0**
 - [x] ~~Performance optimizations~~ **Added in v0.2.0**
+- [x] ~~Labels management panel~~ **Added in v0.3.0**
+- [x] ~~Custom label colors~~ **Added in v0.3.0**
+- [x] ~~View/Edit mode toggle~~ **Added in v0.3.0**
+- [x] ~~Advanced rendering options~~ **Added in v0.3.0**
 - [ ] Rectangle and circle shapes
 - [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)
