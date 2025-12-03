@@ -79,9 +79,20 @@ const MAX_HISTORY = 50; // 最大历史记录数
 let animationFrameId = null; // requestAnimationFrame节流
 const colorCache = new Map(); // 颜色计算缓存
 
+// 点击位置追踪 - 用于支持点击叠加实例时的循环选择
+let lastClickTime = 0;
+let lastClickX = 0;
+let lastClickY = 0;
+const CLICK_THRESHOLD_TIME = 500; // 500ms内视为同一位置的连续点击
+const CLICK_THRESHOLD_DISTANCE = 5; // 5px内视为同一位置
+
+// 光标状态追踪 - 避免频繁更新样式
+let currentCursor = 'default';
+
 // Labels管理 - 全局颜色自定义（会话级别，切换图片保留，关闭插件重置）
 let customColors = new Map(); // 存储用户自定义的标签颜色
 let currentEditingLabel = null; // 当前正在编辑颜色的标签
+let paletteClickHandler = null; // 颜色选择器的点击处理器引用
 
 // 预设调色板（3行 x 8列 = 24个颜色）
 const PRESET_COLORS = [
@@ -455,6 +466,11 @@ function getColorsForLabel(label) {
     return colors;
 }
 
+// 清除颜色缓存（当fillOpacity或自定义颜色改变时调用）
+function invalidateColorCache() {
+    colorCache.clear();
+}
+
 // --- Canvas Interaction ---
 
 // 使用canvasWrapper来监听鼠标事件，因为SVG覆盖在canvas上
@@ -470,15 +486,48 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         const y = my / zoomLevel;
 
         if (!isDrawing) {
-            const clickedShapeIndex = findShapeIndexAt(x, y);
-            if (clickedShapeIndex !== -1) {
-                selectedShapeIndex = clickedShapeIndex;
+            const now = Date.now();
+            const dx = x - lastClickX;
+            const dy = y - lastClickY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            const timeDiff = now - lastClickTime;
+
+            // 检测是否是在同一位置的连续点击
+            const isSameLocation = distance < CLICK_THRESHOLD_DISTANCE && timeDiff < CLICK_THRESHOLD_TIME;
+
+            // 获取点击位置的所有重叠实例
+            const overlappingShapes = findAllShapesAt(x, y);
+
+            if (overlappingShapes.length > 0) {
+                if (isSameLocation && overlappingShapes.length > 1) {
+                    // 如果在同一位置连续点击，且有多个重叠实例，则循环选择下一个
+                    const currentIndex = overlappingShapes.indexOf(selectedShapeIndex);
+                    if (currentIndex !== -1 && currentIndex < overlappingShapes.length - 1) {
+                        // 选择下一个重叠的实例
+                        selectedShapeIndex = overlappingShapes[currentIndex + 1];
+                    } else {
+                        // 循环回到第一个
+                        selectedShapeIndex = overlappingShapes[0];
+                    }
+                } else {
+                    // 首次点击或不同位置，选择最上层的实例
+                    selectedShapeIndex = overlappingShapes[0];
+                }
+
+                // 更新点击位置和时间
+                lastClickX = x;
+                lastClickY = y;
+                lastClickTime = now;
+
                 renderShapeList();
                 draw();
                 return;
             } else {
                 selectedShapeIndex = -1;
                 renderShapeList();
+
+                // 重置点击追踪
+                lastClickTime = 0;
             }
 
             // 只在polygon或rectangle模式下允许开始绘制
@@ -556,11 +605,13 @@ canvasWrapper.addEventListener('mousemove', (e) => {
         const y = my / zoomLevel;
 
         const hoveredIndex = findShapeIndexAt(x, y);
-        if (hoveredIndex !== -1) {
-            canvasWrapper.style.cursor = 'pointer';
-        } else {
-            // View mode uses default cursor, others use crosshair
-            canvasWrapper.style.cursor = currentMode === 'view' ? 'default' : 'crosshair';
+        const desiredCursor = hoveredIndex !== -1 ? 'pointer' :
+            (currentMode === 'view' ? 'default' : 'crosshair');
+
+        // 只在光标需要改变时更新样式
+        if (currentCursor !== desiredCursor) {
+            canvasWrapper.style.cursor = desiredCursor;
+            currentCursor = desiredCursor;
         }
     }
 });
@@ -668,27 +719,39 @@ document.addEventListener('mouseup', () => {
 });
 
 
-function findShapeIndexAt(x, y) {
+// 查找指定位置的所有形状（从上到下）
+function findAllShapesAt(x, y) {
+    const overlappingShapes = [];
+    // 从后往前遍历（从上到下的绘制顺序）
     for (let i = shapes.length - 1; i >= 0; i--) {
+        // 跳过隐藏的形状
+        if (shapes[i].visible === false) continue;
+
         let points = shapes[i].points;
         if (shapes[i].shape_type === 'rectangle') {
             points = getRectPoints(points);
         }
         if (isPointInPolygon([x, y], points)) {
-            return i;
+            overlappingShapes.push(i);
         }
     }
-    return -1;
+    return overlappingShapes;
+}
+
+// 查找指定位置的第一个形状（为了保持向后兼容）
+function findShapeIndexAt(x, y) {
+    const overlapping = findAllShapesAt(x, y);
+    return overlapping.length > 0 ? overlapping[0] : -1;
 }
 
 function isPointInPolygon(point, vs) {
-    var x = point[0], y = point[1];
-    var inside = false;
-    for (var i = 0, j = vs.length - 1; i < vs.length; j = i++) {
-        var xi = vs[i][0], yi = vs[i][1];
-        var xj = vs[j][0], yj = vs[j][1];
+    const x = point[0], y = point[1];
+    let inside = false;
+    for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+        const xi = vs[i][0], yi = vs[i][1];
+        const xj = vs[j][0], yj = vs[j][1];
 
-        var intersect = ((yi > y) != (yj > y))
+        const intersect = ((yi > y) != (yj > y))
             && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
         if (intersect) inside = !inside;
     }
@@ -1001,8 +1064,13 @@ function showColorPicker(label) {
     });
     palette.appendChild(fragment);
 
+    // 移除旧的事件处理器（如果存在）
+    if (paletteClickHandler) {
+        palette.removeEventListener('click', paletteClickHandler);
+    }
+
     // 使用事件委托处理颜色选择
-    palette.onclick = (e) => {
+    paletteClickHandler = (e) => {
         const target = e.target;
         if (target.classList.contains('color-option')) {
             palette.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
@@ -1010,6 +1078,7 @@ function showColorPicker(label) {
             customColorInput.value = target.dataset.color;
         }
     };
+    palette.addEventListener('click', paletteClickHandler);
 
     // 设置当前颜色 - 转换为#XXXXXX格式
     const currentColors = getColorsForLabel(label);
@@ -1143,7 +1212,7 @@ function resetAdvancedOptions() {
         fillOpacityValue.textContent = Math.round(fillOpacity * 100);
     }
 
-    colorCache.clear();
+    invalidateColorCache();
     saveGlobalSettings('borderWidth', borderWidth);
     saveGlobalSettings('fillOpacity', fillOpacity);
     draw();
@@ -1377,14 +1446,23 @@ if (advancedOptionsBtn) {
 
 // Border Width slider
 if (borderWidthSlider) {
-    borderWidthSlider.oninput = (e) => updateBorderWidth(e.target.value);
-    borderWidthSlider.onchange = (e) => saveGlobalSettings('borderWidth', borderWidth); // Save only on release
+    borderWidthSlider.oninput = (e) => {
+        borderWidth = parseFloat(e.target.value);
+        borderWidthValue.textContent = borderWidth;
+        draw();
+    };
+    borderWidthSlider.onchange = (e) => saveGlobalSettings('borderWidth', borderWidth);
 }
 
 // Fill Opacity slider
 if (fillOpacitySlider) {
-    fillOpacitySlider.oninput = (e) => updateFillOpacity(e.target.value);
-    fillOpacitySlider.onchange = (e) => saveGlobalSettings('fillOpacity', fillOpacity); // Save only on release
+    fillOpacitySlider.oninput = (e) => {
+        fillOpacity = parseInt(e.target.value) / 100;
+        fillOpacityValue.textContent = Math.round(fillOpacity * 100);
+        invalidateColorCache(); // 清除缓存以使用新的fillOpacity
+        draw();
+    };
+    fillOpacitySlider.onchange = (e) => saveGlobalSettings('fillOpacity', fillOpacity);
 }
 
 // Reset Advanced Options button

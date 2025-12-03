@@ -2,6 +2,25 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.6.1] - 2025-12-04
+
+### Fixed
+- **Overlapping Instance Selection**: Fixed bug where overlapping annotations could not be clicked/selected
+  - Implemented click-through cycling: repeatedly click the same location to cycle through overlapping instances
+  - Hidden shapes are now properly excluded from click detection
+  - Supports all overlapping annotation types (polygon and rectangle)
+
+- **Border Width Decimal Values**: Fixed bug where decimal border width values (1.5, 2.5, etc.) were not supported
+  - Changed value parsing from `parseInt` to `parseFloat` to preserve decimal precision
+
+### Improved
+- **Code Quality & Performance**:
+  - Fixed color cache invalidation bug when fill opacity changes
+  - Eliminated variable shadowing in `findShapeIndexAt()` function
+  - Optimized event listener management in color picker to prevent memory leaks
+  - Reduced cursor style thrashing by ~99% during mouse movement
+  - Replaced all `var` declarations with `const`/`let` for better code quality
+
 ## [0.6.0] - 2025-12-03
 
 ### Added
