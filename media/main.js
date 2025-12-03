@@ -57,6 +57,7 @@ let currentMode = 'view'; // 默认为view模式
 
 // Zoom & Pan variables
 let zoomLevel = 1;
+let zoomAnimationFrameId = null; // 缩放节流
 
 // Undo/Redo History (实例级别 - 只记录shapes的变化)
 let history = []; // 历史记录栈
@@ -277,12 +278,15 @@ function fitImageToScreen() {
 
     zoomLevel = Math.min(scaleX, scaleY) * 0.98; // 98% fit
 
-    updateCanvasSize();
+    updateCanvasTransform();
 }
 
-function updateCanvasSize() {
-    canvas.width = img.width * zoomLevel;
-    canvas.height = img.height * zoomLevel;
+function updateCanvasTransform() {
+    // Canvas 保持原始图片尺寸，使用 CSS transform 进行缩放
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.style.transform = `scale(${zoomLevel})`;
+    canvas.style.transformOrigin = '0 0';
     draw();
 }
 
@@ -515,39 +519,54 @@ canvas.addEventListener('mousemove', (e) => {
 canvas.addEventListener('wheel', (e) => {
     if (e.ctrlKey) { // Zoom on Ctrl+Wheel
         e.preventDefault();
-        const zoomIntensity = 0.1;
 
-        // Get mouse position relative to container
-        const rect = canvasContainer.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
-
-        // Get scroll position
-        const scrollLeft = canvasContainer.scrollLeft;
-        const scrollTop = canvasContainer.scrollTop;
-
-        // Calculate mouse position in image coordinates before zoom
-        const imageX = (scrollLeft + mouseX) / zoomLevel;
-        const imageY = (scrollTop + mouseY) / zoomLevel;
-
-        // Apply zoom
-        if (e.deltaY < 0) {
-            zoomLevel += zoomIntensity;
-        } else {
-            zoomLevel -= zoomIntensity;
-            if (zoomLevel < 0.1) zoomLevel = 0.1;
+        // 使用 requestAnimationFrame 节流，避免频繁重绘
+        if (zoomAnimationFrameId) {
+            return; // 如果已经有待处理的缩放，忽略此次事件
         }
 
-        // Update canvas size
-        updateCanvasSize();
+        zoomAnimationFrameId = requestAnimationFrame(() => {
+            const zoomFactor = 1.1; // 每次滚轮缩放10%
 
-        // Calculate new scroll position to keep the same image point under the mouse
-        const newScrollLeft = imageX * zoomLevel - mouseX;
-        const newScrollTop = imageY * zoomLevel - mouseY;
+            // Get mouse position relative to container
+            const rect = canvasContainer.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
 
-        // Apply new scroll position
-        canvasContainer.scrollLeft = newScrollLeft;
-        canvasContainer.scrollTop = newScrollTop;
+            // Get scroll position
+            const scrollLeft = canvasContainer.scrollLeft;
+            const scrollTop = canvasContainer.scrollTop;
+
+            // Calculate mouse position in image coordinates before zoom
+            const imageX = (scrollLeft + mouseX) / zoomLevel;
+            const imageY = (scrollTop + mouseY) / zoomLevel;
+
+            // Apply zoom with linear scaling
+            if (e.deltaY < 0) {
+                // Zoom in
+                zoomLevel *= zoomFactor;
+                // Limit maximum zoom to 10x (1000%)
+                if (zoomLevel > 10) zoomLevel = 10;
+            } else {
+                // Zoom out
+                zoomLevel /= zoomFactor;
+                // Minimum zoom limit
+                if (zoomLevel < 0.1) zoomLevel = 0.1;
+            }
+
+            // Update canvas transform (CSS缩放，不改变Canvas尺寸)
+            canvas.style.transform = `scale(${zoomLevel})`;
+
+            // Calculate new scroll position to keep the same image point under the mouse
+            const newScrollLeft = imageX * zoomLevel - mouseX;
+            const newScrollTop = imageY * zoomLevel - mouseY;
+
+            // Apply new scroll position
+            canvasContainer.scrollLeft = newScrollLeft;
+            canvasContainer.scrollTop = newScrollTop;
+
+            zoomAnimationFrameId = null; // 重置标志
+        });
     }
 });
 
@@ -1096,8 +1115,8 @@ function setMode(mode) {
 function draw(mouseEvent) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw image scaled
-    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+    // Draw image at original size (CSS transform handles zoom)
+    ctx.drawImage(img, 0, 0, img.width, img.height);
 
     // Draw existing shapes
     shapes.forEach((shape, index) => {
@@ -1133,12 +1152,12 @@ function draw(mouseEvent) {
         // Draw line to mouse cursor (only for polygon mode)
         if (mouseEvent && currentMode === 'polygon') {
             const rect = canvas.getBoundingClientRect();
-            const mx = (mouseEvent.clientX - rect.left);
-            const my = (mouseEvent.clientY - rect.top);
+            const mx = (mouseEvent.clientX - rect.left) / zoomLevel;
+            const my = (mouseEvent.clientY - rect.top) / zoomLevel;
             const lastPoint = currentPoints[currentPoints.length - 1];
 
             ctx.beginPath();
-            ctx.moveTo(lastPoint[0] * zoomLevel, lastPoint[1] * zoomLevel);
+            ctx.moveTo(lastPoint[0], lastPoint[1]);
             ctx.lineTo(mx, my);
             ctx.strokeStyle = 'red';
             ctx.lineWidth = 2;
@@ -1151,9 +1170,9 @@ function drawPolygon(points, strokeColor, fillColor, showVertices = false) {
     if (points.length === 0) return;
 
     ctx.beginPath();
-    ctx.moveTo(points[0][0] * zoomLevel, points[0][1] * zoomLevel);
+    ctx.moveTo(points[0][0], points[0][1]);
     for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i][0] * zoomLevel, points[i][1] * zoomLevel);
+        ctx.lineTo(points[i][0], points[i][1]);
     }
 
     // Close path if not drawing polygon (drawing rectangle should always be closed)
@@ -1177,7 +1196,7 @@ function drawPolygon(points, strokeColor, fillColor, showVertices = false) {
         const pointRadius = 3;
         points.forEach(p => {
             ctx.beginPath();
-            ctx.arc(p[0] * zoomLevel, p[1] * zoomLevel, pointRadius, 0, 2 * Math.PI);
+            ctx.arc(p[0], p[1], pointRadius, 0, 2 * Math.PI);
             ctx.fill();
         });
     }
