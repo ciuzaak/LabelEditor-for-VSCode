@@ -1,5 +1,7 @@
 const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
+const svgOverlay = document.getElementById('svgOverlay');
+const canvasWrapper = document.getElementById('canvasWrapper');
 const saveBtn = document.getElementById('saveBtn');
 const statusSpan = document.getElementById('status');
 const shapeList = document.getElementById('shapeList');
@@ -11,6 +13,9 @@ const recentLabelsDiv = document.getElementById('recentLabels');
 const resizer = document.getElementById('resizer');
 const sidebar = document.getElementById('sidebar');
 const canvasContainer = document.querySelector('.canvas-container'); // 缓存DOM引用
+
+// SVG命名空间
+const SVG_NS = 'http://www.w3.org/2000/svg';
 
 
 // Navigation buttons
@@ -44,7 +49,6 @@ let img = new Image();
 let shapes = [];
 let currentPoints = [];
 let isDrawing = false;
-let scale = 1;
 let selectedShapeIndex = -1;
 let editingShapeIndex = -1;
 let recentLabels = ["object", "person", "car", "background"];
@@ -282,11 +286,19 @@ function fitImageToScreen() {
 }
 
 function updateCanvasTransform() {
-    // Canvas 保持原始图片尺寸，使用 CSS transform 进行缩放
+    // Canvas 保持原始图片尺寸
     canvas.width = img.width;
     canvas.height = img.height;
-    canvas.style.transform = `scale(${zoomLevel})`;
-    canvas.style.transformOrigin = '0 0';
+    
+    // SVG 也保持原始图片尺寸
+    svgOverlay.setAttribute('width', img.width);
+    svgOverlay.setAttribute('height', img.height);
+    svgOverlay.setAttribute('viewBox', `0 0 ${img.width} ${img.height}`);
+    
+    // 使用wrapper的CSS transform进行整体缩放
+    canvasWrapper.style.transform = `scale(${zoomLevel})`;
+    canvasWrapper.style.transformOrigin = '0 0';
+    
     draw();
 }
 
@@ -409,7 +421,8 @@ function getColorsForLabel(label) {
 
 // --- Canvas Interaction ---
 
-canvas.addEventListener('mousedown', (e) => {
+// 使用canvasWrapper来监听鼠标事件，因为SVG覆盖在canvas上
+canvasWrapper.addEventListener('mousedown', (e) => {
     if (e.button === 0) { // Left click
         const rect = canvas.getBoundingClientRect();
         // Mouse pos relative to canvas
@@ -480,7 +493,7 @@ canvas.addEventListener('mousedown', (e) => {
     }
 });
 
-canvas.addEventListener('mousemove', (e) => {
+canvasWrapper.addEventListener('mousemove', (e) => {
     if (isDrawing) {
         if (!animationFrameId) {
             animationFrameId = requestAnimationFrame(() => {
@@ -508,15 +521,16 @@ canvas.addEventListener('mousemove', (e) => {
 
         const hoveredIndex = findShapeIndexAt(x, y);
         if (hoveredIndex !== -1) {
-            canvas.style.cursor = 'pointer';
+            canvasWrapper.style.cursor = 'pointer';
         } else {
             // View mode uses default cursor, others use crosshair
-            canvas.style.cursor = currentMode === 'view' ? 'default' : 'crosshair';
+            canvasWrapper.style.cursor = currentMode === 'view' ? 'default' : 'crosshair';
         }
     }
 });
 
-canvas.addEventListener('wheel', (e) => {
+// 缩放事件绑定到canvasContainer以确保始终能响应
+canvasContainer.addEventListener('wheel', (e) => {
     if (e.ctrlKey) { // Zoom on Ctrl+Wheel
         e.preventDefault();
 
@@ -554,8 +568,8 @@ canvas.addEventListener('wheel', (e) => {
                 if (zoomLevel < 0.1) zoomLevel = 0.1;
             }
 
-            // Update canvas transform (CSS缩放，不改变Canvas尺寸)
-            canvas.style.transform = `scale(${zoomLevel})`;
+            // Update canvas wrapper transform (整体缩放)
+            canvasWrapper.style.transform = `scale(${zoomLevel})`;
 
             // Calculate new scroll position to keep the same image point under the mouse
             const newScrollLeft = imageX * zoomLevel - mouseX;
@@ -565,13 +579,16 @@ canvas.addEventListener('wheel', (e) => {
             canvasContainer.scrollLeft = newScrollLeft;
             canvasContainer.scrollTop = newScrollTop;
 
+            // 重绘SVG以更新线宽（保持视觉上的恒定粗细）
+            drawSVGAnnotations();
+
             zoomAnimationFrameId = null; // 重置标志
         });
     }
-});
+}, { passive: false });
 
-// 禁用canvas上的右键菜单 (except in View Mode)
-canvas.addEventListener('contextmenu', (e) => {
+// 禁用canvasWrapper上的右键菜单 (except in View Mode)
+canvasWrapper.addEventListener('contextmenu', (e) => {
     if (currentMode !== 'view') {
         e.preventDefault();
     }
@@ -1113,12 +1130,19 @@ function setMode(mode) {
 
 // --- Drawing Logic ---
 function draw(mouseEvent) {
+    // Canvas只绘制图片
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw image at original size (CSS transform handles zoom)
     ctx.drawImage(img, 0, 0, img.width, img.height);
 
-    // Draw existing shapes
+    // SVG绘制标注
+    drawSVGAnnotations(mouseEvent);
+}
+
+function drawSVGAnnotations(mouseEvent) {
+    // 清除SVG内容
+    svgOverlay.innerHTML = '';
+    
+    // 绘制已完成的形状
     shapes.forEach((shape, index) => {
         if (shape.visible === false) return; // Skip hidden shapes
 
@@ -1138,69 +1162,99 @@ function draw(mouseEvent) {
             points = getRectPoints(points);
         }
 
-        drawPolygon(points, strokeColor, fillColor, false);
+        drawSVGPolygon(points, strokeColor, fillColor, false, index);
     });
 
-    // Draw current polygon
+    // 绘制正在创建的形状
     if (isDrawing) {
         let points = currentPoints;
         if (currentMode === 'rectangle' && points.length === 2) {
             points = getRectPoints(points);
         }
-        drawPolygon(points, 'rgba(255, 0, 0, 0.8)', 'rgba(255, 0, 0, 0.1)', true);
+        drawSVGPolygon(points, 'rgba(0, 200, 0, 0.8)', 'rgba(0, 200, 0, 0.1)', true, -1);
 
-        // Draw line to mouse cursor (only for polygon mode)
-        if (mouseEvent && currentMode === 'polygon') {
+        // 绘制到鼠标位置的临时线（只在polygon模式下）
+        if (mouseEvent && currentMode === 'polygon' && currentPoints.length > 0) {
             const rect = canvas.getBoundingClientRect();
             const mx = (mouseEvent.clientX - rect.left) / zoomLevel;
             const my = (mouseEvent.clientY - rect.top) / zoomLevel;
             const lastPoint = currentPoints[currentPoints.length - 1];
 
-            ctx.beginPath();
-            ctx.moveTo(lastPoint[0], lastPoint[1]);
-            ctx.lineTo(mx, my);
-            ctx.strokeStyle = 'red';
-            ctx.lineWidth = 2;
-            ctx.stroke();
+            const line = document.createElementNS(SVG_NS, 'line');
+            line.setAttribute('x1', lastPoint[0]);
+            line.setAttribute('y1', lastPoint[1]);
+            line.setAttribute('x2', mx);
+            line.setAttribute('y2', my);
+            line.setAttribute('stroke', 'rgba(0, 200, 0, 0.8)');
+            line.setAttribute('stroke-width', 2 / zoomLevel); // 根据缩放调整线宽
+            line.style.pointerEvents = 'none';
+            svgOverlay.appendChild(line);
         }
     }
 }
 
-function drawPolygon(points, strokeColor, fillColor, showVertices = false) {
+function drawSVGPolygon(points, strokeColor, fillColor, showVertices = false, shapeIndex = -1) {
     if (points.length === 0) return;
 
-    ctx.beginPath();
-    ctx.moveTo(points[0][0], points[0][1]);
-    for (let i = 1; i < points.length; i++) {
-        ctx.lineTo(points[i][0], points[i][1]);
+    const group = document.createElementNS(SVG_NS, 'g');
+    
+    // 根据zoomLevel调整线宽，使视觉上保持恒定粗细
+    const adjustedStrokeWidth = borderWidth / zoomLevel;
+    const adjustedPointRadius = 3 / zoomLevel;
+    
+    // 创建多边形或折线
+    let pathElement;
+    if (!isDrawing || shapeIndex !== -1 || currentMode === 'rectangle') {
+        // 完成的形状使用polygon
+        pathElement = document.createElementNS(SVG_NS, 'polygon');
+        const pointsStr = points.map(p => `${p[0]},${p[1]}`).join(' ');
+        pathElement.setAttribute('points', pointsStr);
+    } else {
+        // 正在绘制的形状使用polyline
+        pathElement = document.createElementNS(SVG_NS, 'polyline');
+        const pointsStr = points.map(p => `${p[0]},${p[1]}`).join(' ');
+        pathElement.setAttribute('points', pointsStr);
     }
-
-    // Close path if not drawing polygon (drawing rectangle should always be closed)
-    // Or if it is a finished shape
-    if (!isDrawing || points !== currentPoints || currentMode === 'rectangle') {
-        ctx.closePath();
+    
+    pathElement.setAttribute('stroke', strokeColor);
+    pathElement.setAttribute('stroke-width', adjustedStrokeWidth);
+    pathElement.setAttribute('fill', (!isDrawing || shapeIndex !== -1) ? fillColor : 'none');
+    
+    // 为完成的形状添加data属性用于事件委托
+    if (shapeIndex !== -1) {
+        pathElement.style.cursor = 'pointer';
+        pathElement.style.pointerEvents = 'auto';
+        pathElement.dataset.shapeIndex = shapeIndex;
     }
-
-    ctx.strokeStyle = strokeColor;
-    ctx.lineWidth = borderWidth; // 使用全局borderWidth
-    ctx.stroke();
-
-    if (!isDrawing || points !== currentPoints) {
-        ctx.fillStyle = fillColor;
-        ctx.fill();
-    }
-
-    // Draw vertices only if requested (for current drawing)
+    
+    group.appendChild(pathElement);
+    
+    // 绘制顶点（仅在绘制过程中显示）
     if (showVertices) {
-        ctx.fillStyle = strokeColor;
-        const pointRadius = 3;
         points.forEach(p => {
-            ctx.beginPath();
-            ctx.arc(p[0], p[1], pointRadius, 0, 2 * Math.PI);
-            ctx.fill();
+            const circle = document.createElementNS(SVG_NS, 'circle');
+            circle.setAttribute('cx', p[0]);
+            circle.setAttribute('cy', p[1]);
+            circle.setAttribute('r', adjustedPointRadius);
+            circle.setAttribute('fill', strokeColor);
+            circle.style.pointerEvents = 'none';
+            group.appendChild(circle);
         });
     }
+    
+    svgOverlay.appendChild(group);
 }
+
+// SVG事件委托 - 只绑定一次，避免内存泄漏
+svgOverlay.addEventListener('click', (e) => {
+    const target = e.target;
+    if (target.dataset && target.dataset.shapeIndex !== undefined) {
+        e.stopPropagation();
+        selectedShapeIndex = parseInt(target.dataset.shapeIndex);
+        renderShapeList();
+        draw();
+    }
+});
 
 function getRectPoints(points) {
     if (points.length !== 2) return points;

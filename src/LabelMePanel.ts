@@ -227,7 +227,10 @@ export class LabelMePanel {
                             <span id="status"></span>
                         </div>
                         <div class="canvas-container">
-                            <canvas id="canvas"></canvas>
+                            <div id="canvasWrapper" class="canvas-wrapper">
+                                <canvas id="canvas"></canvas>
+                                <svg id="svgOverlay" class="svg-overlay"></svg>
+                            </div>
                         </div>
                     </div>
                     <div id="resizer" class="resizer"></div>

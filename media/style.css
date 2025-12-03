@@ -162,9 +162,32 @@ button.dirty {
     background-color: #1e1e1e;
 }
 
-canvas {
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+.canvas-wrapper {
+    position: relative;
     display: block;
+    transform-origin: 0 0;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+}
+
+canvas {
+    display: block;
+}
+
+.svg-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    pointer-events: none;
+    overflow: visible;
+}
+
+.svg-overlay.interactive {
+    pointer-events: auto;
+}
+
+.svg-overlay polygon,
+.svg-overlay path {
+    cursor: pointer;
 }
 
 /* Modal Styles */

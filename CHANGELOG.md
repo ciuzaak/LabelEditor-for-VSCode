@@ -2,6 +2,22 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.5.0] - 2025-12-03
+
+### Changed
+- **SVG Annotation Rendering**: Migrated annotation rendering from Canvas to SVG
+  - Annotations now remain sharp and crisp at any zoom level (vector graphics)
+  - Fixed blurry annotation edges when zooming in on images
+  - Line width and vertex sizes now stay visually constant regardless of zoom level
+
+### Improved
+- **Event Handling**: Fixed zoom not responding when mouse is over an annotation or outside the image area
+- **Memory Optimization**: Implemented event delegation for SVG elements to prevent memory leaks
+- **Code Cleanup**: Removed unused variables and legacy compatibility functions
+
+### Visual
+- **Preview Color**: Changed drawing preview color from red to green for better visibility
+
 ## [0.4.1] - 2025-12-02
 
 ### Fixed

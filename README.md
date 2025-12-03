@@ -1,16 +1,16 @@
 # LabelEditor for VSCode
 
-A VS Code extension for annotating images with polygon shapes, compatible with the LabelMe JSON format. Perfect for creating datasets for machine learning and computer vision projects.
+A VS Code extension for annotating images with polygon and rectangle shapes, compatible with the LabelMe JSON format. Perfect for creating datasets for machine learning and computer vision projects.
 
 > **Note**: This extension is in early development. Many features are still being refined and improved. Contributions and feedback are welcome!
 
 ## ✨ Features
 
 ### Core Annotation
-- **Polygon Annotation**: Click to draw polygon shapes on images
-- **View/Polygon Mode**: Toggle between viewing and editing modes
+- **Polygon & Rectangle Annotation**: Draw polygon and rectangle shapes on images
+- **Multiple Drawing Modes**: Toggle between viewing and editing modes
   - 👁️ **View Mode**: Browse and select without accidental edits (default)
-  - ✏️ **Polygon Mode**: Create new polygon annotations
+  - ⬠ **Polygon Mode**: Create new polygon annotations
   - ▭ **Rectangle Mode**: Create new rectangle annotations
 - **Label Management**: Assign and edit labels for each annotated region
 - **Undo/Redo Support**: Full undo/redo functionality with up to 50 history states
@@ -62,9 +62,9 @@ A VS Code extension for annotating images with polygon shapes, compatible with t
 ### Basic Workflow
 1. Right-click any image file (.jpg, .jpeg, .png, .bmp) in the Explorer
 2. Select **"LabelEditor: Open Image Annotator"**
-3. Switch to **Polygon Mode** (✏️ button) if needed
-4. Click to add polygon vertices
-5. Click near the first point to close the polygon
+3. Switch to **Polygon Mode** (⬠) or **Rectangle Mode** (▭) as needed
+4. For polygons: Click to add vertices, click near the first point to close
+5. For rectangles: Click to set start point, move and click to set end point
 6. Enter a label name
 7. Save with Ctrl+S
 
@@ -81,8 +81,10 @@ A VS Code extension for annotating images with polygon shapes, compatible with t
 ### Keyboard Shortcuts
 - **Left Click**: Add point / Select shape
 - **Right Click**: Undo last point while drawing
+- **Ctrl+Wheel**: Zoom in/out
 - **V**: Switch to View Mode
 - **P**: Switch to Polygon Mode
+- **R**: Switch to Rectangle Mode
 - **Ctrl+Z** (`Cmd+Z` on Mac): Undo last action
 - **Ctrl+Shift+Z** or **Ctrl+Y**: Redo action
 - **ESC**: Cancel current drawing
@@ -127,7 +129,7 @@ Note: `visible` property is not saved to JSON - it's a session-only UI state.
 
 This extension is still under active development. Some known limitations include:
 
-- No support for other shape types (rectangles, circles, etc.) yet
+- No support for circle/ellipse shape types yet
 - No batch annotation features
 - No import from other formats
 - Performance may degrade with very large images (10000x10000+)
@@ -138,6 +140,7 @@ This extension is still under active development. Some known limitations include
 **All code in this extension was written by AI:**
 - **Gemini 3 Pro**
 - **Claude Sonnet 4.5**
+- **Claude Opus 4.5**
 
 This project serves as a demonstration of AI-assisted development capabilities.
 
