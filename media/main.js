@@ -63,6 +63,13 @@ let currentMode = 'view'; // 默认为view模式
 let zoomLevel = 1;
 let zoomAnimationFrameId = null; // 缩放节流
 
+// 常量定义
+const ZOOM_FIT_RATIO = 0.98;      // 适应屏幕时的缩放比例
+const ZOOM_MAX = 10;               // 最大缩放倍数
+const ZOOM_MIN = 0.1;              // 最小缩放倍数
+const ZOOM_FACTOR = 1.1;           // 滚轮缩放因子
+const CLOSE_DISTANCE_THRESHOLD = 100; // 多边形闭合距离阈值
+
 // Undo/Redo History (实例级别 - 只记录shapes的变化)
 let history = []; // 历史记录栈
 let historyIndex = -1; // 当前历史位置
@@ -81,36 +88,41 @@ const PRESET_COLORS = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A',
     '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
     '#52C41A', '#FA8C16', '#EB2F96', '#722ED1',
-    '#13C2C2', '#52C41A', '#FAAD14', '#F5222D',
-    '#FA541C', '#FADB14', '#A0D911', '#52C41A',
-    '#13C2C2', '#1890FF', '#2F54EB', '#722ED1'
+    '#13C2C2', '#1890FF', '#FAAD14', '#F5222D',
+    '#FA541C', '#FADB14', '#A0D911', '#2F54EB',
+    '#9254DE', '#597EF7', '#36CFC9', '#FF7A45'
 ];
 
 
-// 从vscode state恢复customColors
-const vscodeState = vscode.getState();
-if (vscodeState && vscodeState.customColors) {
-    customColors = new Map(Object.entries(vscodeState.customColors));
-}
-
 // Labels可见性管理 - 全局状态（会话级别，切换图片保留，关闭插件重置）
 let labelVisibilityState = new Map(); // 存储每个label的可见性状态 (true=visible, false=hidden)
+
+// 高级选项 - 全局渲染设置（会话级别，切换图片保留，关闭插件重置）
+let borderWidth = 2; // 边界粗细，默认2px
+let fillOpacity = 0.3; // 填充透明度，默认30%
+
+// Initialize from global settings injected by extension
+const vscodeState = vscode.getState();
+if (typeof initialGlobalSettings !== 'undefined') {
+    if (initialGlobalSettings.customColors) {
+        customColors = new Map(Object.entries(initialGlobalSettings.customColors));
+    }
+    if (initialGlobalSettings.borderWidth !== undefined) {
+        borderWidth = initialGlobalSettings.borderWidth;
+    }
+    if (initialGlobalSettings.fillOpacity !== undefined) {
+        fillOpacity = initialGlobalSettings.fillOpacity;
+    }
+}
 
 // 从vscode state恢复labelVisibilityState
 if (vscodeState && vscodeState.labelVisibility) {
     labelVisibilityState = new Map(Object.entries(vscodeState.labelVisibility).map(([k, v]) => [k, v === 'true' || v === true]));
 }
 
-// 高级选项 - 全局渲染设置（会话级别，切换图片保留，关闭插件重置）
-let borderWidth = 2; // 边界粗细，默认2px
-let fillOpacity = 0.3; // 填充透明度，默认30%
-
-// 从vscode state恢复高级选项设置
-if (vscodeState && vscodeState.borderWidth !== undefined) {
-    borderWidth = vscodeState.borderWidth;
-}
-if (vscodeState && vscodeState.fillOpacity !== undefined) {
-    fillOpacity = vscodeState.fillOpacity;
+// 从vscode state恢复currentMode
+if (vscodeState && vscodeState.currentMode) {
+    currentMode = vscodeState.currentMode;
 }
 
 // 初始化UI显示值
@@ -123,10 +135,7 @@ if (fillOpacitySlider && fillOpacityValue) {
     fillOpacityValue.textContent = Math.round(fillOpacity * 100);
 }
 
-// 从vscode state恢复currentMode
-if (vscodeState && vscodeState.currentMode) {
-    currentMode = vscodeState.currentMode;
-}
+
 
 // 初始化模式按钮UI
 if (viewModeBtn && polygonModeBtn && rectangleModeBtn) {
@@ -161,19 +170,34 @@ if (existingData) {
 // 初始化历史记录
 saveHistory();
 
-img.onload = () => {
+// 图片加载处理函数
+function handleImageLoad() {
     fitImageToScreen();
     draw();
     renderShapeList();
     renderLabelsList();
-};
+}
 
-img.onerror = () => {
+function handleImageError() {
     statusSpan.textContent = "Error loading image";
     statusSpan.style.color = "red";
-};
+}
 
+img.onload = handleImageLoad;
+img.onerror = handleImageError;
 img.src = imageUrl;
+
+// 页面卸载时清理资源
+window.addEventListener('beforeunload', () => {
+    img.onload = null;
+    img.onerror = null;
+    if (animationFrameId) {
+        cancelAnimationFrame(animationFrameId);
+    }
+    if (zoomAnimationFrameId) {
+        cancelAnimationFrame(zoomAnimationFrameId);
+    }
+});
 
 // --- Dirty State Management ---
 
@@ -280,25 +304,37 @@ function fitImageToScreen() {
     const scaleX = w / img.width;
     const scaleY = h / img.height;
 
-    zoomLevel = Math.min(scaleX, scaleY) * 0.98; // 98% fit
+    zoomLevel = Math.min(scaleX, scaleY) * ZOOM_FIT_RATIO;
 
     updateCanvasTransform();
 }
 
 function updateCanvasTransform() {
-    // Canvas 保持原始图片尺寸
+    // Canvas 保持原始图片尺寸 (resolution)
     canvas.width = img.width;
     canvas.height = img.height;
-    
-    // SVG 也保持原始图片尺寸
-    svgOverlay.setAttribute('width', img.width);
-    svgOverlay.setAttribute('height', img.height);
+
+    const displayWidth = Math.floor(img.width * zoomLevel);
+    const displayHeight = Math.floor(img.height * zoomLevel);
+
+    // Set display size via CSS
+    canvas.style.width = `${displayWidth}px`;
+    canvas.style.height = `${displayHeight}px`;
+
+    // SVG 也保持原始图片尺寸 (viewBox)
     svgOverlay.setAttribute('viewBox', `0 0 ${img.width} ${img.height}`);
-    
-    // 使用wrapper的CSS transform进行整体缩放
-    canvasWrapper.style.transform = `scale(${zoomLevel})`;
-    canvasWrapper.style.transformOrigin = '0 0';
-    
+    // Set SVG display size to match canvas
+    svgOverlay.setAttribute('width', `${displayWidth}px`);
+    svgOverlay.setAttribute('height', `${displayHeight}px`);
+    svgOverlay.style.width = `${displayWidth}px`;
+    svgOverlay.style.height = `${displayHeight}px`;
+
+    // Remove transform from wrapper and set explicit size
+    canvasWrapper.style.transform = '';
+    canvasWrapper.style.transformOrigin = '';
+    canvasWrapper.style.width = `${displayWidth}px`;
+    canvasWrapper.style.height = `${displayHeight}px`;
+
     draw();
 }
 
@@ -461,7 +497,7 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 const dy = y - firstPoint[1];
 
                 // Check close distance (scaled)
-                if (currentPoints.length > 2 && (dx * dx + dy * dy) < (100 / (zoomLevel * zoomLevel))) {
+                if (currentPoints.length > 2 && (dx * dx + dy * dy) < (CLOSE_DISTANCE_THRESHOLD / (zoomLevel * zoomLevel))) {
                     finishPolygon();
                 } else {
                     currentPoints.push([x, y]);
@@ -540,8 +576,6 @@ canvasContainer.addEventListener('wheel', (e) => {
         }
 
         zoomAnimationFrameId = requestAnimationFrame(() => {
-            const zoomFactor = 1.1; // 每次滚轮缩放10%
-
             // Get mouse position relative to container
             const rect = canvasContainer.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
@@ -558,18 +592,29 @@ canvasContainer.addEventListener('wheel', (e) => {
             // Apply zoom with linear scaling
             if (e.deltaY < 0) {
                 // Zoom in
-                zoomLevel *= zoomFactor;
-                // Limit maximum zoom to 10x (1000%)
-                if (zoomLevel > 10) zoomLevel = 10;
+                zoomLevel *= ZOOM_FACTOR;
+                if (zoomLevel > ZOOM_MAX) zoomLevel = ZOOM_MAX;
             } else {
                 // Zoom out
-                zoomLevel /= zoomFactor;
-                // Minimum zoom limit
-                if (zoomLevel < 0.1) zoomLevel = 0.1;
+                zoomLevel /= ZOOM_FACTOR;
+                if (zoomLevel < ZOOM_MIN) zoomLevel = ZOOM_MIN;
             }
 
-            // Update canvas wrapper transform (整体缩放)
-            canvasWrapper.style.transform = `scale(${zoomLevel})`;
+            // Update canvas wrapper size (整体缩放)
+            const displayWidth = Math.floor(img.width * zoomLevel);
+            const displayHeight = Math.floor(img.height * zoomLevel);
+
+            canvas.style.width = `${displayWidth}px`;
+            canvas.style.height = `${displayHeight}px`;
+
+            svgOverlay.setAttribute('width', `${displayWidth}px`);
+            svgOverlay.setAttribute('height', `${displayHeight}px`);
+            svgOverlay.style.width = `${displayWidth}px`;
+            svgOverlay.style.height = `${displayHeight}px`;
+
+            canvasWrapper.style.width = `${displayWidth}px`;
+            canvasWrapper.style.height = `${displayHeight}px`;
+            canvasWrapper.style.transform = '';
 
             // Calculate new scroll position to keep the same image point under the mouse
             const newScrollLeft = imageX * zoomLevel - mouseX;
@@ -945,17 +990,26 @@ function showColorPicker(label) {
     const palette = colorPickerModal.querySelector('.color-palette');
     palette.innerHTML = '';
 
+    // 使用 DocumentFragment 批量添加 DOM
+    const fragment = document.createDocumentFragment();
     PRESET_COLORS.forEach(color => {
         const colorOption = document.createElement('div');
         colorOption.className = 'color-option';
         colorOption.style.backgroundColor = color;
-        colorOption.onclick = () => {
-            document.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
-            colorOption.classList.add('selected');
-            customColorInput.value = color;
-        };
-        palette.appendChild(colorOption);
+        colorOption.dataset.color = color;
+        fragment.appendChild(colorOption);
     });
+    palette.appendChild(fragment);
+
+    // 使用事件委托处理颜色选择
+    palette.onclick = (e) => {
+        const target = e.target;
+        if (target.classList.contains('color-option')) {
+            palette.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
+            target.classList.add('selected');
+            customColorInput.value = target.dataset.color;
+        }
+    };
 
     // 设置当前颜色 - 转换为#XXXXXX格式
     const currentColors = getColorsForLabel(label);
@@ -986,15 +1040,19 @@ function hideColorPicker() {
     currentEditingLabel = null;
 }
 
-// Unified state saving
+function saveGlobalSettings(key, value) {
+    vscode.postMessage({
+        command: 'saveGlobalSettings',
+        key: key,
+        value: value
+    });
+}
+
+// Unified state saving (keep for session-specific state like mode/visibility)
 function saveState() {
-    const customColorsObj = Object.fromEntries(customColors);
     const labelVisibilityObj = Object.fromEntries(labelVisibilityState);
     vscode.setState({
-        customColors: customColorsObj,
         labelVisibility: labelVisibilityObj,
-        borderWidth: borderWidth,
-        fillOpacity: fillOpacity,
         currentMode: currentMode
     });
 }
@@ -1006,21 +1064,16 @@ function confirmColorPicker() {
     let color = customColorInput.value.trim();
 
     // 验证颜色格式 - 只接受#XXXXXX格式
-    if (!color.startsWith('#')) {
-        alert('Invalid color format. Please use #RRGGBB format (e.g., #FF5733).');
-        return;
-    }
-
-    if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
-        alert('Invalid color format. Please use #RRGGBB format (e.g., #FF5733).');
+    if (!color.startsWith('#') || !/^#[0-9A-Fa-f]{6}$/.test(color)) {
+        vscode.postMessage({ command: 'alert', text: 'Invalid color format. Please use #RRGGBB format (e.g., #FF5733).' });
         return;
     }
 
     // 保存自定义颜色
     customColors.set(currentEditingLabel, color.toUpperCase());
 
-    // 保存到vscode state以实现持久化
-    saveState();
+    // Save to global settings
+    saveGlobalSettings('customColors', Object.fromEntries(customColors));
 
     // 清除颜色缓存以强制重新计算
     colorCache.delete(currentEditingLabel);
@@ -1035,8 +1088,8 @@ function confirmColorPicker() {
 function resetLabelColor(label) {
     customColors.delete(label);
 
-    // 保存到vscode state
-    saveState();
+    // Save to global settings
+    saveGlobalSettings('customColors', Object.fromEntries(customColors));
 
     colorCache.delete(label);
     renderLabelsList();
@@ -1060,7 +1113,7 @@ function updateBorderWidth(value) {
     if (borderWidthValue) {
         borderWidthValue.textContent = borderWidth;
     }
-    // saveState(); // Removed: Don't save on every pixel of drag
+    // borderWidth 不影响颜色缓存，无需清除
     draw();
 }
 
@@ -1090,7 +1143,9 @@ function resetAdvancedOptions() {
         fillOpacityValue.textContent = Math.round(fillOpacity * 100);
     }
 
-    saveState();
+    colorCache.clear();
+    saveGlobalSettings('borderWidth', borderWidth);
+    saveGlobalSettings('fillOpacity', fillOpacity);
     draw();
 }
 
@@ -1141,7 +1196,7 @@ function draw(mouseEvent) {
 function drawSVGAnnotations(mouseEvent) {
     // 清除SVG内容
     svgOverlay.innerHTML = '';
-    
+
     // 绘制已完成的形状
     shapes.forEach((shape, index) => {
         if (shape.visible === false) return; // Skip hidden shapes
@@ -1154,7 +1209,9 @@ function drawSVGAnnotations(mouseEvent) {
 
         if (isSelected) {
             strokeColor = 'rgba(255, 255, 0, 1)';
-            fillColor = 'rgba(255, 255, 0, 0.4)';
+            // Use global fillOpacity but ensure at least 0.1 visibility for selection
+            const selectionOpacity = Math.max(0.1, fillOpacity);
+            fillColor = `rgba(255, 255, 0, ${selectionOpacity})`;
         }
 
         let points = shape.points;
@@ -1197,11 +1254,11 @@ function drawSVGPolygon(points, strokeColor, fillColor, showVertices = false, sh
     if (points.length === 0) return;
 
     const group = document.createElementNS(SVG_NS, 'g');
-    
+
     // 根据zoomLevel调整线宽，使视觉上保持恒定粗细
     const adjustedStrokeWidth = borderWidth / zoomLevel;
     const adjustedPointRadius = 3 / zoomLevel;
-    
+
     // 创建多边形或折线
     let pathElement;
     if (!isDrawing || shapeIndex !== -1 || currentMode === 'rectangle') {
@@ -1215,20 +1272,20 @@ function drawSVGPolygon(points, strokeColor, fillColor, showVertices = false, sh
         const pointsStr = points.map(p => `${p[0]},${p[1]}`).join(' ');
         pathElement.setAttribute('points', pointsStr);
     }
-    
+
     pathElement.setAttribute('stroke', strokeColor);
     pathElement.setAttribute('stroke-width', adjustedStrokeWidth);
     pathElement.setAttribute('fill', (!isDrawing || shapeIndex !== -1) ? fillColor : 'none');
-    
+
     // 为完成的形状添加data属性用于事件委托
     if (shapeIndex !== -1) {
         pathElement.style.cursor = 'pointer';
         pathElement.style.pointerEvents = 'auto';
         pathElement.dataset.shapeIndex = shapeIndex;
     }
-    
+
     group.appendChild(pathElement);
-    
+
     // 绘制顶点（仅在绘制过程中显示）
     if (showVertices) {
         points.forEach(p => {
@@ -1241,7 +1298,7 @@ function drawSVGPolygon(points, strokeColor, fillColor, showVertices = false, sh
             group.appendChild(circle);
         });
     }
-    
+
     svgOverlay.appendChild(group);
 }
 
@@ -1321,13 +1378,13 @@ if (advancedOptionsBtn) {
 // Border Width slider
 if (borderWidthSlider) {
     borderWidthSlider.oninput = (e) => updateBorderWidth(e.target.value);
-    borderWidthSlider.onchange = (e) => saveState(); // Save only on release
+    borderWidthSlider.onchange = (e) => saveGlobalSettings('borderWidth', borderWidth); // Save only on release
 }
 
 // Fill Opacity slider
 if (fillOpacitySlider) {
     fillOpacitySlider.oninput = (e) => updateFillOpacity(e.target.value);
-    fillOpacitySlider.onchange = (e) => saveState(); // Save only on release
+    fillOpacitySlider.onchange = (e) => saveGlobalSettings('fillOpacity', fillOpacity); // Save only on release
 }
 
 // Reset Advanced Options button

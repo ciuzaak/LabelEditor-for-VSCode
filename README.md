@@ -20,14 +20,14 @@ A VS Code extension for annotating images with polygon and rectangle shapes, com
 - **Batch Visibility Toggle**: Show/hide all instances of a specific label
 - **Custom Colors**: 
   - 24 preset colors + custom hex input (#XXXXXX)
-  - Colors persist across image switches within session
+  - Colors persist globally (saved to VS Code global state)
   - Per-label reset to default color
-- **Session Persistence**: Settings maintained until extension closes
+- **Global Persistence**: Settings maintained even after closing VS Code
 
 ### Advanced Options
 - **Border Width Control**: Adjust polygon outline thickness (1-5px)
 - **Fill Opacity Control**: Adjust polygon fill transparency (0-100%)
-- **Settings Persistence**: Preferences saved across image navigation
+- **Settings Persistence**: Preferences saved globally
 - **Quick Reset**: One-click return to default settings
 
 ### Navigation & Workflow
@@ -155,6 +155,7 @@ Planned features for future releases:
 - [x] ~~View/Edit mode toggle~~ **Added in v0.3.0**
 - [x] ~~Advanced rendering options~~ **Added in v0.3.0**
 - [x] ~~Rectangle shapes~~ **Added in v0.4.0**
+- [x] ~~Global settings persistence~~ **Added in v0.6.0**
 - [ ] Circle shapes
 - [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
+import { existsSync } from 'fs';
 
 export class LabelMePanel {
     public static currentPanel: LabelMePanel | undefined;
@@ -13,7 +14,9 @@ export class LabelMePanel {
     private _isDirty = false;
     private _pendingNavigation: number | undefined;
 
-    public static createOrShow(extensionUri: vscode.Uri, imageUri: vscode.Uri) {
+    private readonly _globalState: vscode.Memento;
+
+    public static createOrShow(context: vscode.ExtensionContext, imageUri: vscode.Uri) {
         const column = vscode.window.activeTextEditor
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
@@ -33,19 +36,20 @@ export class LabelMePanel {
             {
                 enableScripts: true,
                 localResourceRoots: [
-                    vscode.Uri.joinPath(extensionUri, 'media'),
+                    vscode.Uri.joinPath(context.extensionUri, 'media'),
                     vscode.Uri.file(path.dirname(imageUri.fsPath))
                 ]
             }
         );
 
-        LabelMePanel.currentPanel = new LabelMePanel(panel, extensionUri, imageUri);
+        LabelMePanel.currentPanel = new LabelMePanel(panel, context.extensionUri, imageUri, context.globalState);
     }
 
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, imageUri: vscode.Uri) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, imageUri: vscode.Uri, globalState: vscode.Memento) {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._imageUri = imageUri;
+        this._globalState = globalState;
 
         // Set the webview's initial html content
         this._update();
@@ -83,6 +87,9 @@ export class LabelMePanel {
                     case 'prev':
                         this.navigateImage(-1);
                         return;
+                    case 'saveGlobalSettings':
+                        this._globalState.update(message.key, message.value);
+                        return;
                 }
             },
             null,
@@ -117,10 +124,10 @@ export class LabelMePanel {
 
     private async _performNavigation(direction: number) {
         const dirPath = path.dirname(this._imageUri.fsPath);
-        const files = await fs.promises.readdir(dirPath);
+        const files = await fs.readdir(dirPath);
         const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp'];
 
-        const images = files.filter(file => {
+        const images = files.filter((file: string) => {
             const ext = path.extname(file).toLowerCase();
             return imageExtensions.includes(ext);
         }).sort();
@@ -173,13 +180,13 @@ export class LabelMePanel {
         }
     }
 
-    private _update() {
+    private async _update() {
         const webview = this._panel.webview;
         this._panel.title = path.basename(this._imageUri.fsPath);
-        this._panel.webview.html = this._getHtmlForWebview(webview);
+        this._panel.webview.html = await this._getHtmlForWebview(webview);
     }
 
-    private _getHtmlForWebview(webview: vscode.Webview) {
+    private async _getHtmlForWebview(webview: vscode.Webview): Promise<string> {
         // Local path to main script run in the webview
         const scriptPathOnDisk = vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js');
         const scriptUri = webview.asWebviewUri(scriptPathOnDisk);
@@ -194,11 +201,13 @@ export class LabelMePanel {
         // Load existing annotation if exists
         let existingData = null;
         const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
-        if (fs.existsSync(jsonPath)) {
+        if (existsSync(jsonPath)) {
             try {
-                existingData = JSON.parse(fs.readFileSync(jsonPath, 'utf8'));
+                const jsonContent = await fs.readFile(jsonPath, 'utf8');
+                existingData = JSON.parse(jsonContent);
             } catch (e) {
                 console.error("Failed to load existing JSON", e);
+                vscode.window.showWarningMessage(`Failed to load annotation file: ${(e as Error).message}`);
             }
         }
 
@@ -293,13 +302,18 @@ export class LabelMePanel {
                     const imageName = "${path.basename(this._imageUri.fsPath)}";
                     const imagePath = "${this._imageUri.fsPath.replace(/\\/g, '\\\\')}";
                     const existingData = ${JSON.stringify(existingData)};
+                    const initialGlobalSettings = {
+                        customColors: ${JSON.stringify(this._globalState.get('customColors') || {})},
+                        borderWidth: ${this._globalState.get('borderWidth') ?? 2},
+                        fillOpacity: ${this._globalState.get('fillOpacity') ?? 0.3}
+                    };
                 </script>
                 <script src="${scriptUri}"></script>
             </body>
             </html>`;
     }
 
-    private saveAnnotation(data: any) {
+    private async saveAnnotation(data: any) {
         const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
 
         // Construct LabelMe JSON format
@@ -313,18 +327,17 @@ export class LabelMePanel {
             imageWidth: data.imageWidth
         };
 
-        fs.writeFile(jsonPath, JSON.stringify(labelMeData, null, 2), 'utf8', err => {
-            if (err) {
-                vscode.window.showErrorMessage('Failed to save annotation: ' + err.message);
-            } else {
-                vscode.window.showInformationMessage('Annotation saved to ' + path.basename(jsonPath));
-                this._isDirty = false;
+        try {
+            await fs.writeFile(jsonPath, JSON.stringify(labelMeData, null, 2), 'utf8');
+            vscode.window.showInformationMessage('Annotation saved to ' + path.basename(jsonPath));
+            this._isDirty = false;
 
-                if (this._pendingNavigation !== undefined) {
-                    this._performNavigation(this._pendingNavigation);
-                    this._pendingNavigation = undefined;
-                }
+            if (this._pendingNavigation !== undefined) {
+                this._performNavigation(this._pendingNavigation);
+                this._pendingNavigation = undefined;
             }
-        });
+        } catch (err) {
+            vscode.window.showErrorMessage('Failed to save annotation: ' + (err as Error).message);
+        }
     }
 }

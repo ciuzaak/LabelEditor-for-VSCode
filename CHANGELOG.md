@@ -2,6 +2,30 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.6.0] - 2025-12-03
+
+### Added
+- **Global Settings Persistence**: 
+  - Custom label colors, border width, and fill opacity settings are now saved globally.
+  - Settings persist even after closing and reopening VS Code.
+  - Added "Reset" functionality to restore default settings.
+
+### Fixed
+- **Image Loading Bug**: Fixed a critical issue where images failed to open due to a missing variable declaration (`vscodeState`).
+- **Fill Opacity Issues**: 
+  - Fixed an issue where setting opacity to 0 would reset it to default.
+  - Fixed an issue where resetting options didn't immediately update the view.
+  - Selected shapes now respect the global fill opacity setting.
+
+### Improved
+- **Code Quality & Performance**:
+  - Converted synchronous file I/O to async/await for non-blocking operations
+  - Added resource cleanup on page unload to prevent memory leaks
+  - Extracted magic numbers into named constants for better maintainability
+  - Optimized color picker with event delegation and DocumentFragment
+  - Enhanced error handling with user notifications
+  - Removed duplicate preset colors from the color palette
+
 ## [0.5.0] - 2025-12-03
 
 ### Changed
