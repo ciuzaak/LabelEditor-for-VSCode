@@ -786,9 +786,28 @@ function hideLabelModal() {
 
 function renderRecentLabels() {
     recentLabelsDiv.innerHTML = '';
+
+    // 收集当前图片中已有的label（去重）
+    const currentImageLabels = [...new Set(shapes.map(s => s.label))];
+
+    // 合并：当前图片的label优先，然后是历史label（去重）
+    const allLabels = [...currentImageLabels];
     recentLabels.forEach(label => {
+        if (!allLabels.includes(label)) {
+            allLabels.push(label);
+        }
+    });
+
+    // 限制显示数量
+    const labelsToShow = allLabels.slice(0, 12);
+
+    labelsToShow.forEach(label => {
         const chip = document.createElement('div');
         chip.className = 'label-chip';
+        // 如果是当前图片中的label，添加标记
+        if (currentImageLabels.includes(label)) {
+            chip.classList.add('current-image-label');
+        }
         chip.textContent = label;
         chip.onclick = () => {
             labelInput.value = label;
@@ -833,20 +852,44 @@ function confirmLabel() {
 }
 
 modalOkBtn.onclick = confirmLabel;
-modalCancelBtn.onclick = () => {
-    hideLabelModal();
-    editingShapeIndex = -1;
-    currentPoints = [];
-    draw();
-};
 
-labelInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') confirmLabel();
-    if (e.key === 'Escape') {
-        hideLabelModal();
+// 取消标签输入的通用处理函数
+function cancelLabelInput() {
+    hideLabelModal();
+
+    // 如果是编辑已有形状的标签，则只取消编辑
+    if (editingShapeIndex !== -1) {
         editingShapeIndex = -1;
-        currentPoints = [];
         draw();
+        return;
+    }
+
+    // 如果是创建新形状，回到继续绘制状态（不删除任何点）
+    // 因为完成标注的操作是"闭合多边形"或"确定矩形"，取消只是撤销这个完成操作
+    if (currentPoints.length > 0) {
+        isDrawing = true;
+    }
+
+    draw();
+}
+
+modalCancelBtn.onclick = cancelLabelInput;
+
+// 在labelInput上监听Enter键
+labelInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation();
+        confirmLabel();
+    }
+});
+
+// 在document级别监听ESC键，当modal显示时响应
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && labelModal.style.display === 'flex') {
+        e.preventDefault();
+        e.stopPropagation();
+        cancelLabelInput();
     }
 });
 
