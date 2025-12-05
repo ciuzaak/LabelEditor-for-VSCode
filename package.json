@@ -2,7 +2,7 @@
   "name": "labeleditor-vscode",
   "displayName": "LabelEditor for VSCode",
   "description": "Image annotation tool with polygon drawing for machine learning datasets",
-  "version": "0.6.2",
+  "version": "0.6.3",
   "publisher": "ciuzaak",
   "icon": "icon.png",
   "author": {

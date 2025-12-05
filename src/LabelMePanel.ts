@@ -305,7 +305,8 @@ export class LabelMePanel {
                     const initialGlobalSettings = {
                         customColors: ${JSON.stringify(this._globalState.get('customColors') || {})},
                         borderWidth: ${this._globalState.get('borderWidth') ?? 2},
-                        fillOpacity: ${this._globalState.get('fillOpacity') ?? 0.3}
+                        fillOpacity: ${this._globalState.get('fillOpacity') ?? 0.3},
+                        recentLabels: ${JSON.stringify(this._globalState.get('recentLabels') || [])}
                     };
                 </script>
                 <script src="${scriptUri}"></script>

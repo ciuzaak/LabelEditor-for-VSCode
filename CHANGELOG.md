@@ -2,6 +2,17 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.6.3] - 2025-12-05
+
+### Improved
+- **Label Suggestions Enhancement**: Redesigned the label suggestion panel in the label input modal
+  - Split into two distinct sections: "Current Image" and "History"
+  - **Current Image**: Shows labels already used in the current image, ordered by most recently annotated
+  - **History**: Shows globally stored historical labels, ordered by most recently used (max 10)
+  - No duplicate labels between sections - history is automatically filtered
+  - If no annotations exist in the current image, the "Current Image" section is hidden
+  - Historical labels now persist across VS Code sessions (saved to globalState)
+
 ## [0.6.2] - 2025-12-05
 
 ### Improved
@@ -9,11 +20,6 @@ All notable changes to the "LabelEditor for VSCode" extension will be documented
   - Clicking "Cancel" or pressing ESC now only reverts the "close polygon" action instead of clearing all points
   - Users can continue drawing after canceling, allowing for fine-tuning annotations
   - Applies to both polygon and rectangle modes
-  
-- **Label Suggestions**: Enhanced the label suggestion chips in the label input modal
-  - Current image's existing labels are now shown first in the suggestions
-  - Labels from the current image are visually distinguished with the `current-image-label` class
-  - Historical labels follow after current image labels (up to 12 total)
 
 ### Fixed
 - **ESC Key in Label Modal**: Fixed ESC key not responding in the label input dialog

@@ -236,6 +236,25 @@ canvas {
 #recentLabels {
     margin-top: 10px;
     display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.label-section {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.label-section-title {
+    font-size: 11px;
+    color: #888;
+    text-transform: uppercase;
+    margin-bottom: 2px;
+}
+
+.label-chips {
+    display: flex;
     flex-wrap: wrap;
     gap: 5px;
 }

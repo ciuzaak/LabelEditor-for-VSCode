@@ -51,7 +51,7 @@ let currentPoints = [];
 let isDrawing = false;
 let selectedShapeIndex = -1;
 let editingShapeIndex = -1;
-let recentLabels = ["object", "person", "car", "background"];
+let recentLabels = initialGlobalSettings.recentLabels || [];
 
 // Dirty State
 let isDirty = false;
@@ -787,44 +787,92 @@ function hideLabelModal() {
 function renderRecentLabels() {
     recentLabelsDiv.innerHTML = '';
 
-    // 收集当前图片中已有的label（去重）
-    const currentImageLabels = [...new Set(shapes.map(s => s.label))];
-
-    // 合并：当前图片的label优先，然后是历史label（去重）
-    const allLabels = [...currentImageLabels];
-    recentLabels.forEach(label => {
-        if (!allLabels.includes(label)) {
-            allLabels.push(label);
+    // 收集当前图片中已有的label，按最近使用顺序排列
+    // 通过遍历shapes倒序，第一个出现的label排最前
+    const currentImageLabelsOrdered = [];
+    for (let i = shapes.length - 1; i >= 0; i--) {
+        const label = shapes[i].label;
+        if (!currentImageLabelsOrdered.includes(label)) {
+            currentImageLabelsOrdered.push(label);
         }
-    });
+    }
 
-    // 限制显示数量
-    const labelsToShow = allLabels.slice(0, 12);
+    // 过滤历史标签，排除当前图片中已有的
+    const historyLabelsFiltered = recentLabels.filter(label =>
+        !currentImageLabelsOrdered.includes(label)
+    ).slice(0, 10);
 
-    labelsToShow.forEach(label => {
-        const chip = document.createElement('div');
-        chip.className = 'label-chip';
-        // 如果是当前图片中的label，添加标记
-        if (currentImageLabels.includes(label)) {
-            chip.classList.add('current-image-label');
-        }
-        chip.textContent = label;
-        chip.onclick = () => {
-            labelInput.value = label;
-            confirmLabel();
-        };
-        recentLabelsDiv.appendChild(chip);
-    });
+    // 渲染当前图片标签区域（如果有的话）
+    if (currentImageLabelsOrdered.length > 0) {
+        const currentSection = document.createElement('div');
+        currentSection.className = 'label-section current-labels';
+
+        const currentTitle = document.createElement('div');
+        currentTitle.className = 'label-section-title';
+        currentTitle.textContent = 'Current Image';
+        currentSection.appendChild(currentTitle);
+
+        const currentChips = document.createElement('div');
+        currentChips.className = 'label-chips';
+        currentImageLabelsOrdered.forEach(label => {
+            const chip = document.createElement('div');
+            chip.className = 'label-chip current-image-label';
+            chip.textContent = label;
+            chip.onclick = () => {
+                labelInput.value = label;
+                confirmLabel();
+            };
+            currentChips.appendChild(chip);
+        });
+        currentSection.appendChild(currentChips);
+        recentLabelsDiv.appendChild(currentSection);
+    }
+
+    // 渲染历史标签区域（如果有的话）
+    if (historyLabelsFiltered.length > 0) {
+        const historySection = document.createElement('div');
+        historySection.className = 'label-section history-labels';
+
+        const historyTitle = document.createElement('div');
+        historyTitle.className = 'label-section-title';
+        historyTitle.textContent = 'History';
+        historySection.appendChild(historyTitle);
+
+        const historyChips = document.createElement('div');
+        historyChips.className = 'label-chips';
+        historyLabelsFiltered.forEach(label => {
+            const chip = document.createElement('div');
+            chip.className = 'label-chip';
+            chip.textContent = label;
+            chip.onclick = () => {
+                labelInput.value = label;
+                confirmLabel();
+            };
+            historyChips.appendChild(chip);
+        });
+        historySection.appendChild(historyChips);
+        recentLabelsDiv.appendChild(historySection);
+    }
 }
 
 function confirmLabel() {
     const label = labelInput.value.trim();
     if (!label) return;
 
-    if (!recentLabels.includes(label)) {
-        recentLabels.unshift(label);
-        if (recentLabels.length > 10) recentLabels.pop();
+    // 更新历史标签列表（MRU顺序）
+    const existingIndex = recentLabels.indexOf(label);
+    if (existingIndex !== -1) {
+        recentLabels.splice(existingIndex, 1);
     }
+    recentLabels.unshift(label);
+    if (recentLabels.length > 10) recentLabels.pop();
+
+    // 持久化到全局状态
+    vscode.postMessage({
+        command: 'saveGlobalSettings',
+        key: 'recentLabels',
+        value: recentLabels
+    });
 
     if (editingShapeIndex !== -1) {
         // Editing existing shape
