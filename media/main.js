@@ -44,6 +44,11 @@ const fillOpacitySlider = document.getElementById('fillOpacitySlider');
 const fillOpacityValue = document.getElementById('fillOpacityValue');
 const resetAdvancedBtn = document.getElementById('resetAdvancedBtn');
 
+// Image Browser elements
+const imageBrowserToggleBtn = document.getElementById('imageBrowserToggleBtn');
+const imageBrowserSidebar = document.getElementById('imageBrowserSidebar');
+const imageBrowserResizer = document.getElementById('imageBrowserResizer');
+const imageBrowserList = document.getElementById('imageBrowserList');
 
 let img = new Image();
 let shapes = [];
@@ -78,6 +83,9 @@ const MAX_HISTORY = 50; // 最大历史记录数
 // 性能优化变量
 let animationFrameId = null; // requestAnimationFrame节流
 const colorCache = new Map(); // 颜色计算缓存
+
+// Image load request ID to prevent stale callbacks
+let currentImageLoadId = 0;
 
 // 点击位置追踪 - 用于支持点击叠加实例时的循环选择
 let lastClickTime = 0;
@@ -183,6 +191,10 @@ saveHistory();
 
 // 图片加载处理函数
 function handleImageLoad() {
+    // Clear any previous error status
+    statusSpan.textContent = "";
+    statusSpan.style.color = "";
+
     fitImageToScreen();
     draw();
     renderShapeList();
@@ -194,8 +206,17 @@ function handleImageError() {
     statusSpan.style.color = "red";
 }
 
-img.onload = handleImageLoad;
-img.onerror = handleImageError;
+// Initial image load with stale callback protection
+const initialLoadId = ++currentImageLoadId;
+
+img.onload = function () {
+    if (initialLoadId !== currentImageLoadId) return;
+    handleImageLoad();
+};
+img.onerror = function () {
+    if (initialLoadId !== currentImageLoadId) return;
+    handleImageError();
+};
 img.src = imageUrl;
 
 // 页面卸载时清理资源
@@ -220,7 +241,7 @@ function markDirty() {
     if (saveBtn) {
         saveBtn.disabled = false;
         saveBtn.classList.add('dirty');
-        saveBtn.textContent = 'Save (Ctrl+S) *';
+        saveBtn.textContent = '💾*';
     }
 }
 
@@ -232,7 +253,7 @@ function markClean() {
     if (saveBtn) {
         saveBtn.disabled = true;
         saveBtn.classList.remove('dirty');
-        saveBtn.textContent = 'Save (Ctrl+S)';
+        saveBtn.textContent = '💾';
     }
 }
 
@@ -359,8 +380,132 @@ window.addEventListener('message', event => {
         case 'requestSave':
             save();
             break;
+        case 'updateImage':
+            handleImageUpdate(message);
+            break;
     }
 });
+
+// Handle incremental image update (without full HTML reload)
+function handleImageUpdate(message) {
+    // Cancel any current drawing
+    if (isDrawing) {
+        isDrawing = false;
+        currentPoints = [];
+    }
+
+    // Clear selection
+    selectedShapeIndex = -1;
+    editingShapeIndex = -1;
+
+    // Increment load ID to invalidate any pending callbacks from previous loads
+    currentImageLoadId++;
+    const thisLoadId = currentImageLoadId;
+
+    // Update global variables (these were injected via script tag initially)
+    // Note: imageUrl, imageName, imagePath, currentImageRelativePath are const, 
+    // so we need to work around this by using new variables
+    const newImageUrl = message.imageUrl;
+    const newImageName = message.imageName;
+    const newImagePath = message.imagePath;
+    const newCurrentImageRelativePath = message.currentImageRelativePath;
+
+    // Update filename display
+    const fileNameSpan = document.getElementById('fileName');
+    if (fileNameSpan) {
+        fileNameSpan.textContent = newCurrentImageRelativePath || newImageName;
+    }
+
+    // Load new shapes from existing data
+    if (message.existingData) {
+        shapes = (message.existingData.shapes || []).map(shape => {
+            // Apply global visibility state
+            const visible = labelVisibilityState.has(shape.label)
+                ? labelVisibilityState.get(shape.label)
+                : true;
+            return {
+                ...shape,
+                visible: visible
+            };
+        });
+    } else {
+        shapes = [];
+    }
+
+    // Reset history for new image
+    history = [];
+    historyIndex = -1;
+    saveHistory();
+
+    // Mark as clean (new image)
+    markClean();
+
+    // Update image browser list highlight
+    updateImageBrowserHighlight(newCurrentImageRelativePath);
+
+    // Load new image with stale callback protection
+    img.onload = function () {
+        // Check if this callback is for the current load request
+        if (thisLoadId !== currentImageLoadId) return;
+
+        // Clear any previous error status
+        statusSpan.textContent = "";
+        statusSpan.style.color = "";
+
+        fitImageToScreen();
+        draw();
+        renderShapeList();
+        renderLabelsList();
+    };
+    img.onerror = function () {
+        // Check if this callback is for the current load request
+        if (thisLoadId !== currentImageLoadId) return;
+
+        handleImageError();
+    };
+    img.src = newImageUrl;
+}
+
+// Update image browser highlight for virtual scrolling
+// We need to store the new path and re-render the visible items
+let currentImageRelativePathMutable = currentImageRelativePath; // Mutable version for updates
+
+function updateImageBrowserHighlight(newRelativePath) {
+    if (!imageBrowserList) return;
+
+    // Update the mutable path for virtual scrolling to use
+    currentImageRelativePathMutable = newRelativePath;
+
+    // With virtual scrolling, we need to:
+    // 1. Scroll to the new active item position
+    // 2. Force re-render of visible items to update highlighting
+
+    if (typeof workspaceImages !== 'undefined') {
+        const newIndex = workspaceImages.indexOf(newRelativePath);
+        if (newIndex !== -1) {
+            const viewportTop = imageBrowserList.scrollTop;
+            const viewportBottom = viewportTop + imageBrowserList.clientHeight;
+            const itemTop = newIndex * VIRTUAL_ITEM_HEIGHT;
+            const itemBottom = itemTop + VIRTUAL_ITEM_HEIGHT;
+
+            // Only scroll if item is not visible, use minimal scroll (not centering)
+            if (itemTop < viewportTop) {
+                // Item is above viewport - scroll up to show it at top
+                imageBrowserList.scrollTop = itemTop;
+            } else if (itemBottom > viewportBottom) {
+                // Item is below viewport - scroll down to show it at bottom
+                imageBrowserList.scrollTop = itemBottom - imageBrowserList.clientHeight;
+            }
+            // If item is already visible, don't scroll at all
+        }
+    }
+
+    // Force re-render to update highlighting
+    virtualScrollState.startIndex = -1; // Reset to force update
+    virtualScrollState.endIndex = -1;
+    updateVirtualScroll();
+}
+
 
 // --- Shortcuts ---
 
@@ -698,6 +843,7 @@ if (resizer) {
         isResizing = true;
         resizer.classList.add('resizing');
         document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
     });
 }
 
@@ -715,6 +861,13 @@ document.addEventListener('mouseup', () => {
         isResizing = false;
         resizer.classList.remove('resizing');
         document.body.style.cursor = 'default';
+        document.body.style.userSelect = '';
+        // Save right sidebar width
+        if (sidebar) {
+            const state = vscode.getState() || {};
+            state.rightSidebarWidth = sidebar.offsetWidth;
+            vscode.setState(state);
+        }
     }
 });
 
@@ -1594,3 +1747,231 @@ if (rectangleModeBtn) {
     rectangleModeBtn.onclick = () => setMode('rectangle');
 }
 
+// --- Image Browser Sidebar ---
+
+// Sidebar state variable
+let imageBrowserExpanded = false;
+
+// Restore sidebar state from vscode state
+if (vscodeState && vscodeState.imageBrowserExpanded !== undefined) {
+    imageBrowserExpanded = vscodeState.imageBrowserExpanded;
+    if (imageBrowserExpanded && imageBrowserSidebar) {
+        imageBrowserSidebar.classList.remove('collapsed');
+    }
+}
+
+// Toggle image browser sidebar
+if (imageBrowserToggleBtn && imageBrowserSidebar) {
+    imageBrowserToggleBtn.onclick = () => {
+        imageBrowserExpanded = !imageBrowserExpanded;
+        const state = vscode.getState() || {};
+        if (imageBrowserExpanded) {
+            imageBrowserSidebar.classList.remove('collapsed');
+            // Restore saved width if available
+            if (state.leftSidebarWidth) {
+                imageBrowserSidebar.style.width = state.leftSidebarWidth + 'px';
+            }
+        } else {
+            imageBrowserSidebar.classList.add('collapsed');
+            // Clear inline width to ensure CSS collapsed class takes effect
+            imageBrowserSidebar.style.width = '';
+        }
+        // Save state
+        state.imageBrowserExpanded = imageBrowserExpanded;
+        vscode.setState(state);
+    };
+}
+
+// Render image browser list with virtual scrolling
+// Virtual scrolling constants
+const VIRTUAL_ITEM_HEIGHT = 24; // Approximate height of each item in pixels
+const VIRTUAL_BUFFER_SIZE = 10; // Extra items to render above/below viewport
+
+// Virtual scrolling state
+let virtualScrollState = {
+    startIndex: 0,
+    endIndex: 0,
+    scrollTop: 0
+};
+
+function renderImageBrowserList() {
+    if (!imageBrowserList || typeof workspaceImages === 'undefined') return;
+
+    // Clear existing content
+    imageBrowserList.innerHTML = '';
+
+    // Create virtual scroll container structure
+    // We need a container that maintains the full scroll height
+    const totalHeight = workspaceImages.length * VIRTUAL_ITEM_HEIGHT;
+
+    // Create a spacer element to maintain scroll height
+    const spacer = document.createElement('div');
+    spacer.className = 'virtual-scroll-spacer';
+    spacer.style.height = `${totalHeight}px`;
+    spacer.style.position = 'relative';
+    imageBrowserList.appendChild(spacer);
+
+    // Initial render
+    updateVirtualScroll();
+
+    // Scroll to active item on first render
+    const currentState = vscode.getState() || {};
+    if (currentState.skipNextScroll && currentState.savedScrollTop !== undefined) {
+        imageBrowserList.scrollTop = currentState.savedScrollTop;
+        currentState.skipNextScroll = false;
+        currentState.savedScrollTop = undefined;
+        vscode.setState(currentState);
+    } else if (imageBrowserExpanded) {
+        scrollToActiveItem();
+    }
+}
+
+function updateVirtualScroll() {
+    if (!imageBrowserList || typeof workspaceImages === 'undefined') return;
+
+    const spacer = imageBrowserList.querySelector('.virtual-scroll-spacer');
+    if (!spacer) return;
+
+    const scrollTop = imageBrowserList.scrollTop;
+    const viewportHeight = imageBrowserList.clientHeight;
+
+    // Calculate visible range
+    const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER_SIZE);
+    const visibleCount = Math.ceil(viewportHeight / VIRTUAL_ITEM_HEIGHT);
+    const endIndex = Math.min(workspaceImages.length, startIndex + visibleCount + VIRTUAL_BUFFER_SIZE * 2);
+
+    // Check if we need to re-render (only if range changed significantly)
+    if (startIndex === virtualScrollState.startIndex &&
+        endIndex === virtualScrollState.endIndex) {
+        return; // No need to update
+    }
+
+    virtualScrollState.startIndex = startIndex;
+    virtualScrollState.endIndex = endIndex;
+    virtualScrollState.scrollTop = scrollTop;
+
+    // Clear existing items (but keep spacer)
+    const existingItems = spacer.querySelectorAll('.image-browser-item');
+    existingItems.forEach(item => item.remove());
+
+    // Create fragment for new items
+    const fragment = document.createDocumentFragment();
+
+    for (let i = startIndex; i < endIndex; i++) {
+        const imagePath = workspaceImages[i];
+        const li = document.createElement('li');
+        li.className = 'image-browser-item';
+        li.style.position = 'absolute';
+        li.style.top = `${i * VIRTUAL_ITEM_HEIGHT}px`;
+        li.style.left = '0';
+        li.style.right = '0';
+        li.style.height = `${VIRTUAL_ITEM_HEIGHT}px`;
+        li.style.boxSizing = 'border-box';
+
+        // Highlight current image (use mutable path for updates)
+        if (imagePath === currentImageRelativePathMutable) {
+            li.classList.add('active');
+        }
+
+        // Use relative path as display name
+        li.textContent = imagePath;
+        li.title = imagePath;
+
+        // Store data attribute for click handling
+        li.dataset.imagePath = imagePath;
+        li.dataset.index = i;
+
+        li.onclick = () => {
+            // Save scroll position
+            const state = vscode.getState() || {};
+            state.savedScrollTop = imageBrowserList.scrollTop;
+            state.skipNextScroll = true;
+            vscode.setState(state);
+
+            vscode.postMessage({
+                command: 'navigateToImage',
+                imagePath: imagePath
+            });
+        };
+
+        fragment.appendChild(li);
+    }
+
+    spacer.appendChild(fragment);
+}
+
+// Scroll handler for virtual scrolling (throttled)
+let virtualScrollRAF = null;
+if (imageBrowserList) {
+    imageBrowserList.addEventListener('scroll', () => {
+        if (virtualScrollRAF) return;
+        virtualScrollRAF = requestAnimationFrame(() => {
+            updateVirtualScroll();
+            virtualScrollRAF = null;
+        });
+    });
+}
+
+// Scroll to active item helper
+function scrollToActiveItem() {
+    if (!imageBrowserList || typeof workspaceImages === 'undefined') return;
+
+    const currentIndex = workspaceImages.indexOf(currentImageRelativePath);
+    if (currentIndex !== -1) {
+        const targetScrollTop = currentIndex * VIRTUAL_ITEM_HEIGHT - imageBrowserList.clientHeight / 2 + VIRTUAL_ITEM_HEIGHT / 2;
+        imageBrowserList.scrollTop = Math.max(0, targetScrollTop);
+    }
+}
+
+// Image browser resizer logic
+let isResizingImageBrowser = false;
+
+if (imageBrowserResizer && imageBrowserSidebar) {
+    imageBrowserResizer.addEventListener('mousedown', (e) => {
+        isResizingImageBrowser = true;
+        imageBrowserResizer.classList.add('resizing');
+        imageBrowserSidebar.classList.add('resizing');
+        document.body.style.cursor = 'col-resize';
+        document.body.style.userSelect = 'none';
+    });
+}
+
+document.addEventListener('mousemove', (e) => {
+    if (!isResizingImageBrowser) return;
+    const newWidth = e.clientX;
+    if (newWidth > 150 && newWidth < 500 && imageBrowserSidebar) {
+        imageBrowserSidebar.style.width = newWidth + 'px';
+    }
+});
+
+document.addEventListener('mouseup', () => {
+    if (isResizingImageBrowser) {
+        isResizingImageBrowser = false;
+        if (imageBrowserResizer) {
+            imageBrowserResizer.classList.remove('resizing');
+        }
+        if (imageBrowserSidebar) {
+            imageBrowserSidebar.classList.remove('resizing');
+            // Save left sidebar width
+            const state = vscode.getState() || {};
+            state.leftSidebarWidth = imageBrowserSidebar.offsetWidth;
+            vscode.setState(state);
+        }
+        document.body.style.cursor = 'default';
+        document.body.style.userSelect = '';
+    }
+});
+
+// Initialize image browser list
+renderImageBrowserList();
+
+// Restore saved sidebar widths
+(function restoreSidebarWidths() {
+    const state = vscode.getState() || {};
+    if (state.rightSidebarWidth && sidebar) {
+        sidebar.style.width = state.rightSidebarWidth + 'px';
+    }
+    if (state.leftSidebarWidth && imageBrowserSidebar && !imageBrowserSidebar.classList.contains('collapsed')) {
+        imageBrowserSidebar.style.width = state.leftSidebarWidth + 'px';
+    }
+})();

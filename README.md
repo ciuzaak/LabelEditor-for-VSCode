@@ -15,6 +15,17 @@ A VS Code extension for annotating images with polygon and rectangle shapes, com
 - **Label Management**: Assign and edit labels for each annotated region
 - **Undo/Redo Support**: Full undo/redo functionality with up to 50 history states
 
+### Image Browser (New in v0.7.0)
+- **Sidebar Image List**: Browse all images in the workspace from a dedicated sidebar
+  - Toggle with ☰ button in toolbar
+  - Shows all images organized by folder structure
+  - Click any image to navigate instantly
+  - Current image is highlighted
+  - Resizable sidebar width
+- **Virtual Scrolling**: Handles 8000+ images without performance issues
+  - Only renders visible items for smooth performance
+  - No lag when resizing sidebar even with thousands of images
+
 ### Labels Management Panel
 - **Label Overview**: See all label categories with instance counts
 - **Batch Visibility Toggle**: Show/hide all instances of a specific label
@@ -33,6 +44,7 @@ A VS Code extension for annotating images with polygon and rectangle shapes, com
 ### Navigation & Workflow
 - **LabelMe Format**: Compatible with LabelMe JSON format for ML pipelines
 - **Zoom & Pan**: Smooth zooming with mouse-centered pivot and full scrolling
+- **Image Browser**: Quick access to all workspace images via sidebar (☰)
 - **Image Navigation**: Quick prev/next buttons + keyboard shortcuts (A/D)
 - **Manual Save**: Control when to save annotations (Ctrl+S)
 - **Unsaved Changes Protection**: Warning dialog when navigating with unsaved changes
@@ -156,6 +168,7 @@ Planned features for future releases:
 - [x] ~~Advanced rendering options~~ **Added in v0.3.0**
 - [x] ~~Rectangle shapes~~ **Added in v0.4.0**
 - [x] ~~Global settings persistence~~ **Added in v0.6.0**
+- [x] ~~Image Browser with virtual scrolling~~ **Added in v0.7.0**
 - [ ] Circle shapes
 - [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)

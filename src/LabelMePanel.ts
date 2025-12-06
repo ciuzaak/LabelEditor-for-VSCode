@@ -13,6 +13,8 @@ export class LabelMePanel {
     private _imageUri: vscode.Uri;
     private _isDirty = false;
     private _pendingNavigation: number | undefined;
+    private _workspaceImages: string[] = [];
+    private _workspaceRoot: vscode.Uri | undefined;
 
     private readonly _globalState: vscode.Memento;
 
@@ -28,6 +30,16 @@ export class LabelMePanel {
             return;
         }
 
+        // Collect all workspace folders for resource roots
+        const workspaceFolders = vscode.workspace.workspaceFolders || [];
+        const localResourceRoots: vscode.Uri[] = [
+            vscode.Uri.joinPath(context.extensionUri, 'media'),
+            vscode.Uri.file(path.dirname(imageUri.fsPath))
+        ];
+        workspaceFolders.forEach(folder => {
+            localResourceRoots.push(folder.uri);
+        });
+
         // Otherwise, create a new panel.
         const panel = vscode.window.createWebviewPanel(
             LabelMePanel.viewType,
@@ -35,10 +47,7 @@ export class LabelMePanel {
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
-                localResourceRoots: [
-                    vscode.Uri.joinPath(context.extensionUri, 'media'),
-                    vscode.Uri.file(path.dirname(imageUri.fsPath))
-                ]
+                localResourceRoots: localResourceRoots
             }
         );
 
@@ -90,6 +99,9 @@ export class LabelMePanel {
                     case 'saveGlobalSettings':
                         this._globalState.update(message.key, message.value);
                         return;
+                    case 'navigateToImage':
+                        this._navigateToImageByPath(message.imagePath);
+                        return;
                 }
             },
             null,
@@ -123,31 +135,119 @@ export class LabelMePanel {
     }
 
     private async _performNavigation(direction: number) {
-        const dirPath = path.dirname(this._imageUri.fsPath);
-        const files = await fs.readdir(dirPath);
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp'];
+        // Ensure workspace images are scanned
+        if (this._workspaceImages.length === 0) {
+            await this._scanWorkspaceImages();
+        }
 
-        const images = files.filter((file: string) => {
-            const ext = path.extname(file).toLowerCase();
-            return imageExtensions.includes(ext);
-        }).sort();
+        if (!this._workspaceRoot || this._workspaceImages.length === 0) {
+            return;
+        }
 
-        const currentFileName = path.basename(this._imageUri.fsPath);
-        const currentIndex = images.indexOf(currentFileName);
+        // Get current image relative path
+        const currentRelativePath = path.relative(this._workspaceRoot.fsPath, this._imageUri.fsPath);
+        const currentIndex = this._workspaceImages.indexOf(currentRelativePath);
 
         if (currentIndex === -1) return;
 
         let newIndex = currentIndex + direction;
-        if (newIndex < 0) newIndex = images.length - 1;
-        if (newIndex >= images.length) newIndex = 0;
+        if (newIndex < 0) newIndex = this._workspaceImages.length - 1;
+        if (newIndex >= this._workspaceImages.length) newIndex = 0;
 
-        const newImageName = images[newIndex];
-        const newImageUri = vscode.Uri.file(path.join(dirPath, newImageName));
+        const newRelativePath = this._workspaceImages[newIndex];
+        const newImageUri = vscode.Uri.file(path.join(this._workspaceRoot.fsPath, newRelativePath));
 
         this.updateImage(newImageUri);
     }
 
-    public updateImage(imageUri: vscode.Uri) {
+    private async _navigateToImageByPath(imagePath: string) {
+        if (!this._workspaceRoot) {
+            return;
+        }
+
+        // Handle dirty state
+        if (this._isDirty) {
+            const selection = await vscode.window.showWarningMessage(
+                'You have unsaved changes. Do you want to save them?',
+                'Save',
+                'Discard',
+                'Cancel'
+            );
+
+            if (selection === 'Cancel' || selection === undefined) {
+                return;
+            }
+
+            if (selection === 'Save') {
+                // Store the target path and request save
+                this._panel.webview.postMessage({ command: 'requestSave' });
+                // After save, navigate to the image
+                setTimeout(() => {
+                    const absolutePath = path.join(this._workspaceRoot!.fsPath, imagePath);
+                    this.updateImage(vscode.Uri.file(absolutePath));
+                }, 100);
+                return;
+            }
+
+            this._isDirty = false;
+        }
+
+        const absolutePath = path.join(this._workspaceRoot.fsPath, imagePath);
+        this.updateImage(vscode.Uri.file(absolutePath));
+    }
+
+    private async _scanWorkspaceImages(): Promise<string[]> {
+        const workspaceFolders = vscode.workspace.workspaceFolders;
+        if (!workspaceFolders || workspaceFolders.length === 0) {
+            return [];
+        }
+
+        this._workspaceRoot = workspaceFolders[0].uri;
+        const rootPath = this._workspaceRoot.fsPath;
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp'];
+        const images: string[] = [];
+
+        const scanDirectory = async (dirPath: string): Promise<void> => {
+            try {
+                const entries = await fs.readdir(dirPath, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dirPath, entry.name);
+                    if (entry.isDirectory()) {
+                        // Skip hidden directories and common non-image directories
+                        if (!entry.name.startsWith('.') &&
+                            entry.name !== 'node_modules' &&
+                            entry.name !== 'out') {
+                            await scanDirectory(fullPath);
+                        }
+                    } else if (entry.isFile()) {
+                        const ext = path.extname(entry.name).toLowerCase();
+                        if (imageExtensions.includes(ext)) {
+                            // Store relative path
+                            const relativePath = path.relative(rootPath, fullPath);
+                            images.push(relativePath);
+                        }
+                    }
+                }
+            } catch (e) {
+                // Ignore directories we can't access
+            }
+        };
+
+        await scanDirectory(rootPath);
+        // Sort: outer directories first (fewer separators), then by name within same level
+        images.sort((a, b) => {
+            const depthA = (a.match(/[\\/]/g) || []).length;
+            const depthB = (b.match(/[\\/]/g) || []).length;
+            if (depthA !== depthB) {
+                return depthA - depthB;
+            }
+            return a.localeCompare(b);
+        });
+        this._workspaceImages = images;
+        return images;
+    }
+
+    public async updateImage(imageUri: vscode.Uri) {
         this._imageUri = imageUri;
 
         // Update localResourceRoots to include the new image directory
@@ -163,7 +263,47 @@ export class LabelMePanel {
         // Apply the updated options to the webview
         (this._panel.webview as any).options = newOptions;
 
-        this._update();
+        // Update panel title
+        this._panel.title = path.basename(this._imageUri.fsPath);
+
+        // Send incremental update via postMessage instead of full HTML regeneration
+        await this._sendImageUpdate();
+    }
+
+    private async _sendImageUpdate() {
+        const webview = this._panel.webview;
+
+        // Image URI for webview
+        const imageUri = webview.asWebviewUri(this._imageUri);
+
+        // Calculate current image relative path
+        let currentImageRelativePath = '';
+        if (this._workspaceRoot) {
+            currentImageRelativePath = path.relative(this._workspaceRoot.fsPath, this._imageUri.fsPath);
+        }
+
+        // Load existing annotation if exists
+        let existingData = null;
+        const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
+        if (existsSync(jsonPath)) {
+            try {
+                const jsonContent = await fs.readFile(jsonPath, 'utf8');
+                existingData = JSON.parse(jsonContent);
+            } catch (e) {
+                console.error("Failed to load existing JSON", e);
+                vscode.window.showWarningMessage(`Failed to load annotation file: ${(e as Error).message}`);
+            }
+        }
+
+        // Send update message to webview
+        this._panel.webview.postMessage({
+            command: 'updateImage',
+            imageUrl: imageUri.toString(),
+            imageName: path.basename(this._imageUri.fsPath),
+            imagePath: this._imageUri.fsPath,
+            currentImageRelativePath: currentImageRelativePath,
+            existingData: existingData
+        });
     }
 
     public dispose() {
@@ -198,6 +338,18 @@ export class LabelMePanel {
         // Image URI
         const imageUri = webview.asWebviewUri(this._imageUri);
 
+        // Use cached workspace images or scan if not available
+        if (this._workspaceImages.length === 0) {
+            await this._scanWorkspaceImages();
+        }
+        const workspaceImages = this._workspaceImages;
+
+        // Calculate current image relative path
+        let currentImageRelativePath = '';
+        if (this._workspaceRoot) {
+            currentImageRelativePath = path.relative(this._workspaceRoot.fsPath, this._imageUri.fsPath);
+        }
+
         // Load existing annotation if exists
         let existingData = null;
         const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
@@ -211,7 +363,6 @@ export class LabelMePanel {
             }
         }
 
-
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
@@ -222,17 +373,20 @@ export class LabelMePanel {
             </head>
             <body>
                 <div class="app-container">
+                    <div id="imageBrowserSidebar" class="image-browser-sidebar collapsed">
+                        <div class="image-browser-header">
+                            <h3>Images</h3>
+                            <span id="imageCount">(${workspaceImages.length})</span>
+                        </div>
+                        <ul id="imageBrowserList" class="image-browser-list"></ul>
+                    </div>
+                    <div id="imageBrowserResizer" class="image-browser-resizer"></div>
                     <div class="main-area">
                         <div class="toolbar">
+                            <button id="imageBrowserToggleBtn" class="nav-btn" title="Toggle Image Browser">☰</button>
                             <button id="prevImageBtn" class="nav-btn" title="Previous Image (A)">◀</button>
                             <button id="nextImageBtn" class="nav-btn" title="Next Image (D)">▶</button>
-                            <span id="fileName" style="margin-right: auto; font-weight: bold;">${path.basename(this._imageUri.fsPath)}</span>
-                            <div class="mode-toggle-group">
-                                <button id="viewModeBtn" class="mode-btn active" title="View Mode (V)">👁️</button>
-                                <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)">⬠</button>
-                                <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)">▭</button>
-                            </div>
-                            <button id="saveBtn" disabled>Save (Ctrl+S)</button>
+                            <span id="fileName" style="margin-right: auto; font-weight: bold;">${currentImageRelativePath || path.basename(this._imageUri.fsPath)}</span>
                             <span id="status"></span>
                         </div>
                         <div class="canvas-container">
@@ -244,22 +398,30 @@ export class LabelMePanel {
                     </div>
                     <div id="resizer" class="resizer"></div>
                     <div class="sidebar" id="sidebar">
+                        <div class="sidebar-toolbar">
+                            <div class="mode-toggle-group">
+                                <button id="viewModeBtn" class="mode-btn active" title="View Mode (V)">👁️</button>
+                                <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)">⬠</button>
+                                <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)">▭</button>
+                            </div>
+                            <div class="sidebar-actions">
+                                <button id="advancedOptionsBtn" class="sidebar-icon-btn" title="Advanced Options">⚙️</button>
+                                <button id="saveBtn" class="sidebar-icon-btn" title="Save (Ctrl+S)" disabled>💾</button>
+                            </div>
+                        </div>
+                        <div id="advancedOptionsDropdown" class="advanced-options-dropdown" style="display: none;">
+                            <div class="slider-control">
+                                <label>Border Width: <span id="borderWidthValue">2</span>px</label>
+                                <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
+                            </div>
+                            <div class="slider-control">
+                                <label>Fill Opacity: <span id="fillOpacityValue">30</span>%</label>
+                                <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
+                            </div>
+                            <button id="resetAdvancedBtn" class="reset-advanced-btn">Reset</button>
+                        </div>
                         <div class="labels-section">
-                            <div class="labels-header-row">
-                                <h3>Labels</h3>
-                                <button id="advancedOptionsBtn" class="advanced-options-btn" title="Advanced Options">⚙️</button>
-                            </div>
-                            <div id="advancedOptionsDropdown" class="advanced-options-dropdown" style="display: none;">
-                                <div class="slider-control">
-                                    <label>Border Width: <span id="borderWidthValue">2</span>px</label>
-                                    <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
-                                </div>
-                                <div class="slider-control">
-                                    <label>Fill Opacity: <span id="fillOpacityValue">30</span>%</label>
-                                    <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
-                                </div>
-                                <button id="resetAdvancedBtn" class="reset-advanced-btn">Reset</button>
-                            </div>
+                            <h3>Labels</h3>
                             <ul id="labelsList"></ul>
                         </div>
                         <h3>Instances</h3>
@@ -302,6 +464,8 @@ export class LabelMePanel {
                     const imageName = "${path.basename(this._imageUri.fsPath)}";
                     const imagePath = "${this._imageUri.fsPath.replace(/\\/g, '\\\\')}";
                     const existingData = ${JSON.stringify(existingData)};
+                    const workspaceImages = ${JSON.stringify(workspaceImages)};
+                    const currentImageRelativePath = "${currentImageRelativePath.replace(/\\/g, '\\\\')}";
                     const initialGlobalSettings = {
                         customColors: ${JSON.stringify(this._globalState.get('customColors') || {})},
                         borderWidth: ${this._globalState.get('borderWidth') ?? 2},

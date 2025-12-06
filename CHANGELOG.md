@@ -2,6 +2,29 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.7.0] - 2025-12-06
+
+### Added
+- **Image Browser Sidebar**: New sidebar panel for browsing all images in the workspace
+  - Toggle with ☰ button in toolbar
+  - Shows all images with folder structure
+  - Click to navigate to any image instantly
+  - Highlights current image
+  - Resizable sidebar width
+  
+- **Virtual Scrolling**: Handles 8000+ images smoothly
+  - Only renders visible items (~50 DOM elements)
+  - Smooth sidebar resizing even with thousands of images
+  - No performance degradation with large image collections
+
+### Improved
+- **Image Switching Performance**: Dramatically faster image navigation
+  - Images no longer trigger full workspace scan on every switch
+  - Incremental updates via postMessage instead of full HTML regeneration
+  - Cached workspace image list (scan once per session)
+  
+- **Code Quality**: Removed duplicate virtual scroll code, added stale callback protection
+
 ## [0.6.3] - 2025-12-05
 
 ### Improved
