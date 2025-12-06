@@ -107,6 +107,18 @@ export class LabelMePanel {
             null,
             this._disposables
         );
+
+        // Listen for VS Code theme changes and notify webview
+        vscode.window.onDidChangeActiveColorTheme(
+            theme => {
+                this._panel.webview.postMessage({
+                    command: 'vscodeThemeChanged',
+                    themeKind: theme.kind
+                });
+            },
+            null,
+            this._disposables
+        );
     }
 
     private async navigateImage(direction: number) {
@@ -410,15 +422,22 @@ export class LabelMePanel {
                             </div>
                         </div>
                         <div id="advancedOptionsDropdown" class="advanced-options-dropdown" style="display: none;">
+                            <div class="theme-control">
+                                <label>Theme</label>
+                                <div class="theme-toggle-group">
+                                    <button id="themeLightBtn" class="theme-btn" title="Light">☀️</button>
+                                    <button id="themeDarkBtn" class="theme-btn" title="Dark">🌙</button>
+                                    <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code">🔄</button>
+                                </div>
+                            </div>
                             <div class="slider-control">
-                                <label>Border Width: <span id="borderWidthValue">2</span>px</label>
+                                <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
                                 <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
                             </div>
                             <div class="slider-control">
-                                <label>Fill Opacity: <span id="fillOpacityValue">30</span>%</label>
+                                <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
                                 <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
                             </div>
-                            <button id="resetAdvancedBtn" class="reset-advanced-btn">Reset</button>
                         </div>
                         <div class="labels-section">
                             <h3>Labels</h3>
@@ -470,7 +489,9 @@ export class LabelMePanel {
                         customColors: ${JSON.stringify(this._globalState.get('customColors') || {})},
                         borderWidth: ${this._globalState.get('borderWidth') ?? 2},
                         fillOpacity: ${this._globalState.get('fillOpacity') ?? 0.3},
-                        recentLabels: ${JSON.stringify(this._globalState.get('recentLabels') || [])}
+                        recentLabels: ${JSON.stringify(this._globalState.get('recentLabels') || [])},
+                        theme: "${this._globalState.get('theme') ?? 'auto'}",
+                        vscodeThemeKind: ${vscode.window.activeColorTheme.kind}
                     };
                 </script>
                 <script src="${scriptUri}"></script>

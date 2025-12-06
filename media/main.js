@@ -40,15 +40,21 @@ const advancedOptionsBtn = document.getElementById('advancedOptionsBtn');
 const advancedOptionsDropdown = document.getElementById('advancedOptionsDropdown');
 const borderWidthSlider = document.getElementById('borderWidthSlider');
 const borderWidthValue = document.getElementById('borderWidthValue');
+const borderWidthResetBtn = document.getElementById('borderWidthResetBtn');
 const fillOpacitySlider = document.getElementById('fillOpacitySlider');
 const fillOpacityValue = document.getElementById('fillOpacityValue');
-const resetAdvancedBtn = document.getElementById('resetAdvancedBtn');
+const fillOpacityResetBtn = document.getElementById('fillOpacityResetBtn');
 
 // Image Browser elements
 const imageBrowserToggleBtn = document.getElementById('imageBrowserToggleBtn');
 const imageBrowserSidebar = document.getElementById('imageBrowserSidebar');
 const imageBrowserResizer = document.getElementById('imageBrowserResizer');
 const imageBrowserList = document.getElementById('imageBrowserList');
+
+// Theme elements
+const themeLightBtn = document.getElementById('themeLightBtn');
+const themeDarkBtn = document.getElementById('themeDarkBtn');
+const themeAutoBtn = document.getElementById('themeAutoBtn');
 
 let img = new Image();
 let shapes = [];
@@ -120,17 +126,34 @@ let labelVisibilityState = new Map(); // 存储每个label的可见性状态 (tr
 let borderWidth = 2; // 边界粗细，默认2px
 let fillOpacity = 0.3; // 填充透明度，默认30%
 
+// Theme state
+let currentTheme = 'auto'; // 'light', 'dark', 'auto'
+let vscodeThemeKind = 2; // 1=Light, 2=Dark, 3=HighContrast, 4=HighContrastLight
+
 // Initialize from global settings injected by extension
-const vscodeState = vscode.getState();
+const vscodeState = vscode.getState() || {};
 if (typeof initialGlobalSettings !== 'undefined') {
     if (initialGlobalSettings.customColors) {
         customColors = new Map(Object.entries(initialGlobalSettings.customColors));
     }
-    if (initialGlobalSettings.borderWidth !== undefined) {
+    // Check vscodeState first (synchronous, survives HTML regeneration), then fall back to initialGlobalSettings
+    if (vscodeState.borderWidth !== undefined) {
+        borderWidth = vscodeState.borderWidth;
+    } else if (initialGlobalSettings.borderWidth !== undefined) {
         borderWidth = initialGlobalSettings.borderWidth;
     }
-    if (initialGlobalSettings.fillOpacity !== undefined) {
+    if (vscodeState.fillOpacity !== undefined) {
+        fillOpacity = vscodeState.fillOpacity;
+    } else if (initialGlobalSettings.fillOpacity !== undefined) {
         fillOpacity = initialGlobalSettings.fillOpacity;
+    }
+    if (vscodeState.theme !== undefined) {
+        currentTheme = vscodeState.theme;
+    } else if (initialGlobalSettings.theme) {
+        currentTheme = initialGlobalSettings.theme;
+    }
+    if (initialGlobalSettings.vscodeThemeKind !== undefined) {
+        vscodeThemeKind = initialGlobalSettings.vscodeThemeKind;
     }
 }
 
@@ -154,8 +177,10 @@ if (fillOpacitySlider && fillOpacityValue) {
     fillOpacityValue.textContent = Math.round(fillOpacity * 100);
 }
 
-
-
+// 恢复高级选项下拉菜单的展开状态
+if (advancedOptionsDropdown && vscodeState.advancedOptionsExpanded) {
+    advancedOptionsDropdown.style.display = 'block';
+}
 // 初始化模式按钮UI
 if (viewModeBtn && polygonModeBtn && rectangleModeBtn) {
     viewModeBtn.classList.remove('active');
@@ -382,6 +407,12 @@ window.addEventListener('message', event => {
             break;
         case 'updateImage':
             handleImageUpdate(message);
+            break;
+        case 'vscodeThemeChanged':
+            vscodeThemeKind = message.themeKind;
+            if (currentTheme === 'auto') {
+                applyTheme('auto');
+            }
             break;
     }
 });
@@ -1156,6 +1187,19 @@ function renderShapeList() {
     // 一次性更新 DOM
     shapeList.innerHTML = '';
     shapeList.appendChild(fragment);
+
+    // 滚动选中项到可视区域
+    scrollSelectedShapeIntoView();
+}
+
+// 滚动选中的形状到可视区域
+function scrollSelectedShapeIntoView() {
+    if (selectedShapeIndex === -1 || !shapeList) return;
+
+    const selectedItem = shapeList.children[selectedShapeIndex];
+    if (selectedItem) {
+        selectedItem.scrollIntoView({ block: 'nearest' });
+    }
 }
 
 function deleteShape(index) {
@@ -1354,6 +1398,12 @@ function hideColorPicker() {
 }
 
 function saveGlobalSettings(key, value) {
+    // Save to vscodeState immediately (synchronous, survives HTML regeneration)
+    const state = vscode.getState() || {};
+    state[key] = value;
+    vscode.setState(state);
+
+    // Also send to extension for persistent storage across sessions
     vscode.postMessage({
         command: 'saveGlobalSettings',
         key: key,
@@ -1363,11 +1413,10 @@ function saveGlobalSettings(key, value) {
 
 // Unified state saving (keep for session-specific state like mode/visibility)
 function saveState() {
-    const labelVisibilityObj = Object.fromEntries(labelVisibilityState);
-    vscode.setState({
-        labelVisibility: labelVisibilityObj,
-        currentMode: currentMode
-    });
+    const state = vscode.getState() || {};
+    state.labelVisibility = Object.fromEntries(labelVisibilityState);
+    state.currentMode = currentMode;
+    vscode.setState(state);
 }
 
 // 确认颜色选择
@@ -1416,52 +1465,60 @@ function resetLabelColor(label) {
 function toggleAdvancedOptions() {
     if (advancedOptionsDropdown) {
         const isVisible = advancedOptionsDropdown.style.display !== 'none';
-        advancedOptionsDropdown.style.display = isVisible ? 'none' : 'block';
+        const newState = isVisible ? 'none' : 'block';
+        advancedOptionsDropdown.style.display = newState;
+
+        // Save state to vscodeState
+        const state = vscode.getState() || {};
+        state.advancedOptionsExpanded = newState === 'block';
+        vscode.setState(state);
+    }
+}
+// --- Theme Functions ---
+
+// Apply theme to DOM
+function applyTheme(theme) {
+    document.body.classList.remove('theme-light', 'theme-dark');
+
+    let effectiveTheme;
+    if (theme === 'auto') {
+        // vscodeThemeKind: 1=Light, 2=Dark, 3=HighContrast (dark), 4=HighContrastLight
+        const isLight = vscodeThemeKind === 1 || vscodeThemeKind === 4;
+        effectiveTheme = isLight ? 'light' : 'dark';
+    } else {
+        effectiveTheme = theme;
+    }
+
+    document.body.classList.add(`theme-${effectiveTheme}`);
+    updateThemeButtonsUI();
+}
+
+// Set theme and save preference
+function setTheme(theme) {
+    currentTheme = theme;
+    applyTheme(theme);
+    saveGlobalSettings('theme', theme);
+}
+
+// Update theme button UI to show active state
+function updateThemeButtonsUI() {
+    if (themeLightBtn && themeDarkBtn && themeAutoBtn) {
+        themeLightBtn.classList.remove('active');
+        themeDarkBtn.classList.remove('active');
+        themeAutoBtn.classList.remove('active');
+
+        if (currentTheme === 'light') {
+            themeLightBtn.classList.add('active');
+        } else if (currentTheme === 'dark') {
+            themeDarkBtn.classList.add('active');
+        } else {
+            themeAutoBtn.classList.add('active');
+        }
     }
 }
 
-// 更新边界宽度
-function updateBorderWidth(value) {
-    borderWidth = parseFloat(value);
-    if (borderWidthValue) {
-        borderWidthValue.textContent = borderWidth;
-    }
-    // borderWidth 不影响颜色缓存，无需清除
-    draw();
-}
-
-// 更新填充透明度
-function updateFillOpacity(value) {
-    fillOpacity = parseFloat(value) / 100;
-    if (fillOpacityValue) {
-        fillOpacityValue.textContent = Math.round(fillOpacity * 100);
-    }
-    // 清除颜色缓存以使新透明度生效
-    colorCache.clear();
-    // saveState(); // Removed: Don't save on every pixel of drag
-    draw();
-}
-
-// 重置高级选项到默认值
-function resetAdvancedOptions() {
-    borderWidth = 2;
-    fillOpacity = 0.3;
-
-    if (borderWidthSlider && borderWidthValue) {
-        borderWidthSlider.value = borderWidth;
-        borderWidthValue.textContent = borderWidth;
-    }
-    if (fillOpacitySlider && fillOpacityValue) {
-        fillOpacitySlider.value = fillOpacity * 100;
-        fillOpacityValue.textContent = Math.round(fillOpacity * 100);
-    }
-
-    invalidateColorCache();
-    saveGlobalSettings('borderWidth', borderWidth);
-    saveGlobalSettings('fillOpacity', fillOpacity);
-    draw();
-}
-
+// Initialize theme on page load
+applyTheme(currentTheme);
 
 
 // --- Mode Switching ---
@@ -1693,6 +1750,7 @@ if (borderWidthSlider) {
     borderWidthSlider.oninput = (e) => {
         borderWidth = parseFloat(e.target.value);
         borderWidthValue.textContent = borderWidth;
+        updateBorderWidthResetBtn();
         draw();
     };
     borderWidthSlider.onchange = (e) => saveGlobalSettings('borderWidth', borderWidth);
@@ -1703,15 +1761,75 @@ if (fillOpacitySlider) {
     fillOpacitySlider.oninput = (e) => {
         fillOpacity = parseInt(e.target.value) / 100;
         fillOpacityValue.textContent = Math.round(fillOpacity * 100);
-        invalidateColorCache(); // 清除缓存以使用新的fillOpacity
+        updateFillOpacityResetBtn();
+        invalidateColorCache();
         draw();
     };
     fillOpacitySlider.onchange = (e) => saveGlobalSettings('fillOpacity', fillOpacity);
 }
 
-// Reset Advanced Options button
-if (resetAdvancedBtn) {
-    resetAdvancedBtn.onclick = resetAdvancedOptions;
+// Border Width reset button
+if (borderWidthResetBtn) {
+    borderWidthResetBtn.onclick = () => {
+        borderWidth = 2;
+        if (borderWidthSlider) borderWidthSlider.value = borderWidth;
+        if (borderWidthValue) borderWidthValue.textContent = borderWidth;
+        updateBorderWidthResetBtn();
+        saveGlobalSettings('borderWidth', borderWidth);
+        draw();
+    };
+}
+
+// Fill Opacity reset button
+if (fillOpacityResetBtn) {
+    fillOpacityResetBtn.onclick = () => {
+        fillOpacity = 0.3;
+        if (fillOpacitySlider) fillOpacitySlider.value = fillOpacity * 100;
+        if (fillOpacityValue) fillOpacityValue.textContent = Math.round(fillOpacity * 100);
+        updateFillOpacityResetBtn();
+        invalidateColorCache();
+        saveGlobalSettings('fillOpacity', fillOpacity);
+        draw();
+    };
+}
+
+// Update reset button visibility
+function updateBorderWidthResetBtn() {
+    if (borderWidthResetBtn) {
+        if (borderWidth !== 2) {
+            borderWidthResetBtn.classList.add('visible');
+        } else {
+            borderWidthResetBtn.classList.remove('visible');
+        }
+    }
+}
+
+function updateFillOpacityResetBtn() {
+    if (fillOpacityResetBtn) {
+        if (Math.abs(fillOpacity - 0.3) > 0.001) {
+            fillOpacityResetBtn.classList.add('visible');
+        } else {
+            fillOpacityResetBtn.classList.remove('visible');
+        }
+    }
+}
+
+// Initialize reset button visibility
+updateBorderWidthResetBtn();
+updateFillOpacityResetBtn();
+
+// --- Theme Button Event Listeners ---
+
+if (themeLightBtn) {
+    themeLightBtn.onclick = () => setTheme('light');
+}
+
+if (themeDarkBtn) {
+    themeDarkBtn.onclick = () => setTheme('dark');
+}
+
+if (themeAutoBtn) {
+    themeAutoBtn.onclick = () => setTheme('auto');
 }
 
 // --- Navigation Buttons Event Listeners ---

@@ -36,10 +36,14 @@ A VS Code extension for annotating images with polygon and rectangle shapes, com
 - **Global Persistence**: Settings maintained even after closing VS Code
 
 ### Advanced Options
+- **Theme Switching** (New in v0.8.0):
+  - ☀️ Light mode for bright environments
+  - 🌙 Dark mode matching VS Code dark themes
+  - 🔄 Auto mode - follows VS Code's current theme
 - **Border Width Control**: Adjust polygon outline thickness (1-5px)
 - **Fill Opacity Control**: Adjust polygon fill transparency (0-100%)
-- **Settings Persistence**: Preferences saved globally
-- **Quick Reset**: One-click return to default settings
+- **Settings Persistence**: All preferences saved globally
+- **Individual Reset Buttons**: Reset each setting independently
 
 ### Navigation & Workflow
 - **LabelMe Format**: Compatible with LabelMe JSON format for ML pipelines
@@ -87,8 +91,9 @@ A VS Code extension for annotating images with polygon and rectangle shapes, com
 
 ### Advanced Options
 - Click the **⚙️ icon** to open advanced settings
+- Choose **theme**: Light (☀️), Dark (🌙), or Auto (🔄)
 - Adjust **border width** and **fill opacity** with sliders
-- Click **Reset** to restore defaults
+- Click **↺** on any setting to reset to default
 
 ### Keyboard Shortcuts
 - **Left Click**: Add point / Select shape
@@ -169,6 +174,7 @@ Planned features for future releases:
 - [x] ~~Rectangle shapes~~ **Added in v0.4.0**
 - [x] ~~Global settings persistence~~ **Added in v0.6.0**
 - [x] ~~Image Browser with virtual scrolling~~ **Added in v0.7.0**
+- [x] ~~Theme switching (Light/Dark/Auto)~~ **Added in v0.8.0**
 - [ ] Circle shapes
 - [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)

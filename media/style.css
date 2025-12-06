@@ -1,13 +1,95 @@
+/* CSS Custom Properties for Theming */
+:root {
+    /* Dark theme (default) */
+    --color-bg-primary: #1e1e1e;
+    --color-bg-secondary: #252526;
+    --color-bg-tertiary: #2d2d30;
+    --color-bg-input: #3c3c3c;
+    --color-bg-hover: #2a2d2e;
+    --color-bg-active: #37373d;
+    --color-bg-hover-input: #505050;
+    --color-border: #333;
+    --color-border-secondary: #454545;
+    --color-border-input: #555;
+    --color-text-primary: #cccccc;
+    --color-text-secondary: #888;
+    --color-text-muted: #666;
+    --color-text-disabled: #555;
+    --color-accent: #007acc;
+    --color-danger: #ff5555;
+    --color-success: #4ec9b0;
+    --color-warning: #ff9800;
+    --color-shadow: rgba(0, 0, 0, 0.5);
+    --color-modal-overlay: rgba(0, 0, 0, 0.5);
+    --color-scrollbar-track: #1e1e1e;
+    --color-scrollbar-thumb: #424242;
+    --color-scrollbar-thumb-hover: #555555;
+}
+
+body.theme-light {
+    --color-bg-primary: #ffffff;
+    --color-bg-secondary: #f3f3f3;
+    --color-bg-tertiary: #e8e8e8;
+    --color-bg-input: #ffffff;
+    --color-bg-hover: #e8e8e8;
+    --color-bg-active: #d4d4d4;
+    --color-bg-hover-input: #f0f0f0;
+    --color-border: #d4d4d4;
+    --color-border-secondary: #c8c8c8;
+    --color-border-input: #c8c8c8;
+    --color-text-primary: #1e1e1e;
+    --color-text-secondary: #666666;
+    --color-text-muted: #999999;
+    --color-text-disabled: #aaaaaa;
+    --color-accent: #0066b8;
+    --color-danger: #d32f2f;
+    --color-success: #388e3c;
+    --color-warning: #f57c00;
+    --color-shadow: rgba(0, 0, 0, 0.15);
+    --color-modal-overlay: rgba(0, 0, 0, 0.3);
+    --color-scrollbar-track: #f3f3f3;
+    --color-scrollbar-thumb: #c1c1c1;
+    --color-scrollbar-thumb-hover: #a8a8a8;
+}
+
 body {
     margin: 0;
     padding: 0;
-    background-color: #1e1e1e;
-    color: #cccccc;
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
     font-family: sans-serif;
     overflow: hidden;
     height: 100vh;
     display: flex;
     flex-direction: column;
+}
+
+/* Scrollbar Styling */
+* {
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-scrollbar-thumb) var(--color-scrollbar-track);
+}
+
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+    background: var(--color-scrollbar-track);
+}
+
+*::-webkit-scrollbar-thumb {
+    background: var(--color-scrollbar-thumb);
+    border-radius: 5px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: var(--color-scrollbar-thumb-hover);
+}
+
+*::-webkit-scrollbar-corner {
+    background: var(--color-scrollbar-track);
 }
 
 .app-container {
@@ -26,7 +108,7 @@ body {
 
 .sidebar {
     width: 250px;
-    background-color: #252526;
+    background-color: var(--color-bg-secondary);
     display: flex;
     flex-direction: column;
     padding: 10px;
@@ -36,14 +118,14 @@ body {
 
 .resizer {
     width: 5px;
-    background-color: #333;
+    background-color: var(--color-border);
     cursor: col-resize;
     transition: background-color 0.2s;
 }
 
 .resizer:hover,
 .resizer.resizing {
-    background-color: #007acc;
+    background-color: var(--color-accent);
 }
 
 .sidebar h3 {
@@ -51,7 +133,7 @@ body {
     margin-bottom: 10px;
     font-size: 14px;
     text-transform: uppercase;
-    color: #888;
+    color: var(--color-text-secondary);
 }
 
 #shapeList {
@@ -72,26 +154,26 @@ body {
 }
 
 #shapeList li:hover {
-    background-color: #2a2d2e;
+    background-color: var(--color-bg-hover);
 }
 
 #shapeList li.active {
-    background-color: #37373d;
+    background-color: var(--color-bg-active);
 }
 
 .delete-btn {
-    color: #888;
+    color: var(--color-text-secondary);
     cursor: pointer;
     font-weight: bold;
     margin-left: 5px;
 }
 
 .delete-btn:hover {
-    color: #ff5555;
+    color: var(--color-danger);
 }
 
 .visible-btn {
-    color: #888;
+    color: var(--color-text-secondary);
     cursor: pointer;
     font-weight: bold;
     margin-left: auto;
@@ -100,16 +182,16 @@ body {
 }
 
 .visible-btn:hover {
-    color: #cccccc;
+    color: var(--color-text-primary);
 }
 
 .visible-btn.hidden-shape {
-    color: #555;
+    color: var(--color-text-disabled);
     text-decoration: line-through;
 }
 
 .edit-btn {
-    color: #888;
+    color: var(--color-text-secondary);
     cursor: pointer;
     font-weight: bold;
     margin-left: 5px;
@@ -117,22 +199,22 @@ body {
 }
 
 .edit-btn:hover {
-    color: #4ec9b0;
+    color: var(--color-success);
 }
 
 .toolbar {
     height: 40px;
-    background-color: #252526;
+    background-color: var(--color-bg-secondary);
     display: flex;
     align-items: center;
     padding: 0 10px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
 }
 
 button {
-    background-color: #3c3c3c;
-    color: white;
+    background-color: var(--color-bg-input);
+    color: var(--color-text-primary);
     border: none;
     padding: 5px 10px;
     margin-right: 10px;
@@ -141,17 +223,17 @@ button {
 }
 
 button:hover {
-    background-color: #505050;
+    background-color: var(--color-bg-hover-input);
 }
 
 button:disabled {
-    background-color: #2a2a2a;
-    color: #666;
+    background-color: var(--color-bg-tertiary);
+    color: var(--color-text-muted);
     cursor: default;
 }
 
 button.dirty {
-    background-color: #007acc;
+    background-color: var(--color-accent);
     color: white;
 }
 
@@ -159,14 +241,14 @@ button.dirty {
     flex: 1;
     position: relative;
     overflow: auto;
-    background-color: #1e1e1e;
+    background-color: var(--color-bg-primary);
 }
 
 .canvas-wrapper {
     position: relative;
     display: block;
     transform-origin: 0 0;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+    box-shadow: 0 0 10px var(--color-shadow);
 }
 
 canvas {
@@ -199,18 +281,18 @@ canvas {
     top: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(0, 0, 0, 0.5);
+    background-color: var(--color-modal-overlay);
     justify-content: center;
     align-items: center;
 }
 
 .modal-content {
-    background-color: #252526;
+    background-color: var(--color-bg-secondary);
     padding: 20px;
-    border: 1px solid #454545;
+    border: 1px solid var(--color-border-secondary);
     border-radius: 5px;
     width: 300px;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    box-shadow: 0 4px 8px var(--color-shadow);
 }
 
 .modal-content h3 {
@@ -221,9 +303,9 @@ canvas {
     width: 100%;
     padding: 8px;
     margin: 10px 0;
-    background-color: #3c3c3c;
-    border: 1px solid #555;
-    color: white;
+    background-color: var(--color-bg-input);
+    border: 1px solid var(--color-border-input);
+    color: var(--color-text-primary);
     box-sizing: border-box;
 }
 
@@ -248,7 +330,7 @@ canvas {
 
 .label-section-title {
     font-size: 11px;
-    color: #888;
+    color: var(--color-text-secondary);
     text-transform: uppercase;
     margin-bottom: 2px;
 }
@@ -260,22 +342,22 @@ canvas {
 }
 
 .label-chip {
-    background-color: #3c3c3c;
+    background-color: var(--color-bg-input);
     padding: 2px 8px;
     border-radius: 10px;
     font-size: 12px;
     cursor: pointer;
-    border: 1px solid #555;
+    border: 1px solid var(--color-border-input);
 }
 
 .label-chip:hover {
-    background-color: #505050;
+    background-color: var(--color-bg-hover-input);
 }
 
 /* Labels Section Styles */
 .labels-section {
     margin-bottom: 20px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--color-border);
     padding-bottom: 10px;
 }
 
@@ -284,7 +366,7 @@ canvas {
     margin-bottom: 10px;
     font-size: 14px;
     text-transform: uppercase;
-    color: #888;
+    color: var(--color-text-secondary);
 }
 
 #labelsList {
@@ -304,20 +386,20 @@ canvas {
 }
 
 #labelsList li:hover {
-    background-color: #2a2d2e;
+    background-color: var(--color-bg-hover);
 }
 
 .label-color-indicator {
     width: 16px;
     height: 16px;
     border-radius: 3px;
-    border: 1px solid #555;
+    border: 1px solid var(--color-border-input);
     flex-shrink: 0;
     cursor: pointer;
 }
 
 .label-color-indicator:hover {
-    border-color: #888;
+    border-color: var(--color-text-secondary);
 }
 
 .label-name {
@@ -328,29 +410,29 @@ canvas {
 }
 
 .label-count {
-    color: #888;
+    color: var(--color-text-secondary);
     font-size: 11px;
     margin-left: auto;
 }
 
 .label-visibility-btn {
-    color: #888;
+    color: var(--color-text-secondary);
     cursor: pointer;
     font-size: 14px;
     margin-left: 5px;
 }
 
 .label-visibility-btn:hover {
-    color: #cccccc;
+    color: var(--color-text-primary);
 }
 
 .label-visibility-btn.all-hidden {
-    color: #555;
+    color: var(--color-text-disabled);
     opacity: 0.5;
 }
 
 .label-reset-btn {
-    color: #888;
+    color: var(--color-text-secondary);
     cursor: pointer;
     font-size: 12px;
     margin-left: 5px;
@@ -366,21 +448,21 @@ canvas {
     display: block;
     margin-bottom: 5px;
     font-size: 12px;
-    color: #888;
+    color: var(--color-text-secondary);
 }
 
 .custom-color-input input {
     width: 100%;
     padding: 8px;
-    background-color: #3c3c3c;
-    border: 1px solid #555;
-    color: white;
+    background-color: var(--color-bg-input);
+    border: 1px solid var(--color-border-input);
+    color: var(--color-text-primary);
     box-sizing: border-box;
     font-family: monospace;
 }
 
 .label-reset-btn:hover {
-    color: #ff9800;
+    color: var(--color-warning);
 }
 
 /* Color Picker Modal */
@@ -409,12 +491,12 @@ canvas {
 }
 
 .color-option:hover {
-    border-color: #888;
+    border-color: var(--color-text-secondary);
     transform: scale(1.1);
 }
 
 .color-option.selected {
-    border-color: #007acc;
+    border-color: var(--color-accent);
     transform: scale(1.15);
 }
 
@@ -434,7 +516,7 @@ canvas {
     margin: 0;
     font-size: 14px;
     text-transform: uppercase;
-    color: #888;
+    color: var(--color-text-secondary);
 }
 
 .advanced-options-btn {
@@ -450,13 +532,13 @@ canvas {
 
 .advanced-options-btn:hover {
     opacity: 1;
-    background-color: #3c3c3c;
+    background-color: var(--color-bg-input);
     border-radius: 3px;
 }
 
 .advanced-options-dropdown {
-    background-color: #2d2d30;
-    border: 1px solid #454545;
+    background-color: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border-secondary);
     border-radius: 4px;
     padding: 12px;
     margin-bottom: 10px;
@@ -469,14 +551,14 @@ canvas {
 .slider-control label {
     display: block;
     font-size: 12px;
-    color: #cccccc;
+    color: var(--color-text-primary);
     margin-bottom: 4px;
 }
 
 .slider-control input[type="range"] {
     width: 100%;
     height: 4px;
-    background: #3c3c3c;
+    background: var(--color-bg-input);
     outline: none;
     border-radius: 2px;
 }
@@ -486,7 +568,7 @@ canvas {
     appearance: none;
     width: 14px;
     height: 14px;
-    background: #007acc;
+    background: var(--color-accent);
     cursor: pointer;
     border-radius: 50%;
 }
@@ -494,23 +576,72 @@ canvas {
 .slider-control input[type="range"]::-moz-range-thumb {
     width: 14px;
     height: 14px;
-    background: #007acc;
+    background: var(--color-accent);
     cursor: pointer;
     border-radius: 50%;
     border: none;
 }
 
-.reset-advanced-btn {
-    width: 100%;
-    padding: 6px;
+/* Slider Reset Button */
+.slider-reset-btn {
+    color: var(--color-text-secondary);
+    cursor: pointer;
     font-size: 12px;
-    background-color: #3c3c3c;
-    border: 1px solid #555;
-    margin: 0;
+    margin-left: 5px;
+    display: none;
 }
 
-.reset-advanced-btn:hover {
-    background-color: #505050;
+.slider-reset-btn.visible {
+    display: inline;
+}
+
+.slider-reset-btn:hover {
+    color: var(--color-warning);
+}
+
+/* Theme Toggle Control */
+.theme-control {
+    margin-bottom: 12px;
+}
+
+.theme-control label {
+    display: block;
+    font-size: 12px;
+    color: var(--color-text-primary);
+    margin-bottom: 4px;
+}
+
+.theme-toggle-group {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--color-border-input);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.theme-btn {
+    padding: 4px 8px;
+    font-size: 14px;
+    margin: 0;
+    background-color: var(--color-bg-tertiary);
+    border: none;
+    border-right: 1px solid var(--color-border-input);
+    cursor: pointer;
+    flex: 1;
+    text-align: center;
+}
+
+.theme-btn:last-child {
+    border-right: none;
+}
+
+.theme-btn:hover {
+    background-color: var(--color-bg-input);
+}
+
+.theme-btn.active {
+    background-color: var(--color-accent);
+    color: white;
 }
 
 /* Navigation Buttons */
@@ -518,20 +649,20 @@ canvas {
     padding: 4px 10px;
     font-size: 14px;
     margin-right: 8px;
-    background-color: #3c3c3c;
-    border: 1px solid #555;
+    background-color: var(--color-bg-input);
+    border: 1px solid var(--color-border-input);
     cursor: pointer;
 }
 
 .nav-btn:hover {
-    background-color: #505050;
+    background-color: var(--color-bg-hover-input);
 }
 
 /* Mode Toggle Buttons */
 .mode-toggle-group {
     display: flex;
     gap: 0;
-    border: 1px solid #555;
+    border: 1px solid var(--color-border-input);
     border-radius: 3px;
     overflow: hidden;
     flex: 1;
@@ -541,9 +672,9 @@ canvas {
     padding: 4px 8px;
     font-size: 14px;
     margin: 0;
-    background-color: #2d2d30;
+    background-color: var(--color-bg-tertiary);
     border: none;
-    border-right: 1px solid #555;
+    border-right: 1px solid var(--color-border-input);
     cursor: pointer;
     flex: 1;
     text-align: center;
@@ -554,18 +685,18 @@ canvas {
 }
 
 .mode-btn:hover {
-    background-color: #3c3c3c;
+    background-color: var(--color-bg-input);
 }
 
 .mode-btn.active {
-    background-color: #007acc;
+    background-color: var(--color-accent);
     color: white;
 }
 
 /* Sidebar Toolbar */
 .sidebar-toolbar {
     padding: 8px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--color-border);
     display: flex;
     flex-direction: column;
     gap: 8px;
@@ -574,7 +705,7 @@ canvas {
 .sidebar-actions {
     display: flex;
     gap: 0;
-    border: 1px solid #555;
+    border: 1px solid var(--color-border-input);
     border-radius: 3px;
     overflow: hidden;
 }
@@ -582,9 +713,9 @@ canvas {
 .sidebar-icon-btn {
     padding: 4px 8px;
     font-size: 14px;
-    background-color: #2d2d30;
+    background-color: var(--color-bg-tertiary);
     border: none;
-    border-right: 1px solid #555;
+    border-right: 1px solid var(--color-border-input);
     cursor: pointer;
     flex: 1;
     text-align: center;
@@ -595,7 +726,7 @@ canvas {
 }
 
 .sidebar-icon-btn:hover {
-    background-color: #3c3c3c;
+    background-color: var(--color-bg-input);
 }
 
 .sidebar-icon-btn:disabled {
@@ -604,13 +735,13 @@ canvas {
 }
 
 .sidebar-icon-btn:disabled:hover {
-    background-color: #2d2d30;
+    background-color: var(--color-bg-tertiary);
 }
 
 /* Image Browser Sidebar */
 .image-browser-sidebar {
     width: 250px;
-    background-color: #252526;
+    background-color: var(--color-bg-secondary);
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -624,7 +755,7 @@ canvas {
 
 .image-browser-header {
     padding: 10px;
-    border-bottom: 1px solid #333;
+    border-bottom: 1px solid var(--color-border);
     display: flex;
     align-items: center;
     gap: 5px;
@@ -635,12 +766,12 @@ canvas {
     margin: 0;
     font-size: 14px;
     text-transform: uppercase;
-    color: #888;
+    color: var(--color-text-secondary);
 }
 
 .image-browser-header #imageCount {
     font-size: 12px;
-    color: #666;
+    color: var(--color-text-muted);
 }
 
 .image-browser-list {
@@ -659,22 +790,22 @@ canvas {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    color: #ccc;
+    color: var(--color-text-primary);
 }
 
 .image-browser-item:hover {
-    background-color: #2a2d2e;
+    background-color: var(--color-bg-hover);
 }
 
 .image-browser-item.active {
-    background-color: #37373d;
-    border-left-color: #007acc;
-    color: #fff;
+    background-color: var(--color-bg-active);
+    border-left-color: var(--color-accent);
+    color: var(--color-text-primary);
 }
 
 .image-browser-resizer {
     width: 5px;
-    background-color: #333;
+    background-color: var(--color-border);
     cursor: col-resize;
     transition: background-color 0.2s;
     flex-shrink: 0;
@@ -682,7 +813,7 @@ canvas {
 
 .image-browser-resizer:hover,
 .image-browser-resizer.resizing {
-    background-color: #007acc;
+    background-color: var(--color-accent);
 }
 
 .image-browser-sidebar.collapsed+.image-browser-resizer {

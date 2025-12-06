@@ -2,6 +2,36 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.8.0] - 2025-12-06
+
+### Added
+- **Theme Switching**: Full light/dark theme support with three options
+  - ☀️ Light mode - bright theme for well-lit environments
+  - 🌙 Dark mode - dark theme matching VS Code dark themes
+  - 🔄 Auto mode - automatically follows VS Code's current theme
+  - Theme preference persists across sessions
+
+- **Themed Scrollbars**: Scrollbars now match the current theme colors
+
+- **Individual Reset Buttons**: Border Width and Fill Opacity now have separate ↺ reset icons
+  - Only appear when value differs from default
+  - Matches existing color reset button style
+
+- **Auto-Scroll to Selected Instance**: When clicking an annotation on canvas, the sidebar automatically scrolls to show the selected item
+
+### Fixed
+- **Settings Persistence Bug**: Fixed issue where settings (theme, border width, opacity) were reset after switching images on first change
+  - Now uses synchronous vscodeState for immediate persistence
+  
+- **Advanced Options State**: Dropdown expand/collapse state now persists across image switches
+
+- **saveState Overwrite Bug**: Fixed critical bug where saveState() was overwriting global settings
+
+### Improved
+- **Code Cleanup**: Removed ~50 lines of dead/duplicate code
+  - Deleted unused `updateBorderWidth()` and `updateFillOpacity()` functions
+  - Removed duplicate `body.theme-dark` CSS (`:root` already defines dark as default)
+
 ## [0.7.0] - 2025-12-06
 
 ### Added
