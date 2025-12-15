@@ -6,7 +6,12 @@ export function activate(context: vscode.ExtensionContext) {
         LabelMePanel.createOrShow(context, uri);
     });
 
+    let folderDisposable = vscode.commands.registerCommand('labeleditor-vscode.openFromFolder', (uri: vscode.Uri) => {
+        LabelMePanel.createOrShowFromFolder(context, uri);
+    });
+
     context.subscriptions.push(disposable);
+    context.subscriptions.push(folderDisposable);
 }
 
 export function deactivate() { }

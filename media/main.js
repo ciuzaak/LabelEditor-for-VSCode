@@ -50,6 +50,7 @@ const imageBrowserToggleBtn = document.getElementById('imageBrowserToggleBtn');
 const imageBrowserSidebar = document.getElementById('imageBrowserSidebar');
 const imageBrowserResizer = document.getElementById('imageBrowserResizer');
 const imageBrowserList = document.getElementById('imageBrowserList');
+const refreshImagesBtn = document.getElementById('refreshImagesBtn');
 
 // Theme elements
 const themeLightBtn = document.getElementById('themeLightBtn');
@@ -414,6 +415,9 @@ window.addEventListener('message', event => {
                 applyTheme('auto');
             }
             break;
+        case 'updateImageList':
+            handleUpdateImageList(message);
+            break;
     }
 });
 
@@ -445,7 +449,11 @@ function handleImageUpdate(message) {
     const fileNameSpan = document.getElementById('fileName');
     if (fileNameSpan) {
         fileNameSpan.textContent = newCurrentImageRelativePath || newImageName;
+        fileNameSpan.title = 'Click to copy absolute path: ' + newImagePath;
     }
+
+    // Update mutable absolute path for copy feature
+    currentAbsoluteImagePath = newImagePath;
 
     // Load new shapes from existing data
     if (message.existingData) {
@@ -497,9 +505,39 @@ function handleImageUpdate(message) {
     img.src = newImageUrl;
 }
 
+// Handle refreshed image list from extension
+function handleUpdateImageList(message) {
+    // Update the global workspaceImages array
+    // Note: workspaceImages is defined in the HTML as a const, so we need to modify it in place
+    if (typeof workspaceImages !== 'undefined' && Array.isArray(workspaceImages)) {
+        workspaceImages.length = 0; // Clear existing
+        message.workspaceImages.forEach(img => workspaceImages.push(img));
+    }
+
+    // Update the current image relative path
+    if (message.currentImageRelativePath) {
+        currentImageRelativePathMutable = message.currentImageRelativePath;
+    }
+
+    // Update image count display
+    const imageCountEl = document.getElementById('imageCount');
+    if (imageCountEl) {
+        imageCountEl.textContent = `(${workspaceImages.length})`;
+    }
+
+    // Reset virtual scroll state and re-render the list
+    virtualScrollState = {
+        startIndex: 0,
+        endIndex: 0,
+        scrollTop: 0
+    };
+    renderImageBrowserList();
+}
+
 // Update image browser highlight for virtual scrolling
 // We need to store the new path and re-render the visible items
 let currentImageRelativePathMutable = currentImageRelativePath; // Mutable version for updates
+let currentAbsoluteImagePath = imagePath; // Mutable version for copy feature
 
 function updateImageBrowserHighlight(newRelativePath) {
     if (!imageBrowserList) return;
@@ -1848,6 +1886,25 @@ if (nextImageBtn) {
     };
 }
 
+// Filename click to copy absolute path
+const fileNameSpan = document.getElementById('fileName');
+if (fileNameSpan) {
+    fileNameSpan.onclick = () => {
+        if (currentAbsoluteImagePath) {
+            navigator.clipboard.writeText(currentAbsoluteImagePath).then(() => {
+                // Visual feedback - append checkmark
+                const originalText = fileNameSpan.textContent;
+                fileNameSpan.textContent = originalText + ' ✓';
+                setTimeout(() => {
+                    fileNameSpan.textContent = originalText;
+                }, 1000);
+            }).catch(err => {
+                console.error('Failed to copy path:', err);
+            });
+        }
+    };
+}
+
 // --- Mode Toggle Event Listeners ---
 
 // View Mode button
@@ -1897,6 +1954,13 @@ if (imageBrowserToggleBtn && imageBrowserSidebar) {
         // Save state
         state.imageBrowserExpanded = imageBrowserExpanded;
         vscode.setState(state);
+    };
+}
+
+// Refresh Images button
+if (refreshImagesBtn) {
+    refreshImagesBtn.onclick = () => {
+        vscode.postMessage({ command: 'refreshImages' });
     };
 }
 

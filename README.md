@@ -22,6 +22,8 @@ A VS Code extension for annotating images with polygon and rectangle shapes, com
   - Click any image to navigate instantly
   - Current image is highlighted
   - Resizable sidebar width
+  - 🔄 **Refresh button** to rescan images (New in v0.9.0)
+- **Open Folder for Annotation** (New in v0.9.0): Right-click any folder to open only images within that folder
 - **Virtual Scrolling**: Handles 8000+ images without performance issues
   - Only renders visible items for smooth performance
   - No lag when resizing sidebar even with thousands of images
@@ -50,6 +52,7 @@ A VS Code extension for annotating images with polygon and rectangle shapes, com
 - **Zoom & Pan**: Smooth zooming with mouse-centered pivot and full scrolling
 - **Image Browser**: Quick access to all workspace images via sidebar (☰)
 - **Image Navigation**: Quick prev/next buttons + keyboard shortcuts (A/D)
+- **Copy Image Path** (New in v0.9.0): Click filename in toolbar to copy absolute path
 - **Manual Save**: Control when to save annotations (Ctrl+S)
 - **Unsaved Changes Protection**: Warning dialog when navigating with unsaved changes
 
@@ -78,11 +81,12 @@ A VS Code extension for annotating images with polygon and rectangle shapes, com
 ### Basic Workflow
 1. Right-click any image file (.jpg, .jpeg, .png, .bmp) in the Explorer
 2. Select **"LabelEditor: Open Image Annotator"**
-3. Switch to **Polygon Mode** (⬠) or **Rectangle Mode** (▭) as needed
-4. For polygons: Click to add vertices, click near the first point to close
-5. For rectangles: Click to set start point, move and click to set end point
-6. Enter a label name
-7. Save with Ctrl+S
+3. Or right-click a folder and select **"LabelEditor: Open Folder for Annotation"** to work only with images in that folder
+4. Switch to **Polygon Mode** (⬠) or **Rectangle Mode** (▭) as needed
+5. For polygons: Click to add vertices, click near the first point to close
+6. For rectangles: Click to set start point, move and click to set end point
+7. Enter a label name
+8. Save with Ctrl+S
 
 ### Labels Management
 - Click the **color indicator** to customize label colors
@@ -175,6 +179,9 @@ Planned features for future releases:
 - [x] ~~Global settings persistence~~ **Added in v0.6.0**
 - [x] ~~Image Browser with virtual scrolling~~ **Added in v0.7.0**
 - [x] ~~Theme switching (Light/Dark/Auto)~~ **Added in v0.8.0**
+- [x] ~~Refresh image list button~~ **Added in v0.9.0**
+- [x] ~~Open folder for annotation~~ **Added in v0.9.0**
+- [x] ~~Click to copy image path~~ **Added in v0.9.0**
 - [ ] Circle shapes
 - [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)

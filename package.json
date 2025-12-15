@@ -2,7 +2,7 @@
   "name": "labeleditor-vscode",
   "displayName": "LabelEditor for VSCode",
   "description": "Image annotation tool with polygon drawing for machine learning datasets",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "publisher": "ciuzaak",
   "icon": "icon.png",
   "author": {
@@ -41,6 +41,10 @@
       {
         "command": "labeleditor-vscode.openEditor",
         "title": "LabelEditor: Open Image Annotator"
+      },
+      {
+        "command": "labeleditor-vscode.openFromFolder",
+        "title": "LabelEditor: Open Folder for Annotation"
       }
     ],
     "menus": {
@@ -48,6 +52,11 @@
         {
           "command": "labeleditor-vscode.openEditor",
           "when": "resourceExtname =~ /\\.(jpg|jpeg|png|bmp)$/i",
+          "group": "navigation"
+        },
+        {
+          "command": "labeleditor-vscode.openFromFolder",
+          "when": "explorerResourceIsFolder",
           "group": "navigation"
         }
       ]

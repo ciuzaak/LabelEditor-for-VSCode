@@ -15,6 +15,7 @@ export class LabelMePanel {
     private _pendingNavigation: number | undefined;
     private _workspaceImages: string[] = [];
     private _workspaceRoot: vscode.Uri | undefined;
+    private _filterFolderPath: string | undefined; // Optional folder path to filter images
 
     private readonly _globalState: vscode.Memento;
 
@@ -26,6 +27,15 @@ export class LabelMePanel {
         // If we already have a panel, show it.
         if (LabelMePanel.currentPanel) {
             LabelMePanel.currentPanel._panel.reveal(column);
+            const hadFolderFilter = LabelMePanel.currentPanel._filterFolderPath !== undefined;
+            LabelMePanel.currentPanel._filterFolderPath = undefined; // Clear folder filter when opening single image
+            LabelMePanel.currentPanel._workspaceImages = []; // Force rescan
+            // If we had a folder filter before, rescan workspace and update the image list
+            if (hadFolderFilter) {
+                LabelMePanel.currentPanel._scanWorkspaceImages().then(() => {
+                    LabelMePanel.currentPanel!._sendImageListUpdate();
+                });
+            }
             LabelMePanel.currentPanel.updateImage(imageUri);
             return;
         }
@@ -54,11 +64,100 @@ export class LabelMePanel {
         LabelMePanel.currentPanel = new LabelMePanel(panel, context.extensionUri, imageUri, context.globalState);
     }
 
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, imageUri: vscode.Uri, globalState: vscode.Memento) {
+    public static async createOrShowFromFolder(context: vscode.ExtensionContext, folderUri: vscode.Uri) {
+        const column = vscode.window.activeTextEditor
+            ? vscode.window.activeTextEditor.viewColumn
+            : undefined;
+
+        // Scan folder for images
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp'];
+        const images: string[] = [];
+
+        const scanDirectory = async (dirPath: string): Promise<void> => {
+            try {
+                const entries = await fs.readdir(dirPath, { withFileTypes: true });
+                for (const entry of entries) {
+                    const fullPath = path.join(dirPath, entry.name);
+                    if (entry.isDirectory()) {
+                        // Skip hidden directories
+                        if (!entry.name.startsWith('.')) {
+                            await scanDirectory(fullPath);
+                        }
+                    } else if (entry.isFile()) {
+                        const ext = path.extname(entry.name).toLowerCase();
+                        if (imageExtensions.includes(ext)) {
+                            images.push(fullPath);
+                        }
+                    }
+                }
+            } catch (e) {
+                // Ignore directories we can't access
+            }
+        };
+
+        await scanDirectory(folderUri.fsPath);
+
+        if (images.length === 0) {
+            vscode.window.showWarningMessage('No images found in the selected folder.');
+            return;
+        }
+
+        // Sort images
+        images.sort((a, b) => {
+            const depthA = (a.match(/[\\/]/g) || []).length;
+            const depthB = (b.match(/[\\/]/g) || []).length;
+            if (depthA !== depthB) {
+                return depthA - depthB;
+            }
+            return a.localeCompare(b);
+        });
+
+        const firstImageUri = vscode.Uri.file(images[0]);
+
+        // If we already have a panel, update it with folder filter
+        if (LabelMePanel.currentPanel) {
+            LabelMePanel.currentPanel._panel.reveal(column);
+            LabelMePanel.currentPanel._filterFolderPath = folderUri.fsPath;
+            LabelMePanel.currentPanel._workspaceImages = []; // Force rescan with new filter
+            // Rescan first to update _workspaceRoot before sending image update
+            await LabelMePanel.currentPanel._scanWorkspaceImages();
+            // Now update the image (will use correct _workspaceRoot for relative path)
+            LabelMePanel.currentPanel.updateImage(firstImageUri);
+            // Send updated image list to webview
+            LabelMePanel.currentPanel._sendImageListUpdate();
+            return;
+        }
+
+        // Collect all workspace folders for resource roots
+        const workspaceFolders = vscode.workspace.workspaceFolders || [];
+        const localResourceRoots: vscode.Uri[] = [
+            vscode.Uri.joinPath(context.extensionUri, 'media'),
+            folderUri
+        ];
+        workspaceFolders.forEach(folder => {
+            localResourceRoots.push(folder.uri);
+        });
+
+        // Create a new panel
+        const panel = vscode.window.createWebviewPanel(
+            LabelMePanel.viewType,
+            'LabelMe',
+            column || vscode.ViewColumn.One,
+            {
+                enableScripts: true,
+                localResourceRoots: localResourceRoots
+            }
+        );
+
+        LabelMePanel.currentPanel = new LabelMePanel(panel, context.extensionUri, firstImageUri, context.globalState, folderUri.fsPath);
+    }
+
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, imageUri: vscode.Uri, globalState: vscode.Memento, filterFolderPath?: string) {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._imageUri = imageUri;
         this._globalState = globalState;
+        this._filterFolderPath = filterFolderPath;
 
         // Set the webview's initial html content
         this._update();
@@ -101,6 +200,9 @@ export class LabelMePanel {
                         return;
                     case 'navigateToImage':
                         this._navigateToImageByPath(message.imagePath);
+                        return;
+                    case 'refreshImages':
+                        this._refreshWorkspaceImages();
                         return;
                 }
             },
@@ -209,13 +311,23 @@ export class LabelMePanel {
     }
 
     private async _scanWorkspaceImages(): Promise<string[]> {
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-            return [];
+        // Determine the root path for scanning
+        let rootPath: string;
+
+        if (this._filterFolderPath) {
+            // Use the filter folder as the root
+            rootPath = this._filterFolderPath;
+            this._workspaceRoot = vscode.Uri.file(this._filterFolderPath);
+        } else {
+            // Use the workspace root
+            const workspaceFolders = vscode.workspace.workspaceFolders;
+            if (!workspaceFolders || workspaceFolders.length === 0) {
+                return [];
+            }
+            this._workspaceRoot = workspaceFolders[0].uri;
+            rootPath = this._workspaceRoot.fsPath;
         }
 
-        this._workspaceRoot = workspaceFolders[0].uri;
-        const rootPath = this._workspaceRoot.fsPath;
         const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp'];
         const images: string[] = [];
 
@@ -257,6 +369,31 @@ export class LabelMePanel {
         });
         this._workspaceImages = images;
         return images;
+    }
+
+    private _sendImageListUpdate() {
+        // Calculate current image relative path
+        let currentImageRelativePath = '';
+        if (this._workspaceRoot) {
+            currentImageRelativePath = path.relative(this._workspaceRoot.fsPath, this._imageUri.fsPath);
+        }
+
+        // Send updated image list to webview
+        this._panel.webview.postMessage({
+            command: 'updateImageList',
+            workspaceImages: this._workspaceImages,
+            currentImageRelativePath: currentImageRelativePath.replace(/\\/g, '\\\\')
+        });
+    }
+
+    private async _refreshWorkspaceImages() {
+        // Force rescan by clearing cached images
+        this._workspaceImages = [];
+        await this._scanWorkspaceImages();
+
+        this._sendImageListUpdate();
+
+        vscode.window.showInformationMessage(`Refreshed: Found ${this._workspaceImages.length} images`);
     }
 
     public async updateImage(imageUri: vscode.Uri) {
@@ -389,6 +526,7 @@ export class LabelMePanel {
                         <div class="image-browser-header">
                             <h3>Images</h3>
                             <span id="imageCount">(${workspaceImages.length})</span>
+                            <button id="refreshImagesBtn" class="refresh-btn" title="Refresh Image List">🔄</button>
                         </div>
                         <ul id="imageBrowserList" class="image-browser-list"></ul>
                     </div>
@@ -398,7 +536,7 @@ export class LabelMePanel {
                             <button id="imageBrowserToggleBtn" class="nav-btn" title="Toggle Image Browser">☰</button>
                             <button id="prevImageBtn" class="nav-btn" title="Previous Image (A)">◀</button>
                             <button id="nextImageBtn" class="nav-btn" title="Next Image (D)">▶</button>
-                            <span id="fileName" style="margin-right: auto; font-weight: bold;">${currentImageRelativePath || path.basename(this._imageUri.fsPath)}</span>
+                            <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" title="Click to copy absolute path">${currentImageRelativePath || path.basename(this._imageUri.fsPath)}</span>
                             <span id="status"></span>
                         </div>
                         <div class="canvas-container">
