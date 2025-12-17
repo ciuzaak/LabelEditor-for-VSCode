@@ -24,6 +24,8 @@ const nextImageBtn = document.getElementById('nextImageBtn');
 
 // Mode toggle buttons
 const viewModeBtn = document.getElementById('viewModeBtn');
+const pointModeBtn = document.getElementById('pointModeBtn');
+const lineModeBtn = document.getElementById('lineModeBtn');
 const polygonModeBtn = document.getElementById('polygonModeBtn');
 const rectangleModeBtn = document.getElementById('rectangleModeBtn');
 
@@ -68,7 +70,7 @@ let recentLabels = initialGlobalSettings.recentLabels || [];
 // Dirty State
 let isDirty = false;
 
-// Current interaction mode ('view' or 'polygon')
+// Current interaction mode ('view', 'point', 'line', 'polygon', or 'rectangle')
 let currentMode = 'view'; // 默认为view模式
 
 // Zoom & Pan variables
@@ -183,13 +185,19 @@ if (advancedOptionsDropdown && vscodeState.advancedOptionsExpanded) {
     advancedOptionsDropdown.style.display = 'block';
 }
 // 初始化模式按钮UI
-if (viewModeBtn && polygonModeBtn && rectangleModeBtn) {
+if (viewModeBtn && pointModeBtn && lineModeBtn && polygonModeBtn && rectangleModeBtn) {
     viewModeBtn.classList.remove('active');
+    pointModeBtn.classList.remove('active');
+    lineModeBtn.classList.remove('active');
     polygonModeBtn.classList.remove('active');
     rectangleModeBtn.classList.remove('active');
 
     if (currentMode === 'view') {
         viewModeBtn.classList.add('active');
+    } else if (currentMode === 'point') {
+        pointModeBtn.classList.add('active');
+    } else if (currentMode === 'line') {
+        lineModeBtn.classList.add('active');
     } else if (currentMode === 'polygon') {
         polygonModeBtn.classList.add('active');
     } else if (currentMode === 'rectangle') {
@@ -630,6 +638,16 @@ document.addEventListener('keydown', (e) => {
         setMode('view');
     }
 
+    // O: Point Mode
+    if (e.key === 'o' || e.key === 'O') {
+        setMode('point');
+    }
+
+    // L: Line Mode
+    if (e.key === 'l' || e.key === 'L') {
+        setMode('line');
+    }
+
     // P: Polygon Mode
     if (e.key === 'p' || e.key === 'P') {
         setMode('polygon');
@@ -744,8 +762,16 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 lastClickTime = 0;
             }
 
-            // 只在polygon或rectangle模式下允许开始绘制
-            if (currentMode === 'polygon') {
+            // 只在polygon或rectangle或point或line模式下允许开始绘制
+            if (currentMode === 'point') {
+                // Point mode: single click creates a point and immediately finishes
+                isDrawing = true;
+                currentPoints = [[x, y]];
+                finishPolygon();
+            } else if (currentMode === 'line') {
+                isDrawing = true;
+                currentPoints = [[x, y]];
+            } else if (currentMode === 'polygon') {
                 isDrawing = true;
                 currentPoints = [[x, y]];
             } else if (currentMode === 'rectangle') {
@@ -754,7 +780,31 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 currentPoints = [[x, y]];
             }
         } else {
-            if (currentMode === 'polygon') {
+            if (currentMode === 'line') {
+                // Line mode: check if double-clicking the last point
+                if (currentPoints.length > 0) {
+                    const lastPoint = currentPoints[currentPoints.length - 1];
+                    const dx = x - lastPoint[0];
+                    const dy = y - lastPoint[1];
+                    const distanceToLast = Math.sqrt(dx * dx + dy * dy);
+
+                    // Double-click detection on last point (within threshold distance and time)
+                    const now = Date.now();
+                    const timeDiff = now - lastClickTime;
+                    const isDoubleClickOnLast = distanceToLast < CLICK_THRESHOLD_DISTANCE && timeDiff < CLICK_THRESHOLD_TIME;
+
+                    if (isDoubleClickOnLast && currentPoints.length >= 2) {
+                        // Double-click on last point - finish the line
+                        finishPolygon();
+                    } else {
+                        // Add new point
+                        currentPoints.push([x, y]);
+                        lastClickX = x;
+                        lastClickY = y;
+                        lastClickTime = now;
+                    }
+                }
+            } else if (currentMode === 'polygon') {
                 const firstPoint = currentPoints[0];
                 const dx = x - firstPoint[0];
                 const dy = y - firstPoint[1];
@@ -774,7 +824,7 @@ canvasWrapper.addEventListener('mousedown', (e) => {
     } else if (e.button === 2) { // Right click
         e.preventDefault(); // 阻止浏览器默认的上下文菜单
         if (isDrawing) {
-            if (currentMode === 'polygon') {
+            if (currentMode === 'polygon' || currentMode === 'line') {
                 if (currentPoints.length > 0) {
                     currentPoints.pop();
                     if (currentPoints.length === 0) {
@@ -944,17 +994,41 @@ document.addEventListener('mouseup', () => {
 // 查找指定位置的所有形状（从上到下）
 function findAllShapesAt(x, y) {
     const overlappingShapes = [];
+    const POINT_CLICK_RADIUS = 10 / zoomLevel; // Click detection radius for points
+    const LINE_CLICK_THRESHOLD = 5 / zoomLevel; // Distance threshold for line click detection
+
     // 从后往前遍历（从上到下的绘制顺序）
     for (let i = shapes.length - 1; i >= 0; i--) {
         // 跳过隐藏的形状
         if (shapes[i].visible === false) continue;
 
-        let points = shapes[i].points;
-        if (shapes[i].shape_type === 'rectangle') {
-            points = getRectPoints(points);
-        }
-        if (isPointInPolygon([x, y], points)) {
-            overlappingShapes.push(i);
+        const shape = shapes[i];
+        let points = shape.points;
+
+        if (shape.shape_type === 'point') {
+            // Point shape: check if click is within radius
+            if (points.length > 0) {
+                const p = points[0];
+                const dx = x - p[0];
+                const dy = y - p[1];
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                if (distance <= POINT_CLICK_RADIUS) {
+                    overlappingShapes.push(i);
+                }
+            }
+        } else if (shape.shape_type === 'linestrip') {
+            // Linestrip shape: check if click is near any line segment
+            if (isPointNearLinestrip([x, y], points, LINE_CLICK_THRESHOLD)) {
+                overlappingShapes.push(i);
+            }
+        } else {
+            // Polygon or rectangle shape
+            if (shape.shape_type === 'rectangle') {
+                points = getRectPoints(points);
+            }
+            if (isPointInPolygon([x, y], points)) {
+                overlappingShapes.push(i);
+            }
         }
     }
     return overlappingShapes;
@@ -978,6 +1052,41 @@ function isPointInPolygon(point, vs) {
         if (intersect) inside = !inside;
     }
     return inside;
+}
+
+// Check if a point is near any segment of a linestrip
+function isPointNearLinestrip(point, vs, threshold) {
+    if (vs.length < 2) {
+        // Single point - check distance to that point
+        if (vs.length === 1) {
+            const dx = point[0] - vs[0][0];
+            const dy = point[1] - vs[0][1];
+            return Math.sqrt(dx * dx + dy * dy) <= threshold;
+        }
+        return false;
+    }
+
+    const px = point[0], py = point[1];
+
+    for (let i = 0; i < vs.length - 1; i++) {
+        const x1 = vs[i][0], y1 = vs[i][1];
+        const x2 = vs[i + 1][0], y2 = vs[i + 1][1];
+
+        // Calculate distance from point to line segment
+        const lineLen = Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+        if (lineLen === 0) continue;
+
+        // Project point onto line, clamped to segment
+        const t = Math.max(0, Math.min(1, ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / (lineLen * lineLen)));
+        const projX = x1 + t * (x2 - x1);
+        const projY = y1 + t * (y2 - y1);
+
+        const distance = Math.sqrt((px - projX) * (px - projX) + (py - projY) * (py - projY));
+        if (distance <= threshold) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function finishPolygon() {
@@ -1101,12 +1210,21 @@ function confirmLabel() {
         shapes[editingShapeIndex].label = label;
         editingShapeIndex = -1;
     } else {
-        // Creating new shape
+        // Creating new shape - determine shape_type based on current mode
+        let shapeType = 'polygon';
+        if (currentMode === 'point') {
+            shapeType = 'point';
+        } else if (currentMode === 'line') {
+            shapeType = 'linestrip';
+        } else if (currentMode === 'rectangle') {
+            shapeType = 'rectangle';
+        }
+
         shapes.push({
             label: label,
             points: currentPoints,
             group_id: null,
-            shape_type: currentMode === 'rectangle' ? "rectangle" : "polygon",
+            shape_type: shapeType,
             flags: {},
             visible: true
         });
@@ -1134,7 +1252,15 @@ function cancelLabelInput() {
         return;
     }
 
-    // 如果是创建新形状，回到继续绘制状态（不删除任何点）
+    // 点模式：取消应当清除点（因为点模式是单击即完成，取消意味着放弃这个点）
+    if (currentMode === 'point') {
+        currentPoints = [];
+        isDrawing = false;
+        draw();
+        return;
+    }
+
+    // 对于其他模式（polygon, line, rectangle），回到继续绘制状态（不删除任何点）
     // 因为完成标注的操作是"闭合多边形"或"确定矩形"，取消只是撤销这个完成操作
     if (currentPoints.length > 0) {
         isDrawing = true;
@@ -1563,25 +1689,32 @@ applyTheme(currentTheme);
 
 // 设置交互模式
 function setMode(mode) {
+    // 如果正在绘制，取消绘制（切换任何模式时都应取消）
+    if (isDrawing) {
+        isDrawing = false;
+        currentPoints = [];
+        draw();
+    }
+
     currentMode = mode;
 
     // 保存到vscode state
     saveState();
 
     // 更新按钮状态
-    if (viewModeBtn && polygonModeBtn && rectangleModeBtn) {
+    if (viewModeBtn && pointModeBtn && lineModeBtn && polygonModeBtn && rectangleModeBtn) {
         viewModeBtn.classList.remove('active');
+        pointModeBtn.classList.remove('active');
+        lineModeBtn.classList.remove('active');
         polygonModeBtn.classList.remove('active');
         rectangleModeBtn.classList.remove('active');
 
         if (mode === 'view') {
             viewModeBtn.classList.add('active');
-            // 如果正在绘制，取消绘制
-            if (isDrawing) {
-                isDrawing = false;
-                currentPoints = [];
-                draw();
-            }
+        } else if (mode === 'point') {
+            pointModeBtn.classList.add('active');
+        } else if (mode === 'line') {
+            lineModeBtn.classList.add('active');
         } else if (mode === 'polygon') {
             polygonModeBtn.classList.add('active');
         } else if (mode === 'rectangle') {
@@ -1627,19 +1760,20 @@ function drawSVGAnnotations(mouseEvent) {
             points = getRectPoints(points);
         }
 
-        drawSVGPolygon(points, strokeColor, fillColor, false, index);
+        drawSVGShape(shape.shape_type, points, strokeColor, fillColor, false, index);
     });
 
     // 绘制正在创建的形状
     if (isDrawing) {
         let points = currentPoints;
+        let shapeType = currentMode;
         if (currentMode === 'rectangle' && points.length === 2) {
             points = getRectPoints(points);
         }
-        drawSVGPolygon(points, 'rgba(0, 200, 0, 0.8)', 'rgba(0, 200, 0, 0.1)', true, -1);
+        drawSVGShape(shapeType, points, 'rgba(0, 200, 0, 0.8)', 'rgba(0, 200, 0, 0.1)', true, -1);
 
-        // 绘制到鼠标位置的临时线（只在polygon模式下）
-        if (mouseEvent && currentMode === 'polygon' && currentPoints.length > 0) {
+        // 绘制到鼠标位置的临时线（在polygon或line模式下）
+        if (mouseEvent && (currentMode === 'polygon' || currentMode === 'line') && currentPoints.length > 0) {
             const rect = canvas.getBoundingClientRect();
             const mx = (mouseEvent.clientX - rect.left) / zoomLevel;
             const my = (mouseEvent.clientY - rect.top) / zoomLevel;
@@ -1658,7 +1792,7 @@ function drawSVGAnnotations(mouseEvent) {
     }
 }
 
-function drawSVGPolygon(points, strokeColor, fillColor, showVertices = false, shapeIndex = -1) {
+function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = false, shapeIndex = -1) {
     if (points.length === 0) return;
 
     const group = document.createElementNS(SVG_NS, 'g');
@@ -1666,36 +1800,69 @@ function drawSVGPolygon(points, strokeColor, fillColor, showVertices = false, sh
     // 根据zoomLevel调整线宽，使视觉上保持恒定粗细
     const adjustedStrokeWidth = borderWidth / zoomLevel;
     const adjustedPointRadius = 3 / zoomLevel;
+    const largePointRadius = 6 / zoomLevel; // Larger radius for point annotations
 
-    // 创建多边形或折线
-    let pathElement;
-    if (!isDrawing || shapeIndex !== -1 || currentMode === 'rectangle') {
-        // 完成的形状使用polygon
-        pathElement = document.createElementNS(SVG_NS, 'polygon');
-        const pointsStr = points.map(p => `${p[0]},${p[1]}`).join(' ');
-        pathElement.setAttribute('points', pointsStr);
+    // Handle point shape type - draw a circle
+    if (shapeType === 'point') {
+        if (points.length > 0) {
+            const p = points[0];
+            const circle = document.createElementNS(SVG_NS, 'circle');
+            circle.setAttribute('cx', p[0]);
+            circle.setAttribute('cy', p[1]);
+            circle.setAttribute('r', largePointRadius);
+            circle.setAttribute('stroke', strokeColor);
+            circle.setAttribute('stroke-width', adjustedStrokeWidth);
+            circle.setAttribute('fill', fillColor);
+
+            if (shapeIndex !== -1) {
+                circle.style.cursor = 'pointer';
+                circle.style.pointerEvents = 'auto';
+                circle.dataset.shapeIndex = shapeIndex;
+            }
+
+            group.appendChild(circle);
+        }
     } else {
-        // 正在绘制的形状使用polyline
-        pathElement = document.createElementNS(SVG_NS, 'polyline');
-        const pointsStr = points.map(p => `${p[0]},${p[1]}`).join(' ');
-        pathElement.setAttribute('points', pointsStr);
+        // 创建多边形或折线
+        let pathElement;
+        const isLinestrip = shapeType === 'linestrip' || shapeType === 'line';
+        const isCompleted = shapeIndex !== -1;
+
+        if (isLinestrip) {
+            // Linestrip uses polyline (open path, no closure)
+            pathElement = document.createElementNS(SVG_NS, 'polyline');
+            const pointsStr = points.map(p => `${p[0]},${p[1]}`).join(' ');
+            pathElement.setAttribute('points', pointsStr);
+            pathElement.setAttribute('fill', 'none'); // Linestrip has no fill
+        } else if (!isDrawing || isCompleted || shapeType === 'rectangle') {
+            // 完成的形状使用polygon
+            pathElement = document.createElementNS(SVG_NS, 'polygon');
+            const pointsStr = points.map(p => `${p[0]},${p[1]}`).join(' ');
+            pathElement.setAttribute('points', pointsStr);
+            pathElement.setAttribute('fill', isCompleted ? fillColor : 'none');
+        } else {
+            // 正在绘制的形状使用polyline
+            pathElement = document.createElementNS(SVG_NS, 'polyline');
+            const pointsStr = points.map(p => `${p[0]},${p[1]}`).join(' ');
+            pathElement.setAttribute('points', pointsStr);
+            pathElement.setAttribute('fill', 'none');
+        }
+
+        pathElement.setAttribute('stroke', strokeColor);
+        pathElement.setAttribute('stroke-width', adjustedStrokeWidth);
+
+        // 为完成的形状添加data属性用于事件委托
+        if (shapeIndex !== -1) {
+            pathElement.style.cursor = 'pointer';
+            pathElement.style.pointerEvents = 'auto';
+            pathElement.dataset.shapeIndex = shapeIndex;
+        }
+
+        group.appendChild(pathElement);
     }
 
-    pathElement.setAttribute('stroke', strokeColor);
-    pathElement.setAttribute('stroke-width', adjustedStrokeWidth);
-    pathElement.setAttribute('fill', (!isDrawing || shapeIndex !== -1) ? fillColor : 'none');
-
-    // 为完成的形状添加data属性用于事件委托
-    if (shapeIndex !== -1) {
-        pathElement.style.cursor = 'pointer';
-        pathElement.style.pointerEvents = 'auto';
-        pathElement.dataset.shapeIndex = shapeIndex;
-    }
-
-    group.appendChild(pathElement);
-
-    // 绘制顶点（仅在绘制过程中显示）
-    if (showVertices) {
+    // 绘制顶点（仅在绘制过程中显示，或对于linestrip始终显示小点）
+    if (showVertices || (shapeType === 'linestrip' && shapeIndex !== -1)) {
         points.forEach(p => {
             const circle = document.createElementNS(SVG_NS, 'circle');
             circle.setAttribute('cx', p[0]);
@@ -1910,6 +2077,16 @@ if (fileNameSpan) {
 // View Mode button
 if (viewModeBtn) {
     viewModeBtn.onclick = () => setMode('view');
+}
+
+// Point Mode button
+if (pointModeBtn) {
+    pointModeBtn.onclick = () => setMode('point');
+}
+
+// Line Mode button
+if (lineModeBtn) {
+    lineModeBtn.onclick = () => setMode('line');
 }
 
 // Polygon Mode button

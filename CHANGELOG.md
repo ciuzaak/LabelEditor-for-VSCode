@@ -2,6 +2,28 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.9.2] - 2025-12-17
+
+### Added
+- **Point Mode (•)**: New annotation mode for point landmarks
+  - Single click to create a point annotation
+  - Keyboard shortcut: `O`
+  - LabelMe compatible: saves as `shape_type: "point"`
+  - Cancel clears the point (unlike other modes that allow continue drawing)
+
+- **Line Mode (⟋)**: New annotation mode for polyline annotations
+  - Click to add points to create a line
+  - Double-click the last point to complete
+  - Right-click to undo last point
+  - Keyboard shortcut: `L`
+  - LabelMe compatible: saves as `shape_type: "linestrip"`
+
+- **Panel Icon**: Editor tab now displays the extension icon for better visibility
+
+### Improved
+- **Mode Button Order**: Reordered to View → Polygon → Rectangle → Line → Point
+- **Mode Switching**: Switching between any modes now cancels ongoing drawing (prevents orphaned points)
+
 ## [0.8.0] - 2025-12-06
 
 ### Added

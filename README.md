@@ -1,17 +1,19 @@
 # LabelEditor for VSCode
 
-A VS Code extension for annotating images with polygon and rectangle shapes, compatible with the LabelMe JSON format. Perfect for creating datasets for machine learning and computer vision projects.
+A VS Code extension for annotating images with polygon, rectangle, line, and point shapes, compatible with the LabelMe JSON format. Perfect for creating datasets for machine learning and computer vision projects.
 
 > **Note**: This extension is in early development. Many features are still being refined and improved. Contributions and feedback are welcome!
 
 ## ✨ Features
 
 ### Core Annotation
-- **Polygon & Rectangle Annotation**: Draw polygon and rectangle shapes on images
+- **Multiple Shape Types**: Draw polygon, rectangle, line, and point annotations
 - **Multiple Drawing Modes**: Toggle between viewing and editing modes
   - 👁️ **View Mode**: Browse and select without accidental edits (default)
   - ⬠ **Polygon Mode**: Create new polygon annotations
   - ▭ **Rectangle Mode**: Create new rectangle annotations
+  - ⟋ **Line Mode**: Create polyline annotations (New in v0.9.2)
+  - • **Point Mode**: Create point landmarks (New in v0.9.2)
 - **Label Management**: Assign and edit labels for each annotated region
 - **Undo/Redo Support**: Full undo/redo functionality with up to 50 history states
 
@@ -106,6 +108,8 @@ A VS Code extension for annotating images with polygon and rectangle shapes, com
 - **V**: Switch to View Mode
 - **P**: Switch to Polygon Mode
 - **R**: Switch to Rectangle Mode
+- **L**: Switch to Line Mode
+- **O**: Switch to Point Mode
 - **Ctrl+Z** (`Cmd+Z` on Mac): Undo last action
 - **Ctrl+Shift+Z** or **Ctrl+Y**: Redo action
 - **ESC**: Cancel current drawing
@@ -116,7 +120,7 @@ A VS Code extension for annotating images with polygon and rectangle shapes, com
 
 ### Toolbar Buttons
 - **◀ / ▶**: Navigate between images
-- **👁️ / ⬠ / ▭**: Switch between View, Polygon, and Rectangle modes
+- **👁️ / ⬠ / ▭ / ⟋ / •**: Switch between View, Polygon, Rectangle, Line, and Point modes
 - **⚙️**: Open advanced rendering options
 - **Save**: Save current annotations
 
@@ -182,6 +186,8 @@ Planned features for future releases:
 - [x] ~~Refresh image list button~~ **Added in v0.9.0**
 - [x] ~~Open folder for annotation~~ **Added in v0.9.0**
 - [x] ~~Click to copy image path~~ **Added in v0.9.0**
+- [x] ~~Point annotations~~ **Added in v0.9.2**
+- [x] ~~Line (polyline) annotations~~ **Added in v0.9.2**
 - [ ] Circle shapes
 - [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)

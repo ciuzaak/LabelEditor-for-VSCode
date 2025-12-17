@@ -159,6 +159,9 @@ export class LabelMePanel {
         this._globalState = globalState;
         this._filterFolderPath = filterFolderPath;
 
+        // Set panel icon
+        this._panel.iconPath = vscode.Uri.joinPath(extensionUri, 'icon.png');
+
         // Set the webview's initial html content
         this._update();
 
@@ -553,6 +556,8 @@ export class LabelMePanel {
                                 <button id="viewModeBtn" class="mode-btn active" title="View Mode (V)">👁️</button>
                                 <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)">⬠</button>
                                 <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)">▭</button>
+                                <button id="lineModeBtn" class="mode-btn" title="Line Mode (L)">⟋</button>
+                                <button id="pointModeBtn" class="mode-btn" title="Point Mode (O)">•</button>
                             </div>
                             <div class="sidebar-actions">
                                 <button id="advancedOptionsBtn" class="sidebar-icon-btn" title="Advanced Options">⚙️</button>
