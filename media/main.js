@@ -533,6 +533,12 @@ function handleUpdateImageList(message) {
         imageCountEl.textContent = `(${workspaceImages.length})`;
     }
 
+    // Clear saved scroll state to prevent stale scroll position restoration after folder switch
+    const state = vscode.getState() || {};
+    state.savedScrollTop = undefined;
+    state.skipNextScroll = false;
+    vscode.setState(state);
+
     // Reset virtual scroll state and re-render the list
     virtualScrollState = {
         startIndex: 0,
@@ -2275,7 +2281,7 @@ if (imageBrowserList) {
 function scrollToActiveItem() {
     if (!imageBrowserList || typeof workspaceImages === 'undefined') return;
 
-    const currentIndex = workspaceImages.indexOf(currentImageRelativePath);
+    const currentIndex = workspaceImages.indexOf(currentImageRelativePathMutable);
     if (currentIndex !== -1) {
         const targetScrollTop = currentIndex * VIRTUAL_ITEM_HEIGHT - imageBrowserList.clientHeight / 2 + VIRTUAL_ITEM_HEIGHT / 2;
         imageBrowserList.scrollTop = Math.max(0, targetScrollTop);
