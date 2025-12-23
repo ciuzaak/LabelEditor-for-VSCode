@@ -523,7 +523,12 @@ export class LabelMePanel {
                         <div class="image-browser-header">
                             <h3>Images</h3>
                             <span id="imageCount">(${workspaceImages.length})</span>
-                            <button id="refreshImagesBtn" class="refresh-btn" title="Refresh Image List">🔄</button>
+                            <button id="searchImagesBtn" class="header-btn" title="Search Images">🔍</button>
+                            <button id="refreshImagesBtn" class="header-btn" title="Refresh Image List">🔄</button>
+                        </div>
+                        <div id="searchInputContainer" class="search-input-container" style="display: none;">
+                            <input type="text" id="searchInput" placeholder="Search images..." />
+                            <button id="searchCloseBtn" class="search-close-btn" title="Close Search">✕</button>
                         </div>
                         <ul id="imageBrowserList" class="image-browser-list"></ul>
                     </div>

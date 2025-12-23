@@ -53,6 +53,10 @@ const imageBrowserSidebar = document.getElementById('imageBrowserSidebar');
 const imageBrowserResizer = document.getElementById('imageBrowserResizer');
 const imageBrowserList = document.getElementById('imageBrowserList');
 const refreshImagesBtn = document.getElementById('refreshImagesBtn');
+const searchImagesBtn = document.getElementById('searchImagesBtn');
+const searchInputContainer = document.getElementById('searchInputContainer');
+const searchInput = document.getElementById('searchInput');
+const searchCloseBtn = document.getElementById('searchCloseBtn');
 
 // Theme elements
 const themeLightBtn = document.getElementById('themeLightBtn');
@@ -527,10 +531,23 @@ function handleUpdateImageList(message) {
         currentImageRelativePathMutable = message.currentImageRelativePath;
     }
 
+    // Re-apply filter if search is active
+    if (searchQuery) {
+        filteredImages = workspaceImages.filter(img =>
+            img.toLowerCase().includes(searchQuery)
+        );
+    } else {
+        filteredImages = [];
+    }
+
     // Update image count display
     const imageCountEl = document.getElementById('imageCount');
     if (imageCountEl) {
-        imageCountEl.textContent = `(${workspaceImages.length})`;
+        if (searchQuery) {
+            imageCountEl.textContent = `(${filteredImages.length}/${workspaceImages.length})`;
+        } else {
+            imageCountEl.textContent = `(${workspaceImages.length})`;
+        }
     }
 
     // Clear saved scroll state to prevent stale scroll position restoration after folder switch
@@ -595,6 +612,44 @@ function updateImageBrowserHighlight(newRelativePath) {
 document.addEventListener('keydown', (e) => {
     // Ignore shortcuts if modal is open (except Enter/Esc handled in input)
     if (labelModal.style.display === 'flex') return;
+
+    // Ctrl+F: Search
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
+        e.preventDefault();
+        if (searchInputContainer && searchInput) {
+            // Check if sidebar is collapsed
+            if (imageBrowserSidebar && imageBrowserSidebar.classList.contains('collapsed')) {
+                // Open sidebar
+                imageBrowserSidebar.classList.remove('collapsed');
+                imageBrowserExpanded = true;
+
+                // Restore sidebar width if saved
+                const state = vscode.getState() || {};
+                if (state.leftSidebarWidth) {
+                    imageBrowserSidebar.style.width = state.leftSidebarWidth + 'px';
+                }
+
+                // Update state
+                state.imageBrowserExpanded = true;
+                vscode.setState(state);
+
+                // Show and focus search
+                searchInputContainer.style.display = 'flex';
+                searchInput.focus();
+            } else {
+                // Sidebar is open, toggle search box
+                if (searchInputContainer.style.display === 'none') {
+                    searchInputContainer.style.display = 'flex';
+                    searchInput.focus();
+                } else {
+                    // Close search box and clear search
+                    searchInputContainer.style.display = 'none';
+                    searchInput.value = '';
+                    filterImages('');
+                }
+            }
+        }
+    }
 
     // Ctrl+S: Save
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -2147,6 +2202,54 @@ if (refreshImagesBtn) {
     };
 }
 
+// Search Images button - toggle search input visibility
+if (searchImagesBtn && searchInputContainer && searchInput) {
+    searchImagesBtn.onclick = () => {
+        if (searchInputContainer.style.display === 'none') {
+            searchInputContainer.style.display = 'flex';
+            searchInput.focus();
+        } else {
+            // Hide and clear search
+            searchInputContainer.style.display = 'none';
+            searchInput.value = '';
+            filterImages('');
+        }
+    };
+}
+
+// Search input - filter images on input
+let searchDebounceTimer = null;
+if (searchInput) {
+    searchInput.oninput = () => {
+        // Debounce input to avoid excessive filtering
+        if (searchDebounceTimer) {
+            clearTimeout(searchDebounceTimer);
+        }
+        searchDebounceTimer = setTimeout(() => {
+            filterImages(searchInput.value);
+        }, 150);
+    };
+
+    // Also handle Enter key to immediately apply filter
+    searchInput.onkeydown = (e) => {
+        if (e.key === 'Escape') {
+            // Hide search on Escape
+            searchInputContainer.style.display = 'none';
+            searchInput.value = '';
+            filterImages('');
+        }
+    };
+}
+
+// Search close button - hide search input and clear filter
+if (searchCloseBtn && searchInputContainer && searchInput) {
+    searchCloseBtn.onclick = () => {
+        searchInputContainer.style.display = 'none';
+        searchInput.value = '';
+        filterImages('');
+    };
+}
+
 // Render image browser list with virtual scrolling
 // Virtual scrolling constants
 const VIRTUAL_ITEM_HEIGHT = 24; // Approximate height of each item in pixels
@@ -2159,15 +2262,90 @@ let virtualScrollState = {
     scrollTop: 0
 };
 
+// Search state
+let searchQuery = '';
+let filteredImages = []; // Filtered image list when search is active
+
+// Get the effective image list (filtered or full)
+function getEffectiveImageList() {
+    if (searchQuery && filteredImages.length >= 0) {
+        return filteredImages;
+    }
+    return typeof workspaceImages !== 'undefined' ? workspaceImages : [];
+}
+
+// Filter images based on search query
+function filterImages(query) {
+    searchQuery = query.toLowerCase().trim();
+    if (!searchQuery) {
+        filteredImages = [];
+    } else {
+        filteredImages = workspaceImages.filter(img =>
+            img.toLowerCase().includes(searchQuery)
+        );
+    }
+
+    // Save search state
+    const state = vscode.getState() || {};
+    state.searchQuery = searchQuery;
+    vscode.setState(state);
+
+    // Update image count display
+    const imageCountEl = document.getElementById('imageCount');
+    if (imageCountEl) {
+        const effectiveImages = getEffectiveImageList();
+        if (searchQuery) {
+            imageCountEl.textContent = `(${effectiveImages.length}/${workspaceImages.length})`;
+        } else {
+            imageCountEl.textContent = `(${workspaceImages.length})`;
+        }
+    }
+    // Reset virtual scroll state and re-render
+    virtualScrollState = {
+        startIndex: -1,
+        endIndex: -1,
+        scrollTop: 0
+    };
+    renderImageBrowserList();
+}
+
+// Restore search state if available
+if (vscodeState && vscodeState.searchQuery) {
+    const savedQuery = vscodeState.searchQuery;
+    if (searchInput && searchInputContainer) {
+        searchInput.value = savedQuery;
+        searchInputContainer.style.display = 'flex';
+        // Apply filter immediately (without saving state again initially)
+        searchQuery = savedQuery.toLowerCase().trim();
+        filteredImages = workspaceImages.filter(img =>
+            img.toLowerCase().includes(searchQuery)
+        );
+
+        // Update count immediately
+        const imageCountEl = document.getElementById('imageCount');
+        if (imageCountEl) {
+            const effectiveImages = getEffectiveImageList();
+            imageCountEl.textContent = `(${effectiveImages.length}/${workspaceImages.length})`;
+        }
+    }
+} else {
+    // If no search query, ensure UI is reset (though it should be hidden by default in HTML)
+    if (searchInput) searchInput.value = '';
+    if (searchInputContainer) searchInputContainer.style.display = 'none';
+}
+
 function renderImageBrowserList() {
     if (!imageBrowserList || typeof workspaceImages === 'undefined') return;
 
     // Clear existing content
     imageBrowserList.innerHTML = '';
 
+    // Use effective image list (filtered or full)
+    const effectiveImages = getEffectiveImageList();
+
     // Create virtual scroll container structure
     // We need a container that maintains the full scroll height
-    const totalHeight = workspaceImages.length * VIRTUAL_ITEM_HEIGHT;
+    const totalHeight = effectiveImages.length * VIRTUAL_ITEM_HEIGHT;
 
     // Create a spacer element to maintain scroll height
     const spacer = document.createElement('div');
@@ -2197,13 +2375,16 @@ function updateVirtualScroll() {
     const spacer = imageBrowserList.querySelector('.virtual-scroll-spacer');
     if (!spacer) return;
 
+    // Use effective image list (filtered or full)
+    const effectiveImages = getEffectiveImageList();
+
     const scrollTop = imageBrowserList.scrollTop;
     const viewportHeight = imageBrowserList.clientHeight;
 
     // Calculate visible range
     const startIndex = Math.max(0, Math.floor(scrollTop / VIRTUAL_ITEM_HEIGHT) - VIRTUAL_BUFFER_SIZE);
     const visibleCount = Math.ceil(viewportHeight / VIRTUAL_ITEM_HEIGHT);
-    const endIndex = Math.min(workspaceImages.length, startIndex + visibleCount + VIRTUAL_BUFFER_SIZE * 2);
+    const endIndex = Math.min(effectiveImages.length, startIndex + visibleCount + VIRTUAL_BUFFER_SIZE * 2);
 
     // Check if we need to re-render (only if range changed significantly)
     if (startIndex === virtualScrollState.startIndex &&
@@ -2223,7 +2404,7 @@ function updateVirtualScroll() {
     const fragment = document.createDocumentFragment();
 
     for (let i = startIndex; i < endIndex; i++) {
-        const imagePath = workspaceImages[i];
+        const imagePath = effectiveImages[i];
         const li = document.createElement('li');
         li.className = 'image-browser-item';
         li.style.position = 'absolute';

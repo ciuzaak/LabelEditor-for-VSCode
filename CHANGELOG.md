@@ -2,7 +2,22 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
-## [0.9.2] - 2025-12-17
+## [0.9.4] - 2025-12-23
+
+### Added
+- **Image Search**: Filter image list by name with real-time search
+  - 🔍 Search button in sidebar header
+  - `Ctrl+F` shortcut to toggle search box
+  - Shows filtered count (e.g., "5/20")
+- **Search Logic**:
+  - Auto-expands sidebar if collapsed when searching
+  - `Esc` or Close button to clear search
+  - Toggle logic: Open -> Focus -> Close
+
+### Fixed
+- **Search State Persistence**: Search query survives webview reloads (e.g., when clicking images)
+
+## [0.9.3] - 2025-12-23
 
 ### Added
 - **Point Mode (•)**: New annotation mode for point landmarks
