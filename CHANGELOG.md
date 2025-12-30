@@ -2,6 +2,20 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.9.5] - 2025-12-30
+
+### Fixed
+- **Zoom Annotation Alignment**: Fixed annotation misalignment with target positions during zoom on large images
+  - Root cause: `Math.floor()` rounding errors in display dimension calculations
+  - Now uses exact floating-point values for sub-pixel accurate canvas/SVG alignment
+  
+- **Recent Labels Persistence**: Fixed intermittent issue where recent labels were not saved after first annotation
+  - Root cause: Async write race condition and missing vscodeState backup
+  - Now uses dual-save mechanism (vscodeState + globalState) for reliable persistence
+
+### Improved
+- **Code Quality**: All async message handlers now properly use `await` for consistent error handling
+
 ## [0.9.4] - 2025-12-23
 
 ### Added

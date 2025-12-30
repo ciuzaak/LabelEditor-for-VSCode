@@ -196,10 +196,10 @@ export class LabelMePanel {
 
         // Handle messages from the webview
         this._panel.webview.onDidReceiveMessage(
-            message => {
+            async message => {
                 switch (message.command) {
                     case 'save':
-                        this.saveAnnotation(message.data);
+                        await this.saveAnnotation(message.data);
                         return;
                     case 'dirty':
                         this._isDirty = message.value;
@@ -208,19 +208,19 @@ export class LabelMePanel {
                         vscode.window.showErrorMessage(message.text);
                         return;
                     case 'next':
-                        this.navigateImage(1);
+                        await this.navigateImage(1);
                         return;
                     case 'prev':
-                        this.navigateImage(-1);
+                        await this.navigateImage(-1);
                         return;
                     case 'saveGlobalSettings':
-                        this._globalState.update(message.key, message.value);
+                        await this._globalState.update(message.key, message.value);
                         return;
                     case 'navigateToImage':
-                        this._navigateToImageByPath(message.imagePath);
+                        await this._navigateToImageByPath(message.imagePath);
                         return;
                     case 'refreshImages':
-                        this._refreshWorkspaceImages();
+                        await this._refreshWorkspaceImages();
                         return;
                 }
             },

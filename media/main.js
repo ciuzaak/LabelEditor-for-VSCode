@@ -162,6 +162,12 @@ if (typeof initialGlobalSettings !== 'undefined') {
     if (initialGlobalSettings.vscodeThemeKind !== undefined) {
         vscodeThemeKind = initialGlobalSettings.vscodeThemeKind;
     }
+    // Restore recentLabels from vscodeState first (survives HTML regeneration)
+    if (vscodeState.recentLabels !== undefined && Array.isArray(vscodeState.recentLabels)) {
+        recentLabels = vscodeState.recentLabels;
+    } else if (initialGlobalSettings.recentLabels) {
+        recentLabels = initialGlobalSettings.recentLabels;
+    }
 }
 
 // 从vscode state恢复labelVisibilityState
@@ -384,8 +390,8 @@ function updateCanvasTransform() {
     canvas.width = img.width;
     canvas.height = img.height;
 
-    const displayWidth = Math.floor(img.width * zoomLevel);
-    const displayHeight = Math.floor(img.height * zoomLevel);
+    const displayWidth = img.width * zoomLevel;
+    const displayHeight = img.height * zoomLevel;
 
     // Set display size via CSS
     canvas.style.width = `${displayWidth}px`;
@@ -977,8 +983,8 @@ canvasContainer.addEventListener('wheel', (e) => {
             }
 
             // Update canvas wrapper size (整体缩放)
-            const displayWidth = Math.floor(img.width * zoomLevel);
-            const displayHeight = Math.floor(img.height * zoomLevel);
+            const displayWidth = img.width * zoomLevel;
+            const displayHeight = img.height * zoomLevel;
 
             canvas.style.width = `${displayWidth}px`;
             canvas.style.height = `${displayHeight}px`;
@@ -1259,12 +1265,8 @@ function confirmLabel() {
     recentLabels.unshift(label);
     if (recentLabels.length > 10) recentLabels.pop();
 
-    // 持久化到全局状态
-    vscode.postMessage({
-        command: 'saveGlobalSettings',
-        key: 'recentLabels',
-        value: recentLabels
-    });
+    // 持久化到全局状态（同时保存到vscodeState和extension globalState）
+    saveGlobalSettings('recentLabels', recentLabels);
 
     if (editingShapeIndex !== -1) {
         // Editing existing shape
