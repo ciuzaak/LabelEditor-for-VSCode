@@ -12,8 +12,10 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
   - 👁️ **View Mode**: Browse and select without accidental edits (default)
   - ⬠ **Polygon Mode**: Create new polygon annotations
   - ▭ **Rectangle Mode**: Create new rectangle annotations
-  - ⟋ **Line Mode**: Create polyline annotations (New in v0.9.2)
-  - • **Point Mode**: Create point landmarks (New in v0.9.2)
+  - ⟋ **Line Mode**: Create polyline annotations
+  - • **Point Mode**: Create point landmarks
+- **Unified Edit Mode** (New in v0.10.0): seamlessly move shapes or adjust vertices by simply clicking on them
+- **Context Menu** (New in v0.10.0): Right-click any shape to Edit, Rename, Hide, or Delete
 - **Label Management**: Assign and edit labels for each annotated region
 - **Undo/Redo Support**: Full undo/redo functionality with up to 50 history states
 
@@ -188,6 +190,8 @@ Planned features for future releases:
 - [x] ~~Click to copy image path~~ **Added in v0.9.0**
 - [x] ~~Point annotations~~ **Added in v0.9.2**
 - [x] ~~Line (polyline) annotations~~ **Added in v0.9.2**
+- [x] ~~Unified Edit Mode~~ **Added in v0.10.0**
+- [x] ~~Context Menu (Rename/Hide/Delete)~~ **Added in v0.10.0**
 - [ ] Circle shapes
 - [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)

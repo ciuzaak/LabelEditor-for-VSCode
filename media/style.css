@@ -883,3 +883,49 @@ canvas {
 .image-browser-sidebar.collapsed+.image-browser-resizer {
     display: none;
 }
+
+/* Shape Context Menu */
+.shape-context-menu {
+    position: absolute;
+    background-color: var(--color-bg-secondary);
+    border: 1px solid var(--color-border-secondary);
+    border-radius: 4px;
+    box-shadow: 0 4px 12px var(--color-shadow);
+    z-index: 1000;
+    min-width: 100px;
+    overflow: hidden;
+}
+
+.context-menu-item {
+    padding: 8px 16px;
+    cursor: pointer;
+    font-size: 13px;
+    color: var(--color-text-primary);
+    transition: background-color 0.15s;
+}
+
+.context-menu-item:hover {
+    background-color: var(--color-bg-hover);
+}
+
+.context-menu-item:active {
+    background-color: var(--color-bg-active);
+}
+
+.context-menu-item.context-menu-danger {
+    color: #ff4d4f;
+}
+
+.context-menu-item.context-menu-danger:hover {
+    background-color: rgba(255, 77, 79, 0.15);
+}
+
+/* Vertex handles for edit mode */
+.vertex-handle {
+    cursor: move;
+    transition: r 0.15s;
+}
+
+.vertex-handle:hover {
+    filter: brightness(1.2);
+}

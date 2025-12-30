@@ -2,6 +2,25 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.10.0] - 2025-12-31
+
+### Added
+- **Context Menu Integration**: Comprehensive context menu for shapes
+  - **Right-click** any shape to open the menu (works in both View and Edit modes)
+  - **Edit**: Enter unified edit mode for vertex manipulation and dragging
+  - **Rename**: Quickly rename the label of the selected shape
+  - **Hide**: Toggle visibility of the selected shape
+  - **Delete**: Delete the selected shape (with red danger styling)
+
+### Improved
+- **Unified Edit Mode**: Seamlessly combined Drag and Edit modes
+  - Simply click a shape to start dragging it
+  - Click a vertex/point to start adjusting its position
+  - No need to switch between separate "Move" and "Edit" tool modes
+  - Visual cursor feedback (Move vs Crosshair)
+- **Edit Interaction**:
+  - **Click-Outside to Cancel**: Clicking outside a shape while editing now cancels changes (same as ESC)
+  - **Context Menu Consistency**: Right-click context menu now works reliably in all modes, including View mode
 ## [0.9.5] - 2025-12-30
 
 ### Fixed

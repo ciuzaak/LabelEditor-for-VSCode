@@ -83,7 +83,7 @@ let zoomAnimationFrameId = null; // 缩放节流
 
 // 常量定义
 const ZOOM_FIT_RATIO = 0.98;      // 适应屏幕时的缩放比例
-const ZOOM_MAX = 10;               // 最大缩放倍数
+const ZOOM_MAX = 20;               // 最大缩放倍数
 const ZOOM_MIN = 0.1;              // 最小缩放倍数
 const ZOOM_FACTOR = 1.1;           // 滚轮缩放因子
 const CLOSE_DISTANCE_THRESHOLD = 100; // 多边形闭合距离阈值
@@ -115,7 +115,6 @@ let customColors = new Map(); // 存储用户自定义的标签颜色
 let currentEditingLabel = null; // 当前正在编辑颜色的标签
 let paletteClickHandler = null; // 颜色选择器的点击处理器引用
 
-// 预设调色板（3行 x 8列 = 24个颜色）
 const PRESET_COLORS = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A',
     '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E2',
@@ -124,6 +123,22 @@ const PRESET_COLORS = [
     '#FA541C', '#FADB14', '#A0D911', '#2F54EB',
     '#9254DE', '#597EF7', '#36CFC9', '#FF7A45'
 ];
+
+// Shape edit mode for vertex editing and shape dragging
+let isEditingShape = false;          // Whether in shape edit mode
+let shapeBeingEdited = -1;          // Shape being edited (for vertex/drag manipulation)
+let originalEditPoints = null;       // Store original points for cancellation
+let dragStartPoint = null;           // {x, y} for drag offset calculation
+let isDraggingVertex = false;        // Whether currently dragging a vertex
+let isDraggingWholeShape = false;    // Whether currently dragging the whole shape
+let activeVertexIndex = -1;          // Vertex being dragged
+
+// Context menu element reference
+const shapeContextMenu = document.getElementById('shapeContextMenu');
+const contextMenuEdit = document.getElementById('contextMenuEdit');
+const contextMenuRename = document.getElementById('contextMenuRename');
+const contextMenuToggleVisible = document.getElementById('contextMenuToggleVisible');
+const contextMenuDelete = document.getElementById('contextMenuDelete');
 
 
 // Labels可见性管理 - 全局状态（会话级别，切换图片保留，关闭插件重置）
@@ -691,8 +706,21 @@ document.addEventListener('keydown', (e) => {
         deleteShape(selectedShapeIndex);
     }
 
-    // ESC: Cancel drawing
+    // ESC: Cancel drawing or exit drag/edit mode
     if (e.key === 'Escape') {
+        // First priority: hide context menu if visible
+        if (shapeContextMenu && shapeContextMenu.style.display !== 'none') {
+            hideShapeContextMenu();
+            return;
+        }
+
+        // Second priority: exit edit mode
+        if (isEditingShape) {
+            exitShapeEditMode(false); // Cancel and restore original position
+            return;
+        }
+
+        // Third priority: cancel drawing
         if (isDrawing) {
             isDrawing = false;
             currentPoints = [];
@@ -775,6 +803,17 @@ function invalidateColorCache() {
 // 使用canvasWrapper来监听鼠标事件，因为SVG覆盖在canvas上
 canvasWrapper.addEventListener('mousedown', (e) => {
     if (e.button === 0) { // Left click
+        // If click is on the context menu, let it handle the click
+        if (shapeContextMenu && shapeContextMenu.contains(e.target)) {
+            return;
+        }
+
+        // If context menu is visible and click is outside it, hide it and don't process further
+        if (shapeContextMenu && shapeContextMenu.style.display !== 'none') {
+            hideShapeContextMenu();
+            return;
+        }
+
         const rect = canvas.getBoundingClientRect();
         // Mouse pos relative to canvas
         const mx = e.clientX - rect.left;
@@ -905,6 +944,24 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 currentPoints = [];
                 draw();
             }
+        } else {
+            // Not drawing - check if right-clicked on a shape to show context menu (works in all modes)
+            const rect = canvas.getBoundingClientRect();
+            const mx = e.clientX - rect.left;
+            const my = e.clientY - rect.top;
+            const x = mx / zoomLevel;
+            const y = my / zoomLevel;
+
+            const clickedShapeIndex = findShapeIndexAt(x, y);
+            if (clickedShapeIndex !== -1) {
+                // Select the shape and show context menu
+                selectedShapeIndex = clickedShapeIndex;
+                renderShapeList();
+                draw();
+                showShapeContextMenu(e.clientX, e.clientY, clickedShapeIndex);
+            } else {
+                hideShapeContextMenu();
+            }
         }
     }
 });
@@ -1014,10 +1071,261 @@ canvasContainer.addEventListener('wheel', (e) => {
     }
 }, { passive: false });
 
-// 禁用canvasWrapper上的右键菜单 (except in View Mode)
+// 禁用canvasWrapper上的右键菜单（现在所有模式都阻止默认菜单）
 canvasWrapper.addEventListener('contextmenu', (e) => {
-    if (currentMode !== 'view') {
+    e.preventDefault();
+});
+
+// --- Shape Context Menu Functions ---
+function showShapeContextMenu(clientX, clientY, shapeIndex) {
+    if (!shapeContextMenu) return;
+
+    // Position the menu at mouse location relative to canvasWrapper
+    const wrapperRect = canvasWrapper.getBoundingClientRect();
+    const menuX = clientX - wrapperRect.left;
+    const menuY = clientY - wrapperRect.top;
+
+    shapeContextMenu.style.left = menuX + 'px';
+    shapeContextMenu.style.top = menuY + 'px';
+    shapeContextMenu.style.display = 'block';
+}
+
+function hideShapeContextMenu() {
+    if (shapeContextMenu) {
+        shapeContextMenu.style.display = 'none';
+    }
+}
+
+// Context menu item click handler - enter edit mode
+if (contextMenuEdit) {
+    contextMenuEdit.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hideShapeContextMenu();
+        if (selectedShapeIndex !== -1) {
+            enterShapeEditMode(selectedShapeIndex);
+        }
+    });
+}
+
+// Context menu item click handler - rename (edit label)
+if (contextMenuRename) {
+    contextMenuRename.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hideShapeContextMenu();
+        if (selectedShapeIndex !== -1) {
+            showLabelModal(selectedShapeIndex);
+        }
+    });
+}
+
+// Context menu item click handler - toggle visibility
+if (contextMenuToggleVisible) {
+    contextMenuToggleVisible.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hideShapeContextMenu();
+        if (selectedShapeIndex !== -1) {
+            const shape = shapes[selectedShapeIndex];
+            shape.visible = shape.visible === undefined ? false : !shape.visible;
+            renderShapeList();
+            draw();
+        }
+    });
+}
+
+// Context menu item click handler - delete
+if (contextMenuDelete) {
+    contextMenuDelete.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hideShapeContextMenu();
+        if (selectedShapeIndex !== -1) {
+            deleteShape(selectedShapeIndex);
+        }
+    });
+}
+
+// Hide context menu when clicking elsewhere
+document.addEventListener('click', (e) => {
+    if (shapeContextMenu && !shapeContextMenu.contains(e.target)) {
+        hideShapeContextMenu();
+    }
+});
+
+// --- Unified Edit Mode Functions ---
+function enterShapeEditMode(shapeIndex) {
+    isEditingShape = true;
+    shapeBeingEdited = shapeIndex;
+    selectedShapeIndex = shapeIndex;
+    originalEditPoints = JSON.parse(JSON.stringify(shapes[shapeIndex].points));
+    draw();
+}
+
+function exitShapeEditMode(saveChanges = true) {
+    if (!isEditingShape) return;
+
+    if (!saveChanges && originalEditPoints && shapeBeingEdited !== -1) {
+        // Restore original points
+        shapes[shapeBeingEdited].points = originalEditPoints;
+    }
+
+    isEditingShape = false;
+    shapeBeingEdited = -1;
+    originalEditPoints = null;
+    dragStartPoint = null;
+    isDraggingVertex = false;
+    isDraggingWholeShape = false;
+    activeVertexIndex = -1;
+    canvasWrapper.style.cursor = currentMode === 'view' ? 'default' : 'crosshair';
+    draw();
+}
+
+// Find vertex at position (for edit mode)
+function findVertexAt(shapeIndex, x, y) {
+    const shape = shapes[shapeIndex];
+    let points = shape.points;
+
+    // For rectangles, use the actual corner points
+    if (shape.shape_type === 'rectangle') {
+        points = getRectPoints(shape.points);
+    }
+
+    const VERTEX_CLICK_RADIUS = 8 / zoomLevel;
+
+    for (let i = 0; i < points.length; i++) {
+        const p = points[i];
+        const dx = x - p[0];
+        const dy = y - p[1];
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        if (distance <= VERTEX_CLICK_RADIUS) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+// Handle mouse events for unified edit mode on canvasWrapper
+canvasWrapper.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return; // Only left click
+
+    if (isEditingShape && shapeBeingEdited !== -1) {
+        const rect = canvas.getBoundingClientRect();
+        const mx = e.clientX - rect.left;
+        const my = e.clientY - rect.top;
+        const x = mx / zoomLevel;
+        const y = my / zoomLevel;
+
+        // First check if clicked on a vertex
+        const vertexIndex = findVertexAt(shapeBeingEdited, x, y);
+        if (vertexIndex !== -1) {
+            activeVertexIndex = vertexIndex;
+            isDraggingVertex = true;
+            dragStartPoint = { x, y };
+            e.stopPropagation();
+            e.preventDefault();
+            return;
+        }
+
+        // Check if clicked on the shape itself (for whole shape dragging)
+        const clickedIndex = findShapeIndexAt(x, y);
+        if (clickedIndex === shapeBeingEdited) {
+            isDraggingWholeShape = true;
+            dragStartPoint = { x, y };
+            canvasWrapper.style.cursor = 'move';
+            e.stopPropagation();
+            e.preventDefault();
+            return;
+        }
+
+        // Clicked outside the shape - exit edit mode without saving (like ESC)
+        exitShapeEditMode(false);
+        e.stopPropagation();
         e.preventDefault();
+        return;
+    }
+}, true); // Use capture phase to intercept before other handlers
+
+document.addEventListener('mousemove', (e) => {
+    if (!isEditingShape || shapeBeingEdited === -1) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+    const x = mx / zoomLevel;
+    const y = my / zoomLevel;
+
+    if (isDraggingWholeShape && dragStartPoint) {
+        const dx = x - dragStartPoint.x;
+        const dy = y - dragStartPoint.y;
+
+        // Move all points by the delta
+        const shape = shapes[shapeBeingEdited];
+        shape.points = originalEditPoints.map(p => [p[0] + dx, p[1] + dy]);
+
+        draw();
+    } else if (isDraggingVertex && activeVertexIndex !== -1) {
+        const shape = shapes[shapeBeingEdited];
+
+        // For rectangles, we need special handling since we store only 2 corner points
+        if (shape.shape_type === 'rectangle') {
+            // Rectangle is stored as [[x1,y1], [x2,y2]] representing opposite corners
+            // The 4 visual vertices are: [0]topLeft, [1]topRight, [2]bottomRight, [3]bottomLeft
+            // Map back to the 2-point representation
+            if (activeVertexIndex === 0 || activeVertexIndex === 2) {
+                // Moving a diagonal corner - straightforward
+                if (activeVertexIndex === 0) {
+                    shape.points[0] = [x, y];
+                } else {
+                    shape.points[1] = [x, y];
+                }
+            } else {
+                // Moving non-diagonal corner - need to update both stored points
+                const [p1, p2] = shape.points;
+                if (activeVertexIndex === 1) {
+                    // Top-right: affects p1[1] and p2[0]
+                    shape.points = [[p1[0], y], [x, p2[1]]];
+                } else {
+                    // Bottom-left: affects p1[0] and p2[1]
+                    shape.points = [[x, p1[1]], [p2[0], y]];
+                }
+            }
+        } else {
+            // For polygon/line/point, just update the vertex directly
+            shape.points[activeVertexIndex] = [x, y];
+        }
+
+        draw();
+    } else if (isEditingShape) {
+        // Update cursor based on what's under the mouse
+        const vertexIndex = findVertexAt(shapeBeingEdited, x, y);
+        if (vertexIndex !== -1) {
+            canvasWrapper.style.cursor = 'move';
+        } else {
+            const onShape = findShapeIndexAt(x, y) === shapeBeingEdited;
+            canvasWrapper.style.cursor = onShape ? 'move' : 'crosshair';
+        }
+    }
+});
+
+document.addEventListener('mouseup', (e) => {
+    if (isDraggingWholeShape) {
+        isDraggingWholeShape = false;
+        dragStartPoint = null;
+        canvasWrapper.style.cursor = 'default';
+        // Update originalEditPoints to current position for next drag
+        if (shapeBeingEdited !== -1) {
+            originalEditPoints = JSON.parse(JSON.stringify(shapes[shapeBeingEdited].points));
+        }
+        markDirty();
+        saveHistory();
+    }
+    if (isDraggingVertex) {
+        isDraggingVertex = false;
+        activeVertexIndex = -1;
+        // Update originalEditPoints to current position
+        if (shapeBeingEdited !== -1) {
+            originalEditPoints = JSON.parse(JSON.stringify(shapes[shapeBeingEdited].points));
+        }
+        markDirty();
+        saveHistory();
     }
 });
 
@@ -1430,6 +1738,15 @@ function scrollSelectedShapeIntoView() {
 }
 
 function deleteShape(index) {
+    // Check if we are deleting the shape currently being edited
+    if (isEditingShape) {
+        if (shapeBeingEdited === index) {
+            exitShapeEditMode(false); // Exit edit mode (points restoration doesn't matter as it will be deleted)
+        } else if (shapeBeingEdited > index) {
+            shapeBeingEdited--; // Shift index if a preceding shape is deleted
+        }
+    }
+
     shapes.splice(index, 1);
     if (selectedShapeIndex === index) {
         selectedShapeIndex = -1;
@@ -1759,6 +2076,14 @@ function setMode(mode) {
         draw();
     }
 
+    // 如果在编辑模式，退出并保存更改
+    if (isEditingShape) {
+        exitShapeEditMode(true);
+    }
+
+    // 隐藏上下文菜单
+    hideShapeContextMenu();
+
     currentMode = mode;
 
     // 保存到vscode state
@@ -1924,15 +2249,31 @@ function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = 
         group.appendChild(pathElement);
     }
 
-    // 绘制顶点（仅在绘制过程中显示，或对于linestrip始终显示小点）
-    if (showVertices || (shapeType === 'linestrip' && shapeIndex !== -1)) {
-        points.forEach(p => {
+    // 绘制顶点（仅在绘制过程中显示，或对于linestrip始终显示小点，或在编辑模式下显示可拖动的顶点）
+    const isInEditMode = isEditingShape && shapeIndex === shapeBeingEdited;
+
+    if (showVertices || (shapeType === 'linestrip' && shapeIndex !== -1) || isInEditMode) {
+        const vertexRadius = isInEditMode ? (6 / zoomLevel) : adjustedPointRadius;
+
+        points.forEach((p, index) => {
             const circle = document.createElementNS(SVG_NS, 'circle');
             circle.setAttribute('cx', p[0]);
             circle.setAttribute('cy', p[1]);
-            circle.setAttribute('r', adjustedPointRadius);
-            circle.setAttribute('fill', strokeColor);
-            circle.style.pointerEvents = 'none';
+            circle.setAttribute('r', vertexRadius);
+            circle.setAttribute('fill', isInEditMode ? '#FFD700' : strokeColor);
+            circle.setAttribute('stroke', isInEditMode ? '#FFA500' : 'none');
+            circle.setAttribute('stroke-width', isInEditMode ? (2 / zoomLevel) : 0);
+
+            if (isInEditMode) {
+                circle.style.cursor = 'move';
+                circle.style.pointerEvents = 'auto';
+                circle.classList.add('vertex-handle');
+                circle.dataset.vertexIndex = index;
+                circle.dataset.shapeIndex = shapeIndex;
+            } else {
+                circle.style.pointerEvents = 'none';
+            }
+
             group.appendChild(circle);
         });
     }
