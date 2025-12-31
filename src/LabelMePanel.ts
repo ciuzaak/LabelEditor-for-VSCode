@@ -556,43 +556,57 @@ export class LabelMePanel {
                     </div>
                     <div id="resizer" class="resizer"></div>
                     <div class="sidebar" id="sidebar">
-                        <div class="sidebar-toolbar">
-                            <div class="mode-toggle-group">
-                                <button id="viewModeBtn" class="mode-btn active" title="View Mode (V)">👁️</button>
-                                <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)">⬠</button>
-                                <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)">▭</button>
-                                <button id="lineModeBtn" class="mode-btn" title="Line Mode (L)">⟋</button>
-                                <button id="pointModeBtn" class="mode-btn" title="Point Mode (O)">•</button>
-                            </div>
-                            <div class="sidebar-actions">
-                                <button id="advancedOptionsBtn" class="sidebar-icon-btn" title="Advanced Options">⚙️</button>
-                                <button id="saveBtn" class="sidebar-icon-btn" title="Save (Ctrl+S)" disabled>💾</button>
-                            </div>
-                        </div>
-                        <div id="advancedOptionsDropdown" class="advanced-options-dropdown" style="display: none;">
-                            <div class="theme-control">
-                                <label>Theme</label>
-                                <div class="theme-toggle-group">
-                                    <button id="themeLightBtn" class="theme-btn" title="Light">☀️</button>
-                                    <button id="themeDarkBtn" class="theme-btn" title="Dark">🌙</button>
-                                    <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code">🔄</button>
+                        <div class="sidebar-config-section">
+                            <div class="sidebar-toolbar">
+                                <div class="mode-toggle-group">
+                                    <button id="viewModeBtn" class="mode-btn active" title="View Mode (V)">👁️</button>
+                                    <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)">⬠</button>
+                                    <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)">▭</button>
+                                    <button id="lineModeBtn" class="mode-btn" title="Line Mode (L)">⟋</button>
+                                    <button id="pointModeBtn" class="mode-btn" title="Point Mode (O)">•</button>
+                                </div>
+                                <div class="sidebar-actions">
+                                    <button id="advancedOptionsBtn" class="sidebar-icon-btn" title="Advanced Options">⚙️</button>
+                                    <button id="saveBtn" class="sidebar-icon-btn" title="Save (Ctrl+S)" disabled>💾</button>
                                 </div>
                             </div>
-                            <div class="slider-control">
-                                <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
-                            </div>
-                            <div class="slider-control">
-                                <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
+                            <div id="advancedOptionsDropdown" class="advanced-options-dropdown" style="display: none;">
+                                <div class="theme-control">
+                                    <label>Theme</label>
+                                    <div class="theme-toggle-group">
+                                        <button id="themeLightBtn" class="theme-btn" title="Light">☀️</button>
+                                        <button id="themeDarkBtn" class="theme-btn" title="Dark">🌙</button>
+                                        <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code">🔄</button>
+                                    </div>
+                                </div>
+                                <div class="lock-view-control">
+                                    <label>Lock View</label>
+                                    <div class="lock-view-toggle-group">
+                                        <button id="lockViewOnBtn" class="lock-view-btn" title="Keep zoom and position when switching images">On</button>
+                                        <button id="lockViewOffBtn" class="lock-view-btn active" title="Fit to screen on each image">Off</button>
+                                    </div>
+                                </div>
+                                <div class="slider-control">
+                                    <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                    <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
+                                </div>
+                                <div class="slider-control">
+                                    <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                    <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
+                                </div>
                             </div>
                         </div>
-                        <div class="labels-section">
-                            <h3>Labels</h3>
-                            <ul id="labelsList"></ul>
+                        <div class="sidebar-content">
+                            <div class="sidebar-labels-section" id="sidebarLabelsSection">
+                                <h3>Labels</h3>
+                                <ul id="labelsList"></ul>
+                            </div>
+                            <div id="sidebarSectionResizer" class="sidebar-section-resizer"></div>
+                            <div class="sidebar-instances-section" id="sidebarInstancesSection">
+                                <h3>Instances</h3>
+                                <ul id="shapeList"></ul>
+                            </div>
                         </div>
-                        <h3>Instances</h3>
-                        <ul id="shapeList"></ul>
                     </div>
                 </div>
                 
@@ -639,6 +653,7 @@ export class LabelMePanel {
                         fillOpacity: ${this._globalState.get('fillOpacity') ?? 0.3},
                         recentLabels: ${JSON.stringify(this._globalState.get('recentLabels') || [])},
                         theme: "${this._globalState.get('theme') ?? 'auto'}",
+                        lockViewEnabled: ${this._globalState.get('lockViewEnabled') ?? false},
                         vscodeThemeKind: ${vscode.window.activeColorTheme.kind}
                     };
                 </script>

@@ -152,6 +152,10 @@ let fillOpacity = 0.3; // 填充透明度，默认30%
 let currentTheme = 'auto'; // 'light', 'dark', 'auto'
 let vscodeThemeKind = 2; // 1=Light, 2=Dark, 3=HighContrast, 4=HighContrastLight
 
+// Lock View state - preserves zoom and position when navigating between images
+let lockViewEnabled = false;
+let lockedViewState = null; // { zoomLevel, centerX, centerY } - normalized view state
+
 // Initialize from global settings injected by extension
 const vscodeState = vscode.getState() || {};
 if (typeof initialGlobalSettings !== 'undefined') {
@@ -193,6 +197,16 @@ if (vscodeState && vscodeState.labelVisibility) {
 // 从vscode state恢复currentMode
 if (vscodeState && vscodeState.currentMode) {
     currentMode = vscodeState.currentMode;
+}
+
+// 从vscode state恢复lockViewEnabled (先从vscode state，再从globalSettings)
+if (vscodeState && vscodeState.lockViewEnabled !== undefined) {
+    lockViewEnabled = vscodeState.lockViewEnabled;
+} else if (initialGlobalSettings.lockViewEnabled !== undefined) {
+    lockViewEnabled = initialGlobalSettings.lockViewEnabled;
+}
+if (vscodeState && vscodeState.lockedViewState) {
+    lockedViewState = vscodeState.lockedViewState;
 }
 
 // 初始化UI显示值
@@ -248,13 +262,141 @@ if (existingData) {
 // 初始化历史记录
 saveHistory();
 
+// --- Lock View Functions ---
+const lockViewOnBtn = document.getElementById('lockViewOnBtn');
+const lockViewOffBtn = document.getElementById('lockViewOffBtn');
+
+// Initialize lock view toggle UI state
+function updateLockViewUI() {
+    if (lockViewOnBtn && lockViewOffBtn) {
+        if (lockViewEnabled) {
+            lockViewOnBtn.classList.add('active');
+            lockViewOffBtn.classList.remove('active');
+        } else {
+            lockViewOnBtn.classList.remove('active');
+            lockViewOffBtn.classList.add('active');
+        }
+    }
+}
+updateLockViewUI();
+
+// Calculate normalized view state (relative to image center)
+function getNormalizedViewState() {
+    const scrollX = canvasContainer.scrollLeft;
+    const scrollY = canvasContainer.scrollTop;
+    const viewportW = canvasContainer.clientWidth;
+    const viewportH = canvasContainer.clientHeight;
+    const imageW = img.width * zoomLevel;
+    const imageH = img.height * zoomLevel;
+
+    // Protect against divide-by-zero when image dimensions are 0
+    if (imageW === 0 || imageH === 0) {
+        return { zoomLevel, centerX: 0, centerY: 0 };
+    }
+
+    // Viewport center position relative to image center, normalized by image dimensions
+    const centerX = (scrollX + viewportW / 2 - imageW / 2) / imageW;
+    const centerY = (scrollY + viewportH / 2 - imageH / 2) / imageH;
+
+    return { zoomLevel, centerX, centerY };
+}
+
+// Apply normalized view state to current image
+function applyNormalizedViewState(state) {
+    if (!state) return;
+
+    zoomLevel = state.zoomLevel;
+    updateCanvasTransform();
+
+    const imageW = img.width * zoomLevel;
+    const imageH = img.height * zoomLevel;
+    const viewportW = canvasContainer.clientWidth;
+    const viewportH = canvasContainer.clientHeight;
+
+    // Reverse the normalization to get scroll position
+    const scrollX = state.centerX * imageW + imageW / 2 - viewportW / 2;
+    const scrollY = state.centerY * imageH + imageH / 2 - viewportH / 2;
+
+    canvasContainer.scrollLeft = Math.max(0, scrollX);
+    canvasContainer.scrollTop = Math.max(0, scrollY);
+}
+
+// Save current view state if lock view is enabled
+// Only save if image is scrollable (larger than viewport) to prevent small images from corrupting the saved state
+function saveLockedViewState() {
+    if (lockViewEnabled) {
+        const imageW = img.width * zoomLevel;
+        const imageH = img.height * zoomLevel;
+        const viewportW = canvasContainer.clientWidth;
+        const viewportH = canvasContainer.clientHeight;
+
+        // Only save if at least one dimension is scrollable
+        if (imageW > viewportW || imageH > viewportH) {
+            lockedViewState = getNormalizedViewState();
+            const state = vscode.getState() || {};
+            state.lockedViewState = lockedViewState;
+            vscode.setState(state);
+        }
+        // If image fits entirely in viewport, don't update - keep the previous locked state
+    }
+}
+
+// Lock view button click handlers
+function setLockView(enabled) {
+    lockViewEnabled = enabled;
+
+    if (lockViewEnabled) {
+        // Save current view state when enabling
+        const imageW = img.width * zoomLevel;
+        const imageH = img.height * zoomLevel;
+        const viewportW = canvasContainer.clientWidth;
+        const viewportH = canvasContainer.clientHeight;
+
+        // Only save if image is scrollable
+        if (imageW > viewportW || imageH > viewportH) {
+            lockedViewState = getNormalizedViewState();
+        }
+    } else {
+        // Clear locked state when disabling
+        lockedViewState = null;
+    }
+
+    // Update UI
+    updateLockViewUI();
+
+    // Persist to vscode state
+    const state = vscode.getState() || {};
+    state.lockViewEnabled = lockViewEnabled;
+    state.lockedViewState = lockedViewState;
+    vscode.setState(state);
+
+    // Persist to globalState for long-term storage
+    vscode.postMessage({
+        command: 'saveGlobalSettings',
+        key: 'lockViewEnabled',
+        value: lockViewEnabled
+    });
+}
+
+if (lockViewOnBtn) {
+    lockViewOnBtn.addEventListener('click', () => setLockView(true));
+}
+if (lockViewOffBtn) {
+    lockViewOffBtn.addEventListener('click', () => setLockView(false));
+}
+
 // 图片加载处理函数
 function handleImageLoad() {
     // Clear any previous error status
     statusSpan.textContent = "";
     statusSpan.style.color = "";
 
-    fitImageToScreen();
+    // Apply locked view state if enabled, otherwise fit to screen
+    if (lockViewEnabled && lockedViewState) {
+        applyNormalizedViewState(lockedViewState);
+    } else {
+        fitImageToScreen();
+    }
     draw();
     renderShapeList();
     renderLabelsList();
@@ -524,7 +666,12 @@ function handleImageUpdate(message) {
         statusSpan.textContent = "";
         statusSpan.style.color = "";
 
-        fitImageToScreen();
+        // Apply locked view state if enabled, otherwise fit to screen
+        if (lockViewEnabled && lockedViewState) {
+            applyNormalizedViewState(lockedViewState);
+        } else {
+            fitImageToScreen();
+        }
         draw();
         renderShapeList();
         renderLabelsList();
@@ -1004,6 +1151,17 @@ canvasWrapper.addEventListener('mousemove', (e) => {
     }
 });
 
+// Save locked view state on scroll (debounced)
+let scrollSaveTimeout = null;
+canvasContainer.addEventListener('scroll', () => {
+    if (lockViewEnabled) {
+        if (scrollSaveTimeout) clearTimeout(scrollSaveTimeout);
+        scrollSaveTimeout = setTimeout(() => {
+            saveLockedViewState();
+        }, 200); // Debounce to avoid too frequent saves
+    }
+});
+
 // 缩放事件绑定到canvasContainer以确保始终能响应
 canvasContainer.addEventListener('wheel', (e) => {
     if (e.ctrlKey) { // Zoom on Ctrl+Wheel
@@ -1065,6 +1223,9 @@ canvasContainer.addEventListener('wheel', (e) => {
 
             // 重绘SVG以更新线宽（保持视觉上的恒定粗细）
             drawSVGAnnotations();
+
+            // Save view state if lock view is enabled
+            saveLockedViewState();
 
             zoomAnimationFrameId = null; // 重置标志
         });
@@ -2864,3 +3025,86 @@ renderImageBrowserList();
         imageBrowserSidebar.style.width = state.leftSidebarWidth + 'px';
     }
 })();
+
+// --- Sidebar Section Resizer Logic ---
+// Allows adjustable height ratio between Labels and Instances sections
+
+const sidebarSectionResizer = document.getElementById('sidebarSectionResizer');
+const sidebarLabelsSection = document.getElementById('sidebarLabelsSection');
+const sidebarInstancesSection = document.getElementById('sidebarInstancesSection');
+let isResizingSidebarSection = false;
+let sidebarContentHeight = 0;
+
+// Restore saved section ratio
+(function restoreSidebarSectionRatio() {
+    const state = vscode.getState() || {};
+    if (state.labelsSectionRatio !== undefined && sidebarLabelsSection && sidebarInstancesSection) {
+        const ratio = state.labelsSectionRatio;
+        sidebarLabelsSection.style.flex = `${ratio} 1 0`;
+        sidebarInstancesSection.style.flex = `${1 - ratio} 1 0`;
+    }
+})();
+
+if (sidebarSectionResizer && sidebarLabelsSection && sidebarInstancesSection) {
+    sidebarSectionResizer.addEventListener('mousedown', (e) => {
+        isResizingSidebarSection = true;
+        sidebarSectionResizer.classList.add('resizing');
+        document.body.style.cursor = 'row-resize';
+        document.body.style.userSelect = 'none';
+
+        // Calculate available height for resizing
+        const sidebarContent = sidebarLabelsSection.parentElement;
+        if (sidebarContent) {
+            sidebarContentHeight = sidebarContent.clientHeight - sidebarSectionResizer.offsetHeight;
+        }
+
+        e.preventDefault();
+    });
+}
+
+document.addEventListener('mousemove', (e) => {
+    if (!isResizingSidebarSection) return;
+    if (!sidebarLabelsSection || !sidebarInstancesSection) return;
+
+    const sidebarContent = sidebarLabelsSection.parentElement;
+    if (!sidebarContent) return;
+
+    // Get the position relative to the sidebar content
+    const rect = sidebarContent.getBoundingClientRect();
+    const relativeY = e.clientY - rect.top;
+
+    // Calculate ratio (clamped between 0.1 and 0.9)
+    const minHeight = 60; // Minimum section height in pixels
+    const maxLabelsHeight = sidebarContentHeight - minHeight;
+    const labelsHeight = Math.max(minHeight, Math.min(maxLabelsHeight, relativeY));
+    const ratio = labelsHeight / sidebarContentHeight;
+
+    // Apply the new heights using flex
+    sidebarLabelsSection.style.flex = `${ratio} 1 0`;
+    sidebarInstancesSection.style.flex = `${1 - ratio} 1 0`;
+});
+
+document.addEventListener('mouseup', () => {
+    if (isResizingSidebarSection) {
+        isResizingSidebarSection = false;
+        if (sidebarSectionResizer) {
+            sidebarSectionResizer.classList.remove('resizing');
+        }
+        document.body.style.cursor = 'default';
+        document.body.style.userSelect = '';
+
+        // Save the current ratio to state
+        if (sidebarLabelsSection && sidebarInstancesSection) {
+            const sidebarContent = sidebarLabelsSection.parentElement;
+            if (sidebarContent) {
+                const labelsHeight = sidebarLabelsSection.offsetHeight;
+                const totalHeight = sidebarContent.clientHeight - sidebarSectionResizer.offsetHeight;
+                const ratio = labelsHeight / totalHeight;
+
+                const state = vscode.getState() || {};
+                state.labelsSectionRatio = ratio;
+                vscode.setState(state);
+            }
+        }
+    }
+});

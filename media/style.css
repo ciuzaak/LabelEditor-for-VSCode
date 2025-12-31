@@ -112,8 +112,86 @@ body {
     display: flex;
     flex-direction: column;
     padding: 10px;
-    overflow-y: auto;
+    overflow: hidden;
     min-width: 150px;
+}
+
+/* Sidebar Config Section - Always visible, no scroll */
+.sidebar-config-section {
+    flex-shrink: 0;
+}
+
+/* Sidebar Content - Contains Labels and Instances */
+.sidebar-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+}
+
+/* Labels Section with independent scroll */
+.sidebar-labels-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 60px;
+    border-bottom: 1px solid var(--color-border);
+    padding-bottom: 5px;
+}
+
+.sidebar-labels-section h3 {
+    margin: 10px 0 10px 0;
+    font-size: 14px;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    flex-shrink: 0;
+}
+
+.sidebar-labels-section #labelsList {
+    flex: 1;
+    overflow-y: auto;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+/* Horizontal Resizer between Labels and Instances */
+.sidebar-section-resizer {
+    height: 5px;
+    background-color: var(--color-border);
+    cursor: row-resize;
+    transition: background-color 0.2s;
+    flex-shrink: 0;
+}
+
+.sidebar-section-resizer:hover,
+.sidebar-section-resizer.resizing {
+    background-color: var(--color-accent);
+}
+
+/* Instances Section with independent scroll */
+.sidebar-instances-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 60px;
+    padding-top: 5px;
+}
+
+.sidebar-instances-section h3 {
+    margin: 5px 0 10px 0;
+    font-size: 14px;
+    text-transform: uppercase;
+    color: var(--color-text-secondary);
+    flex-shrink: 0;
+}
+
+.sidebar-instances-section #shapeList {
+    flex: 1;
+    overflow-y: auto;
 }
 
 .resizer {
@@ -644,6 +722,51 @@ canvas {
     color: white;
 }
 
+/* Lock View Toggle Control */
+.lock-view-control {
+    margin-bottom: 12px;
+}
+
+.lock-view-control label {
+    display: block;
+    font-size: 12px;
+    color: var(--color-text-primary);
+    margin-bottom: 4px;
+}
+
+.lock-view-toggle-group {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--color-border-input);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.lock-view-btn {
+    padding: 4px 12px;
+    font-size: 12px;
+    margin: 0;
+    background-color: var(--color-bg-tertiary);
+    border: none;
+    border-right: 1px solid var(--color-border-input);
+    cursor: pointer;
+    flex: 1;
+    text-align: center;
+}
+
+.lock-view-btn:last-child {
+    border-right: none;
+}
+
+.lock-view-btn:hover {
+    background-color: var(--color-bg-input);
+}
+
+.lock-view-btn.active {
+    background-color: var(--color-accent);
+    color: white;
+}
+
 /* Navigation Buttons */
 .nav-btn {
     padding: 4px 10px;
@@ -736,6 +859,11 @@ canvas {
 
 .sidebar-icon-btn:disabled:hover {
     background-color: var(--color-bg-tertiary);
+}
+
+.sidebar-icon-btn.locked {
+    background-color: var(--color-accent);
+    color: white;
 }
 
 /* Image Browser Sidebar */

@@ -2,6 +2,26 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.10.2] - 2025-12-31
+
+### Added
+- **Sidebar Split Layout**: Right sidebar now has three independent sections
+  - **Config Section**: Always fully visible (mode buttons, save, advanced options)
+  - **Labels Section**: Independent scrolling for label list
+  - **Instances Section**: Independent scrolling for instance list
+  - **Adjustable Height Ratio**: Drag the resizer between Labels and Instances to adjust their relative heights
+  - Height ratio persists across sessions
+
+- **Lock View Mode**: New option to preserve zoom level and position when navigating between images
+  - Toggle On/Off in Advanced Options (below Theme)
+  - Uses normalized position storage (relative to image center)
+  - Ensures consistent view across different image sizes
+  - Small images that fit in viewport won't corrupt saved state
+  - Setting persists across sessions (globalState)
+
+### Fixed
+- **Divide-by-Zero Protection**: Added safety check in `getNormalizedViewState()` for zero-dimension images
+
 ## [0.10.0] - 2025-12-31
 
 ### Added
