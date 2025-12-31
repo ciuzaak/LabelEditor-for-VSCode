@@ -154,7 +154,7 @@ let vscodeThemeKind = 2; // 1=Light, 2=Dark, 3=HighContrast, 4=HighContrastLight
 
 // Lock View state - preserves zoom and position when navigating between images
 let lockViewEnabled = false;
-let lockedViewState = null; // { zoomLevel, centerX, centerY } - normalized view state
+let lockedViewState = null; // { zoomFactor, imageCenterX, imageCenterY } - normalized view state
 
 // Initialize from global settings injected by extension
 const vscodeState = vscode.getState() || {};
@@ -265,6 +265,7 @@ saveHistory();
 // --- Lock View Functions ---
 const lockViewOnBtn = document.getElementById('lockViewOnBtn');
 const lockViewOffBtn = document.getElementById('lockViewOffBtn');
+const lockViewResetBtn = document.getElementById('lockViewResetBtn');
 
 // Initialize lock view toggle UI state
 function updateLockViewUI() {
@@ -277,67 +278,151 @@ function updateLockViewUI() {
             lockViewOffBtn.classList.add('active');
         }
     }
+
+    // Update reset button visibility - show only when zoomFactor != 1
+    if (lockViewResetBtn) {
+        if (lockedViewState && Math.abs(lockedViewState.zoomFactor - 1) > 0.01) {
+            lockViewResetBtn.classList.add('visible');
+        } else {
+            lockViewResetBtn.classList.remove('visible');
+        }
+    }
 }
 updateLockViewUI();
 
+// Calculate fit-to-screen zoom level for current image
+function calculateFitToScreenZoom() {
+    const w = canvasContainer.clientWidth;
+    const h = canvasContainer.clientHeight;
+
+    if (w === 0 || h === 0 || img.width === 0 || img.height === 0) return 1;
+
+    const scaleX = w / img.width;
+    const scaleY = h / img.height;
+
+    return Math.min(scaleX, scaleY) * ZOOM_FIT_RATIO;
+}
+
 // Calculate normalized view state (relative to image center)
+// Uses zoomFactor (relative to fit-to-screen) instead of absolute zoomLevel
+// Position is normalized in IMAGE coordinates (0-1 range, 0.5 = center of image)
 function getNormalizedViewState() {
     const scrollX = canvasContainer.scrollLeft;
     const scrollY = canvasContainer.scrollTop;
     const viewportW = canvasContainer.clientWidth;
     const viewportH = canvasContainer.clientHeight;
+
+    // Protect against divide-by-zero when image dimensions are 0
+    if (img.width === 0 || img.height === 0 || zoomLevel === 0) {
+        return { zoomFactor: 1, imageCenterX: 0.5, imageCenterY: 0.5 };
+    }
+
+    // Calculate zoom factor relative to fit-to-screen zoom
+    const fitZoom = calculateFitToScreenZoom();
+    const zoomFactor = zoomLevel / fitZoom;
+
     const imageW = img.width * zoomLevel;
     const imageH = img.height * zoomLevel;
 
-    // Protect against divide-by-zero when image dimensions are 0
-    if (imageW === 0 || imageH === 0) {
-        return { zoomLevel, centerX: 0, centerY: 0 };
+    // For each dimension: if not scrollable (image fits in viewport), use 0.5 (centered)
+    // Otherwise, calculate the actual position from scroll
+    let imageCenterX, imageCenterY;
+
+    if (imageW <= viewportW) {
+        // Image fits horizontally, use center
+        imageCenterX = 0.5;
+    } else {
+        // Calculate which point of the ORIGINAL image is at the viewport center
+        const viewportCenterScreenX = scrollX + viewportW / 2;
+        const viewportCenterImageX = viewportCenterScreenX / zoomLevel;
+        imageCenterX = viewportCenterImageX / img.width;
     }
 
-    // Viewport center position relative to image center, normalized by image dimensions
-    const centerX = (scrollX + viewportW / 2 - imageW / 2) / imageW;
-    const centerY = (scrollY + viewportH / 2 - imageH / 2) / imageH;
+    if (imageH <= viewportH) {
+        // Image fits vertically, use center
+        imageCenterY = 0.5;
+    } else {
+        const viewportCenterScreenY = scrollY + viewportH / 2;
+        const viewportCenterImageY = viewportCenterScreenY / zoomLevel;
+        imageCenterY = viewportCenterImageY / img.height;
+    }
 
-    return { zoomLevel, centerX, centerY };
+    return { zoomFactor, imageCenterX, imageCenterY };
 }
 
 // Apply normalized view state to current image
+// Converts zoomFactor back to absolute zoomLevel based on current image's fit-to-screen zoom
+// Position is in image coordinates (0-1 range)
 function applyNormalizedViewState(state) {
     if (!state) return;
 
-    zoomLevel = state.zoomLevel;
+    // Calculate zoomLevel from zoomFactor
+    const fitZoom = calculateFitToScreenZoom();
+    zoomLevel = fitZoom * state.zoomFactor;
+
+    // Clamp zoomLevel to valid range
+    zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomLevel));
+
     updateCanvasTransform();
 
-    const imageW = img.width * zoomLevel;
-    const imageH = img.height * zoomLevel;
     const viewportW = canvasContainer.clientWidth;
     const viewportH = canvasContainer.clientHeight;
 
-    // Reverse the normalization to get scroll position
-    const scrollX = state.centerX * imageW + imageW / 2 - viewportW / 2;
-    const scrollY = state.centerY * imageH + imageH / 2 - viewportH / 2;
+    // Convert image coordinates back to scroll position
+    const imageX = state.imageCenterX * img.width;
+    const imageY = state.imageCenterY * img.height;
+    const scrollX = imageX * zoomLevel - viewportW / 2;
+    const scrollY = imageY * zoomLevel - viewportH / 2;
 
     canvasContainer.scrollLeft = Math.max(0, scrollX);
     canvasContainer.scrollTop = Math.max(0, scrollY);
 }
 
 // Save current view state if lock view is enabled
-// Only save if image is scrollable (larger than viewport) to prevent small images from corrupting the saved state
+// When zoomFactor <= 1 (fit to screen or zoomed out): always update normally
+// When zoomFactor > 1 (zoomed in): only update scrollable dimensions to prevent position drift
 function saveLockedViewState() {
-    if (lockViewEnabled) {
-        const imageW = img.width * zoomLevel;
-        const imageH = img.height * zoomLevel;
-        const viewportW = canvasContainer.clientWidth;
-        const viewportH = canvasContainer.clientHeight;
+    if (!lockViewEnabled) return;
 
-        // Only save if at least one dimension is scrollable
-        if (imageW > viewportW || imageH > viewportH) {
-            lockedViewState = getNormalizedViewState();
-            const state = vscode.getState() || {};
-            state.lockedViewState = lockedViewState;
-            vscode.setState(state);
+    // Get the normalized state first (this calculates zoomFactor internally)
+    const newState = getNormalizedViewState();
+    const currentZoomFactor = newState.zoomFactor;
+
+    const imageW = img.width * zoomLevel;
+    const imageH = img.height * zoomLevel;
+    const viewportW = canvasContainer.clientWidth;
+    const viewportH = canvasContainer.clientHeight;
+
+    const isScrollableX = imageW > viewportW;
+    const isScrollableY = imageH > viewportH;
+
+    // Determine if we should update the state
+    let shouldUpdate = false;
+
+    if (currentZoomFactor <= 1) {
+        // Zoomed out: always update the full state
+        shouldUpdate = true;
+    } else if (isScrollableX || isScrollableY) {
+        // Zoomed in and at least one dimension is scrollable
+        // Merge with old state: only update scrollable dimensions
+        if (lockedViewState) {
+            if (!isScrollableX) {
+                newState.imageCenterX = lockedViewState.imageCenterX;
+            }
+            if (!isScrollableY) {
+                newState.imageCenterY = lockedViewState.imageCenterY;
+            }
         }
-        // If image fits entirely in viewport, don't update - keep the previous locked state
+        shouldUpdate = true;
+    }
+    // If image fits entirely in viewport AND zoomed in, don't update
+
+    if (shouldUpdate) {
+        lockedViewState = newState;
+        const state = vscode.getState() || {};
+        state.lockedViewState = lockedViewState;
+        vscode.setState(state);
+        updateLockViewUI(); // Update reset button visibility
     }
 }
 
@@ -346,16 +431,8 @@ function setLockView(enabled) {
     lockViewEnabled = enabled;
 
     if (lockViewEnabled) {
-        // Save current view state when enabling
-        const imageW = img.width * zoomLevel;
-        const imageH = img.height * zoomLevel;
-        const viewportW = canvasContainer.clientWidth;
-        const viewportH = canvasContainer.clientHeight;
-
-        // Only save if image is scrollable
-        if (imageW > viewportW || imageH > viewportH) {
-            lockedViewState = getNormalizedViewState();
-        }
+        // Save current view state when enabling - always save (including fit-to-screen)
+        lockedViewState = getNormalizedViewState();
     } else {
         // Clear locked state when disabling
         lockedViewState = null;
@@ -383,6 +460,22 @@ if (lockViewOnBtn) {
 }
 if (lockViewOffBtn) {
     lockViewOffBtn.addEventListener('click', () => setLockView(false));
+}
+if (lockViewResetBtn) {
+    lockViewResetBtn.addEventListener('click', () => {
+        // Reset zoom to fit screen (zoomFactor = 1)
+        if (lockedViewState) {
+            lockedViewState.zoomFactor = 1;
+            // Apply the reset immediately to current view
+            fitImageToScreen();
+            // Update the saved state with new zoomFactor
+            const state = vscode.getState() || {};
+            state.lockedViewState = lockedViewState;
+            vscode.setState(state);
+            // Update UI
+            updateLockViewUI();
+        }
+    });
 }
 
 // 图片加载处理函数
@@ -529,16 +622,7 @@ function redo() {
 // --- Zoom & Scroll ---
 
 function fitImageToScreen() {
-    const w = canvasContainer.clientWidth;
-    const h = canvasContainer.clientHeight;
-
-    if (w === 0 || h === 0 || img.width === 0 || img.height === 0) return;
-
-    const scaleX = w / img.width;
-    const scaleY = h / img.height;
-
-    zoomLevel = Math.min(scaleX, scaleY) * ZOOM_FIT_RATIO;
-
+    zoomLevel = calculateFitToScreenZoom();
     updateCanvasTransform();
 }
 
@@ -571,8 +655,17 @@ function updateCanvasTransform() {
     draw();
 }
 
+// Debounced resize handler for lock view state
+let resizeSaveTimeout = null;
 window.addEventListener('resize', () => {
-    // Optional: re-fit on resize? Or just keep zoom?
+    // When window resizes, save the current locked view state (debounced)
+    // This ensures the relative zoom factor is recalculated based on the new window size
+    if (lockViewEnabled) {
+        if (resizeSaveTimeout) clearTimeout(resizeSaveTimeout);
+        resizeSaveTimeout = setTimeout(() => {
+            saveLockedViewState();
+        }, 200);
+    }
 });
 
 window.addEventListener('message', event => {
@@ -1224,8 +1317,16 @@ canvasContainer.addEventListener('wheel', (e) => {
             // 重绘SVG以更新线宽（保持视觉上的恒定粗细）
             drawSVGAnnotations();
 
-            // Save view state if lock view is enabled
-            saveLockedViewState();
+            // Explicitly save locked view state after zoom
+            // Cannot rely solely on scroll event because:
+            // 1. If scroll position resets to 0 (image fits screen), scroll event may not fire
+            // 2. This ensures zoomFactor is always updated after wheel zoom
+            if (lockViewEnabled) {
+                if (scrollSaveTimeout) clearTimeout(scrollSaveTimeout);
+                scrollSaveTimeout = setTimeout(() => {
+                    saveLockedViewState();
+                }, 200);
+            }
 
             zoomAnimationFrameId = null; // 重置标志
         });

@@ -2,6 +2,15 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.10.3] - 2025-12-31
+
+### Fixed
+- **Lock View State Sync**: Fixed wheel zoom not updating locked view state when image fits in viewport
+  - Previously relied on scroll event which doesn't fire when scrollLeft/scrollTop reset to 0
+  - Now explicitly saves state after every wheel zoom operation
+- **Lock View Resize Handling**: Added debounced resize handler to preserve Lock View state when window is resized
+  - Prevents visual jumps in relative zoom when switching images after resizing
+
 ## [0.10.2] - 2025-12-31
 
 ### Added

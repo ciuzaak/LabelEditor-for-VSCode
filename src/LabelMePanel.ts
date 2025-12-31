@@ -580,7 +580,7 @@ export class LabelMePanel {
                                     </div>
                                 </div>
                                 <div class="lock-view-control">
-                                    <label>Lock View</label>
+                                    <label>Lock View <span id="lockViewResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen">&#8634;</span></label>
                                     <div class="lock-view-toggle-group">
                                         <button id="lockViewOnBtn" class="lock-view-btn" title="Keep zoom and position when switching images">On</button>
                                         <button id="lockViewOffBtn" class="lock-view-btn active" title="Fit to screen on each image">Off</button>
