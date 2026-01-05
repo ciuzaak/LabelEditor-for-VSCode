@@ -579,11 +579,10 @@ export class LabelMePanel {
                                         <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code">🔄</button>
                                     </div>
                                 </div>
-                                <div class="lock-view-control">
-                                    <label>Lock View <span id="lockViewResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen">&#8634;</span></label>
-                                    <div class="lock-view-toggle-group">
-                                        <button id="lockViewOnBtn" class="lock-view-btn" title="Keep zoom and position when switching images">On</button>
-                                        <button id="lockViewOffBtn" class="lock-view-btn active" title="Fit to screen on each image">Off</button>
+                                <div class="zoom-control">
+                                    <div class="zoom-header">
+                                        <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen">&#8634;</span></label>
+                                        <button id="zoomLockBtn" class="zoom-lock-btn" title="Lock: Keep zoom and position when switching images">🔓</button>
                                     </div>
                                 </div>
                                 <div class="slider-control">

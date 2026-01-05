@@ -262,33 +262,50 @@ if (existingData) {
 // 初始化历史记录
 saveHistory();
 
-// --- Lock View Functions ---
-const lockViewOnBtn = document.getElementById('lockViewOnBtn');
-const lockViewOffBtn = document.getElementById('lockViewOffBtn');
-const lockViewResetBtn = document.getElementById('lockViewResetBtn');
+// --- Zoom Functions ---
+const zoomLockBtn = document.getElementById('zoomLockBtn');
+const zoomResetBtn = document.getElementById('zoomResetBtn');
+const zoomPercentageSpan = document.getElementById('zoomPercentage');
 
-// Initialize lock view toggle UI state
-function updateLockViewUI() {
-    if (lockViewOnBtn && lockViewOffBtn) {
+// Update zoom UI state (lock button icon and reset button visibility)
+function updateZoomUI() {
+    // Update lock button icon and state
+    if (zoomLockBtn) {
         if (lockViewEnabled) {
-            lockViewOnBtn.classList.add('active');
-            lockViewOffBtn.classList.remove('active');
+            zoomLockBtn.textContent = '🔒';
+            zoomLockBtn.classList.add('locked');
+            zoomLockBtn.title = 'Locked: Keeping zoom and position when switching images. Click to unlock.';
         } else {
-            lockViewOnBtn.classList.remove('active');
-            lockViewOffBtn.classList.add('active');
+            zoomLockBtn.textContent = '🔓';
+            zoomLockBtn.classList.remove('locked');
+            zoomLockBtn.title = 'Unlocked: Fit to screen on each image. Click to lock current view.';
         }
     }
 
-    // Update reset button visibility - show only when zoomFactor != 1
-    if (lockViewResetBtn) {
-        if (lockedViewState && Math.abs(lockedViewState.zoomFactor - 1) > 0.01) {
-            lockViewResetBtn.classList.add('visible');
+    // Update zoom percentage display
+    updateZoomPercentage();
+
+    // Update reset button visibility - show when zoom is not 100% (regardless of lock state)
+    if (zoomResetBtn) {
+        const fitZoom = calculateFitToScreenZoom();
+        const currentZoomFactor = fitZoom > 0 ? zoomLevel / fitZoom : 1;
+        if (Math.abs(currentZoomFactor - 1) > 0.01) {
+            zoomResetBtn.classList.add('visible');
         } else {
-            lockViewResetBtn.classList.remove('visible');
+            zoomResetBtn.classList.remove('visible');
         }
     }
 }
-updateLockViewUI();
+
+// Update zoom percentage display
+// Shows absolute zoom level where 100% = 1:1 pixel ratio with original image
+function updateZoomPercentage() {
+    if (zoomPercentageSpan) {
+        const percentage = Math.round(zoomLevel * 100);
+        zoomPercentageSpan.textContent = percentage + '%';
+    }
+}
+updateZoomUI();
 
 // Calculate fit-to-screen zoom level for current image
 function calculateFitToScreenZoom() {
@@ -422,13 +439,13 @@ function saveLockedViewState() {
         const state = vscode.getState() || {};
         state.lockedViewState = lockedViewState;
         vscode.setState(state);
-        updateLockViewUI(); // Update reset button visibility
+        updateZoomUI(); // Update reset button visibility
     }
 }
 
-// Lock view button click handlers
-function setLockView(enabled) {
-    lockViewEnabled = enabled;
+// Zoom lock button click handler - toggle lock state
+function toggleLockView() {
+    lockViewEnabled = !lockViewEnabled;
 
     if (lockViewEnabled) {
         // Save current view state when enabling - always save (including fit-to-screen)
@@ -439,7 +456,7 @@ function setLockView(enabled) {
     }
 
     // Update UI
-    updateLockViewUI();
+    updateZoomUI();
 
     // Persist to vscode state
     const state = vscode.getState() || {};
@@ -455,26 +472,22 @@ function setLockView(enabled) {
     });
 }
 
-if (lockViewOnBtn) {
-    lockViewOnBtn.addEventListener('click', () => setLockView(true));
+if (zoomLockBtn) {
+    zoomLockBtn.addEventListener('click', toggleLockView);
 }
-if (lockViewOffBtn) {
-    lockViewOffBtn.addEventListener('click', () => setLockView(false));
-}
-if (lockViewResetBtn) {
-    lockViewResetBtn.addEventListener('click', () => {
-        // Reset zoom to fit screen (zoomFactor = 1)
-        if (lockedViewState) {
-            lockedViewState.zoomFactor = 1;
-            // Apply the reset immediately to current view
-            fitImageToScreen();
-            // Update the saved state with new zoomFactor
+if (zoomResetBtn) {
+    zoomResetBtn.addEventListener('click', () => {
+        // Reset zoom to fit screen (100%)
+        fitImageToScreen();
+        // If lock is enabled, update the locked state
+        if (lockViewEnabled) {
+            lockedViewState = getNormalizedViewState();
             const state = vscode.getState() || {};
             state.lockedViewState = lockedViewState;
             vscode.setState(state);
-            // Update UI
-            updateLockViewUI();
         }
+        // Update UI
+        updateZoomUI();
     });
 }
 
@@ -493,6 +506,7 @@ function handleImageLoad() {
     draw();
     renderShapeList();
     renderLabelsList();
+    updateZoomUI(); // Update zoom percentage display
 }
 
 function handleImageError() {
@@ -622,8 +636,22 @@ function redo() {
 // --- Zoom & Scroll ---
 
 function fitImageToScreen() {
+    // First pass: calculate and apply initial fit
+    const initialViewportW = canvasContainer.clientWidth;
+    const initialViewportH = canvasContainer.clientHeight;
+
     zoomLevel = calculateFitToScreenZoom();
     updateCanvasTransform();
+
+    // Second pass: check if viewport size changed (due to scrollbar appearing/disappearing)
+    // and recalculate if needed to get accurate fit-to-screen
+    const newViewportW = canvasContainer.clientWidth;
+    const newViewportH = canvasContainer.clientHeight;
+
+    if (newViewportW !== initialViewportW || newViewportH !== initialViewportH) {
+        zoomLevel = calculateFitToScreenZoom();
+        updateCanvasTransform();
+    }
 }
 
 function updateCanvasTransform() {
@@ -660,12 +688,13 @@ let resizeSaveTimeout = null;
 window.addEventListener('resize', () => {
     // When window resizes, save the current locked view state (debounced)
     // This ensures the relative zoom factor is recalculated based on the new window size
-    if (lockViewEnabled) {
-        if (resizeSaveTimeout) clearTimeout(resizeSaveTimeout);
-        resizeSaveTimeout = setTimeout(() => {
+    if (resizeSaveTimeout) clearTimeout(resizeSaveTimeout);
+    resizeSaveTimeout = setTimeout(() => {
+        if (lockViewEnabled) {
             saveLockedViewState();
-        }, 200);
-    }
+        }
+        updateZoomUI(); // Update zoom percentage (it's relative to fit-to-screen)
+    }, 200);
 });
 
 window.addEventListener('message', event => {
@@ -768,6 +797,7 @@ function handleImageUpdate(message) {
         draw();
         renderShapeList();
         renderLabelsList();
+        updateZoomUI(); // Update zoom percentage display
     };
     img.onerror = function () {
         // Check if this callback is for the current load request
@@ -1327,6 +1357,10 @@ canvasContainer.addEventListener('wheel', (e) => {
                     saveLockedViewState();
                 }, 200);
             }
+
+
+            // Update zoom percentage display
+            updateZoomUI();
 
             zoomAnimationFrameId = null; // 重置标志
         });
