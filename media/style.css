@@ -62,6 +62,9 @@ body {
     height: 100vh;
     display: flex;
     flex-direction: column;
+    user-select: none;
+    /* 禁用文字选择 */
+    -webkit-user-select: none;
 }
 
 /* Scrollbar Styling */
@@ -192,6 +195,14 @@ body {
 .sidebar-instances-section #shapeList {
     flex: 1;
     overflow-y: auto;
+}
+
+/* Section count display in headers */
+.section-count {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    font-weight: normal;
+    text-transform: none;
 }
 
 .resizer {

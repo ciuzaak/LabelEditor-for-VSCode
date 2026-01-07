@@ -2,6 +2,32 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.10.5] - 2026-01-07
+
+### Fixed
+- **Edit Mode Persistence**: Fixed bug where edit mode was not exited when switching images
+  - Previously, if you entered edit mode and then switched images (with no changes or after discarding), edit mode would incorrectly persist
+  - Now properly calls `exitShapeEditMode(false)` when handling image updates
+  
+- **Undo/Redo Dirty State**: Fixed save button remaining highlighted after undoing to saved state
+  - Introduced `savedHistoryIndex` to track the history position when last saved
+  - Undo/redo now correctly detects when state matches saved state and updates dirty indicator accordingly
+  - Properly handles edge cases: history truncation (branching) and MAX_HISTORY limit
+
+### Added
+- **Section Counts**: Labels and Instances headers now display count statistics
+  - Shows "Labels (N)" and "Instances (M)" for quick overview
+  - Updates dynamically as annotations are added/removed
+
+- **Disabled System Context Menu**: Right-click context menu is now disabled globally to prevent browser default menu
+- **Disabled Text Selection**: Text selection is disabled throughout the plugin interface for a more app-like experience
+
+### Improved
+- **Image List Sorting**: Updated to VS Code-style hierarchical natural sorting
+  - Folders like "folder2" now correctly appear before "folder10"
+  - Path segments are compared individually for proper multi-level folder sorting
+  - Uses `localeCompare` with `{ numeric: true, sensitivity: 'base' }`
+
 ## [0.10.3] - 2025-12-31
 
 ### Fixed

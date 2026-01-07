@@ -91,6 +91,7 @@ const CLOSE_DISTANCE_THRESHOLD = 100; // 多边形闭合距离阈值
 // Undo/Redo History (实例级别 - 只记录shapes的变化)
 let history = []; // 历史记录栈
 let historyIndex = -1; // 当前历史位置
+let savedHistoryIndex = -1; // 保存时的历史位置，用于判断是否需要更新dirty状态
 const MAX_HISTORY = 50; // 最大历史记录数
 
 // 性能优化变量
@@ -256,11 +257,12 @@ if (existingData) {
             visible: visible
         };
     });
-    markClean();
 }
 
 // 初始化历史记录
 saveHistory();
+// markClean必须在saveHistory之后调用，确保savedHistoryIndex正确记录初始历史位置
+markClean();
 
 // --- Zoom Functions ---
 const zoomLockBtn = document.getElementById('zoomLockBtn');
@@ -558,6 +560,8 @@ function markClean() {
         isDirty = false;
         vscode.postMessage({ command: 'dirty', value: false });
     }
+    // 记录保存时的历史位置，用于判断undo/redo后是否恢复到保存状态
+    savedHistoryIndex = historyIndex;
     if (saveBtn) {
         saveBtn.disabled = true;
         saveBtn.classList.remove('dirty');
@@ -578,6 +582,10 @@ function saveHistory() {
     // 如果不在历史末尾，删除当前位置之后的所有历史
     if (historyIndex < history.length - 1) {
         history = history.slice(0, historyIndex + 1);
+        // 如果savedHistoryIndex指向被删除的历史，使其失效
+        if (savedHistoryIndex > historyIndex) {
+            savedHistoryIndex = -1;
+        }
     }
 
     // 添加新快照
@@ -586,6 +594,10 @@ function saveHistory() {
     // 限制历史记录数量
     if (history.length > MAX_HISTORY) {
         history.shift();
+        // 调整savedHistoryIndex（因为删除了第一个元素）
+        if (savedHistoryIndex >= 0) {
+            savedHistoryIndex--;
+        }
     } else {
         historyIndex++;
     }
@@ -605,7 +617,12 @@ function undo() {
         });
 
         selectedShapeIndex = -1;
-        markDirty();
+        // 检查是否恢复到保存时的状态
+        if (historyIndex === savedHistoryIndex) {
+            markClean();
+        } else {
+            markDirty();
+        }
         renderShapeList();
         renderLabelsList();
         draw();
@@ -626,7 +643,12 @@ function redo() {
         });
 
         selectedShapeIndex = -1;
-        markDirty();
+        // 检查是否恢复到保存时的状态
+        if (historyIndex === savedHistoryIndex) {
+            markClean();
+        } else {
+            markDirty();
+        }
         renderShapeList();
         renderLabelsList();
         draw();
@@ -720,6 +742,11 @@ window.addEventListener('message', event => {
 
 // Handle incremental image update (without full HTML reload)
 function handleImageUpdate(message) {
+    // Exit shape edit mode if currently editing (without saving changes to the old image)
+    if (isEditingShape) {
+        exitShapeEditMode(false);
+    }
+
     // Cancel any current drawing
     if (isDrawing) {
         isDrawing = false;
@@ -1367,8 +1394,8 @@ canvasContainer.addEventListener('wheel', (e) => {
     }
 }, { passive: false });
 
-// 禁用canvasWrapper上的右键菜单（现在所有模式都阻止默认菜单）
-canvasWrapper.addEventListener('contextmenu', (e) => {
+// 禁用全局右键菜单（防止系统右键菜单出现）
+document.addEventListener('contextmenu', (e) => {
     e.preventDefault();
 });
 
@@ -2019,6 +2046,12 @@ function renderShapeList() {
     shapeList.innerHTML = '';
     shapeList.appendChild(fragment);
 
+    // 更新 Instances 计数
+    const instancesCountEl = document.getElementById('instancesCount');
+    if (instancesCountEl) {
+        instancesCountEl.textContent = `(${shapes.length})`;
+    }
+
     // 滚动选中项到可视区域
     scrollSelectedShapeIntoView();
 }
@@ -2146,6 +2179,12 @@ function renderLabelsList() {
 
     labelsList.innerHTML = '';
     labelsList.appendChild(fragment);
+
+    // 更新 Labels 计数
+    const labelsCountEl = document.getElementById('labelsCount');
+    if (labelsCountEl) {
+        labelsCountEl.textContent = `(${sortedLabels.length})`;
+    }
 }
 
 // 切换指定标签的所有实例的可见性

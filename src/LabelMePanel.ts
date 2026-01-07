@@ -91,14 +91,17 @@ export class LabelMePanel {
             return;
         }
 
-        // Sort images
+        // Sort images (VS Code style: hierarchical natural sort)
+        // Compare path segments individually to ensure folders are also naturally sorted
         images.sort((a, b) => {
-            const depthA = (a.match(/[\\/]/g) || []).length;
-            const depthB = (b.match(/[\\/]/g) || []).length;
-            if (depthA !== depthB) {
-                return depthA - depthB;
+            const partsA = a.split(/[\\/]/);
+            const partsB = b.split(/[\\/]/);
+            const minLen = Math.min(partsA.length, partsB.length);
+            for (let i = 0; i < minLen; i++) {
+                const cmp = partsA[i].localeCompare(partsB[i], undefined, { numeric: true, sensitivity: 'base' });
+                if (cmp !== 0) return cmp;
             }
-            return a.localeCompare(b);
+            return partsA.length - partsB.length;
         });
 
         // Determine which image to show: targetImageUri if provided and valid, otherwise first image
@@ -358,14 +361,17 @@ export class LabelMePanel {
         };
 
         await scanDirectory(rootPath);
-        // Sort: outer directories first (fewer separators), then by name within same level
+        // Sort images (VS Code style: hierarchical natural sort)
+        // Compare path segments individually to ensure folders are also naturally sorted
         images.sort((a, b) => {
-            const depthA = (a.match(/[\\/]/g) || []).length;
-            const depthB = (b.match(/[\\/]/g) || []).length;
-            if (depthA !== depthB) {
-                return depthA - depthB;
+            const partsA = a.split(/[\\/]/);
+            const partsB = b.split(/[\\/]/);
+            const minLen = Math.min(partsA.length, partsB.length);
+            for (let i = 0; i < minLen; i++) {
+                const cmp = partsA[i].localeCompare(partsB[i], undefined, { numeric: true, sensitivity: 'base' });
+                if (cmp !== 0) return cmp;
             }
-            return a.localeCompare(b);
+            return partsA.length - partsB.length;
         });
         this._workspaceImages = images;
         return images;
@@ -597,12 +603,12 @@ export class LabelMePanel {
                         </div>
                         <div class="sidebar-content">
                             <div class="sidebar-labels-section" id="sidebarLabelsSection">
-                                <h3>Labels</h3>
+                                <h3>Labels <span id="labelsCount" class="section-count"></span></h3>
                                 <ul id="labelsList"></ul>
                             </div>
                             <div id="sidebarSectionResizer" class="sidebar-section-resizer"></div>
                             <div class="sidebar-instances-section" id="sidebarInstancesSection">
-                                <h3>Instances</h3>
+                                <h3>Instances <span id="instancesCount" class="section-count"></span></h3>
                                 <ul id="shapeList"></ul>
                             </div>
                         </div>
