@@ -2,6 +2,40 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.10.6] - 2026-03-13
+
+### Fixed
+- **Save Race Condition (P0)**: Fixed data-loss bug where navigating during an in-flight save could discard newer edits
+  - Reworked save-navigate protocol: extension now waits for webview confirmation before navigating
+  - Added `isSaving` lock to prevent concurrent saves on both extension and webview sides
+  - Save completions are now version-aware — only marks clean if user hasn't edited since save started
+
+- **Premature markClean (P0)**: `save()` no longer clears dirty state immediately
+  - Dirty state is now driven by backend `saveComplete` confirmation
+  - Added `saveFailed` message to preserve dirty state on write errors
+
+- **Pending Navigation Leak (P1)**: Fixed stale pending navigation firing on a later unrelated save
+  - Deferred navigation is cleared on save failure
+  - Manual toolbar saves no longer trigger navigation-initiated pending navigations
+
+- **Undo/Redo Visibility (P1)**: Fixed label-level visibility reverting after undo/redo
+  - History snapshots now preserve per-shape `visible` state
+  - `applyLabelVisibilityState()` re-applied after every undo/redo to maintain label-level overrides
+
+- **Tab-Switch State Loss (P1)**: Fixed webview state being destroyed when switching tabs
+  - Enabled `retainContextWhenHidden` on all panel creation paths
+  - Removed unnecessary `onDidChangeViewState` full-rebuild handler
+
+- **localResourceRoots (P1)**: Fixed images from subdirectories failing to load after navigation
+  - `updateWebviewOptions` now includes root path, not just current image directory
+
+### Changed
+- **Single Image Mode**: Opening a single image no longer scans the entire workspace
+  - Only the clicked image is loaded; use Refresh button to scan the directory
+  - Switching to folder mode via `Open Folder for Annotation` always refreshes image list
+
+- **Folder Mode Transition (P1)**: Fixed image list staying stuck at one image when switching from single-image mode to folder mode
+
 ## [0.10.5] - 2026-01-07
 
 ### Fixed

@@ -12,7 +12,9 @@ export class LabelMePanel {
     private _disposables: vscode.Disposable[] = [];
     private _imageUri: vscode.Uri;
     private _isDirty = false;
+    private _isSaving = false;
     private _pendingNavigation: number | undefined;
+    private _pendingNavigationPath: string | undefined;
     private _workspaceImages: string[] = [];
     private _rootPath: string; // The single source of truth for the image scanning root
 
@@ -23,24 +25,51 @@ export class LabelMePanel {
      * This delegates to createOrShowFromFolder using the workspace root as the folder.
      */
     public static async createOrShow(context: vscode.ExtensionContext, imageUri: vscode.Uri) {
-        // Determine the workspace root folder for the image
-        const workspaceFolders = vscode.workspace.workspaceFolders;
-        if (!workspaceFolders || workspaceFolders.length === 0) {
-            vscode.window.showErrorMessage('No workspace folder is open.');
+        const column = vscode.window.activeTextEditor
+            ? vscode.window.activeTextEditor.viewColumn
+            : undefined;
+
+        const imageDir = path.dirname(imageUri.fsPath);
+        const rootPath = imageDir;
+        const workspaceImages = [path.relative(rootPath, imageUri.fsPath)];
+
+        // Check if we have an existing panel
+        if (LabelMePanel.currentPanel) {
+            const panel = LabelMePanel.currentPanel;
+            panel._panel.reveal(column);
+
+            // Update to show only the single image
+            panel._rootPath = rootPath;
+            panel._imageUri = imageUri;
+            panel._workspaceImages = workspaceImages;
+            panel.updateWebviewOptions();
+            await panel._update();
             return;
         }
 
-        // Find the workspace folder that contains this image
-        let targetFolder = workspaceFolders[0].uri;
-        for (const folder of workspaceFolders) {
-            if (imageUri.fsPath.startsWith(folder.uri.fsPath)) {
-                targetFolder = folder.uri;
-                break;
-            }
-        }
+        // Collect resource roots
+        const localResourceRoots: vscode.Uri[] = [
+            vscode.Uri.joinPath(context.extensionUri, 'media'),
+            vscode.Uri.file(rootPath)
+        ];
+        const workspaceFolders = vscode.workspace.workspaceFolders || [];
+        workspaceFolders.forEach(folder => {
+            localResourceRoots.push(folder.uri);
+        });
 
-        // Delegate to createOrShowFromFolder with the workspace root
-        await LabelMePanel.createOrShowFromFolder(context, targetFolder, imageUri);
+        // Create a new panel with only the single image
+        const panel = vscode.window.createWebviewPanel(
+            LabelMePanel.viewType,
+            'LabelMe',
+            column || vscode.ViewColumn.One,
+            {
+                enableScripts: true,
+                retainContextWhenHidden: true,
+                localResourceRoots: localResourceRoots
+            }
+        );
+
+        LabelMePanel.currentPanel = new LabelMePanel(panel, context.extensionUri, imageUri, context.globalState, rootPath, workspaceImages);
     }
 
     /**
@@ -131,11 +160,15 @@ export class LabelMePanel {
                 // Force full HTML regeneration
                 await panel._update();
             } else {
-                // Same root, just navigate to the new image (incremental update)
-                // We typically assume _workspaceImages is up to date if root hasn't changed,
-                // but we can trigger a background refresh if needed.
-                // For now, trust the existing state or let user refresh manually.
-                panel.updateImage(initialImageUri);
+                // Same root path - always refresh workspaceImages from the new scan
+                // (handles transition from single-image mode to folder mode)
+                panel._workspaceImages = images.map(p => path.relative(rootPath, p));
+                panel._imageUri = initialImageUri;
+                panel.updateWebviewOptions();
+
+                // Send the updated image list and navigate to target image
+                panel._sendImageListUpdate();
+                await panel._sendImageUpdate();
             }
             return;
         }
@@ -160,6 +193,7 @@ export class LabelMePanel {
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
+                retainContextWhenHidden: true,
                 localResourceRoots: localResourceRoots
             }
         );
@@ -186,22 +220,19 @@ export class LabelMePanel {
         // Listen for when the panel is disposed
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
 
-        // Update the content based on view changes
-        this._panel.onDidChangeViewState(
-            e => {
-                if (this._panel.visible) {
-                    this._update();
-                }
-            },
-            null,
-            this._disposables
-        );
+        // Note: retainContextWhenHidden is enabled, so the webview context survives
+        // tab switches. No need for onDidChangeViewState to re-send data.
 
         // Handle messages from the webview
         this._panel.webview.onDidReceiveMessage(
             async message => {
                 switch (message.command) {
                     case 'save':
+                        if (this._isSaving) {
+                            // Block concurrent saves — the webview should not send
+                            // another save while one is in flight
+                            return;
+                        }
                         await this.saveAnnotation(message.data);
                         return;
                     case 'dirty':
@@ -224,6 +255,10 @@ export class LabelMePanel {
                         return;
                     case 'refreshImages':
                         await this._refreshWorkspaceImages();
+                        return;
+                    case 'navigateAfterSave':
+                        // Webview confirmed it is clean after save — now safe to navigate
+                        this._executePendingNavigation();
                         return;
                 }
             },
@@ -311,13 +346,9 @@ export class LabelMePanel {
             }
 
             if (selection === 'Save') {
-                // Store the target path and request save
+                // Store the target path and request save; navigation will happen after save completes
+                this._pendingNavigationPath = imagePath;
                 this._panel.webview.postMessage({ command: 'requestSave' });
-                // After save, navigate to the image
-                setTimeout(() => {
-                    const absolutePath = path.join(this._rootPath, imagePath);
-                    this.updateImage(vscode.Uri.file(absolutePath));
-                }, 100);
                 return;
             }
 
@@ -401,14 +432,21 @@ export class LabelMePanel {
     }
 
     public updateWebviewOptions() {
-        // Update localResourceRoots to include the new image directory
-        // This ensures images from different folders can be accessed
+        // Update localResourceRoots to include root path and current image directory
+        // This ensures images from all subdirectories can be accessed
+        const roots: vscode.Uri[] = [
+            vscode.Uri.joinPath(this._extensionUri, 'media'),
+            vscode.Uri.file(this._rootPath)
+        ];
+        // Also add current image's directory in case it's outside rootPath
+        const imageDir = path.dirname(this._imageUri.fsPath);
+        if (!imageDir.startsWith(this._rootPath)) {
+            roots.push(vscode.Uri.file(imageDir));
+        }
+
         const newOptions = {
             enableScripts: true,
-            localResourceRoots: [
-                vscode.Uri.joinPath(this._extensionUri, 'media'),
-                vscode.Uri.file(path.dirname(this._imageUri.fsPath))
-            ]
+            localResourceRoots: roots
         };
 
         // Apply the updated options to the webview
@@ -681,17 +719,42 @@ export class LabelMePanel {
             imageWidth: data.imageWidth
         };
 
+        this._isSaving = true;
         try {
             await fs.writeFile(jsonPath, JSON.stringify(labelMeData, null, 2), 'utf8');
             vscode.window.showInformationMessage('Annotation saved to ' + path.basename(jsonPath));
-            this._isDirty = false;
 
-            if (this._pendingNavigation !== undefined) {
-                this._performNavigation(this._pendingNavigation);
-                this._pendingNavigation = undefined;
-            }
+            // Notify webview that save completed.
+            // The webview will check if the confirmed save matches the current snapshot.
+            // If clean, it posts 'navigateAfterSave' so we can safely navigate.
+            // If dirty (user edited during save), it stays dirty and does NOT post navigate.
+            this._panel.webview.postMessage({ command: 'saveComplete' });
         } catch (err) {
             vscode.window.showErrorMessage('Failed to save annotation: ' + (err as Error).message);
+            // Clear pending navigation so a later unrelated save doesn't trigger it
+            this._pendingNavigation = undefined;
+            this._pendingNavigationPath = undefined;
+            // Notify webview that save failed so dirty state is preserved
+            this._panel.webview.postMessage({ command: 'saveFailed' });
+        } finally {
+            this._isSaving = false;
+        }
+    }
+
+    /**
+     * Execute any pending navigation that was deferred during save-and-navigate.
+     * Called only when the webview confirms it is clean after a save.
+     */
+    private _executePendingNavigation() {
+        if (this._pendingNavigation !== undefined) {
+            this._performNavigation(this._pendingNavigation);
+            this._pendingNavigation = undefined;
+        }
+
+        if (this._pendingNavigationPath !== undefined) {
+            const absolutePath = path.join(this._rootPath, this._pendingNavigationPath);
+            this.updateImage(vscode.Uri.file(absolutePath));
+            this._pendingNavigationPath = undefined;
         }
     }
 }

@@ -92,6 +92,9 @@ const CLOSE_DISTANCE_THRESHOLD = 100; // 多边形闭合距离阈值
 let history = []; // 历史记录栈
 let historyIndex = -1; // 当前历史位置
 let savedHistoryIndex = -1; // 保存时的历史位置，用于判断是否需要更新dirty状态
+let pendingSaveHistoryIndex = -1; // 发起保存请求时的历史位置，用于确认保存完成时匹配
+let isSaving = false; // Whether a save is currently in flight (blocks concurrent saves)
+let saveTriggeredByNavigation = false; // Whether the current save was initiated by a navigation request
 const MAX_HISTORY = 50; // 最大历史记录数
 
 // 性能优化变量
@@ -569,15 +572,30 @@ function markClean() {
     }
 }
 
+// Mark clean at a specific history index (used when backend confirms save)
+// Only clears dirty state if the user is still at the exact saved snapshot
+function markCleanAtIndex(index) {
+    savedHistoryIndex = index;
+    if (historyIndex === savedHistoryIndex) {
+        if (isDirty) {
+            isDirty = false;
+            vscode.postMessage({ command: 'dirty', value: false });
+        }
+        if (saveBtn) {
+            saveBtn.disabled = true;
+            saveBtn.classList.remove('dirty');
+            saveBtn.textContent = '💾';
+        }
+    }
+    // If historyIndex !== savedHistoryIndex, the user has made new edits
+    // since the save was initiated, so we keep the dirty state
+}
+
 // --- Undo/Redo History Management ---
 
 function saveHistory() {
-    // 使用 structuredClone 进行深拷贝,并过滤掉visible字段
-    const shapesWithoutVisible = shapes.map(shape => {
-        const { visible, ...shapeWithoutVisible } = shape;
-        return shapeWithoutVisible;
-    });
-    const snapshot = structuredClone(shapesWithoutVisible);
+    // 使用 structuredClone 进行深拷贝 (保留visible字段以支持实例级别的可见性撤销/重做)
+    const snapshot = structuredClone(shapes);
 
     // 如果不在历史末尾，删除当前位置之后的所有历史
     if (historyIndex < history.length - 1) {
@@ -605,16 +623,11 @@ function saveHistory() {
 
 function undo() {
     if (historyIndex > 0) {
-        // 保存当前的visible状态
-        const visibleStates = new Map(shapes.map((shape, index) => [index, shape.visible]));
-
         historyIndex--;
         shapes = structuredClone(history[historyIndex]);
 
-        // 恢复visible状态
-        shapes.forEach((shape, index) => {
-            shape.visible = visibleStates.get(index) !== false; // 默认为true
-        });
+        // Reapply label-level visibility overrides (not recorded in history)
+        applyLabelVisibilityState();
 
         selectedShapeIndex = -1;
         // 检查是否恢复到保存时的状态
@@ -631,16 +644,11 @@ function undo() {
 
 function redo() {
     if (historyIndex < history.length - 1) {
-        // 保存当前的visible状态
-        const visibleStates = new Map(shapes.map((shape, index) => [index, shape.visible]));
-
         historyIndex++;
         shapes = structuredClone(history[historyIndex]);
 
-        // 恢复visible状态
-        shapes.forEach((shape, index) => {
-            shape.visible = visibleStates.get(index) !== false; // 默认为true
-        });
+        // Reapply label-level visibility overrides (not recorded in history)
+        applyLabelVisibilityState();
 
         selectedShapeIndex = -1;
         // 检查是否恢复到保存时的状态
@@ -723,7 +731,31 @@ window.addEventListener('message', event => {
     const message = event.data;
     switch (message.command) {
         case 'requestSave':
+            saveTriggeredByNavigation = true;
             save();
+            break;
+        case 'saveComplete': {
+            // Mark clean at the exact history snapshot that was saved
+            markCleanAtIndex(pendingSaveHistoryIndex);
+            const isClean = (historyIndex === savedHistoryIndex);
+            const wasNavigationSave = saveTriggeredByNavigation;
+            pendingSaveHistoryIndex = -1;
+            isSaving = false;
+            saveTriggeredByNavigation = false;
+
+            // Only navigate if:
+            // 1. The save was triggered by a navigation request (not manual toolbar save)
+            // 2. The webview is actually clean (user didn't edit during save)
+            if (wasNavigationSave && isClean) {
+                vscode.postMessage({ command: 'navigateAfterSave' });
+            }
+            break;
+        }
+        case 'saveFailed':
+            // Keep dirty state - save failed on backend
+            pendingSaveHistoryIndex = -1;
+            isSaving = false;
+            saveTriggeredByNavigation = false;
             break;
         case 'updateImage':
             handleImageUpdate(message);
@@ -2187,6 +2219,16 @@ function renderLabelsList() {
     }
 }
 
+// Reapply label-level visibility state onto current shapes
+// Called after undo/redo to ensure label-level toggles (which are not in history) stay consistent
+function applyLabelVisibilityState() {
+    shapes.forEach(shape => {
+        if (labelVisibilityState.has(shape.label)) {
+            shape.visible = labelVisibilityState.get(shape.label);
+        }
+    });
+}
+
 // 切换指定标签的所有实例的可见性
 function toggleLabelVisibility(label) {
     const labelsStats = getLabelsStats();
@@ -2640,6 +2682,12 @@ function getRectPoints(points) {
 
 function save() {
     if (!isDirty) return;
+    if (isSaving) return; // Block concurrent saves
+
+    // Capture the history position being saved, so saveComplete only marks
+    // this exact snapshot as clean (not any edits made while save was in flight)
+    pendingSaveHistoryIndex = historyIndex;
+    isSaving = true;
 
     // 过滤掉visible字段,不保存到JSON中
     const shapesToSave = shapes.map(shape => {
@@ -2655,7 +2703,7 @@ function save() {
             imageWidth: img.width
         }
     });
-    markClean();
+    // markClean() is called when backend confirms save via 'saveComplete' message
 }
 
 if (saveBtn) {
