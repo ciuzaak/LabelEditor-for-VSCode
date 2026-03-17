@@ -37,9 +37,9 @@ const customColorInput = document.getElementById('customColorInput');
 const colorOkBtn = document.getElementById('colorOkBtn');
 const colorCancelBtn = document.getElementById('colorCancelBtn');
 
-// Advanced Options elements
-const advancedOptionsBtn = document.getElementById('advancedOptionsBtn');
-const advancedOptionsDropdown = document.getElementById('advancedOptionsDropdown');
+// Settings/Tools dropdown elements
+const settingsMenuBtn = document.getElementById('settingsMenuBtn');
+const settingsMenuDropdown = document.getElementById('settingsMenuDropdown');
 const borderWidthSlider = document.getElementById('borderWidthSlider');
 const borderWidthValue = document.getElementById('borderWidthValue');
 const borderWidthResetBtn = document.getElementById('borderWidthResetBtn');
@@ -223,9 +223,9 @@ if (fillOpacitySlider && fillOpacityValue) {
     fillOpacityValue.textContent = Math.round(fillOpacity * 100);
 }
 
-// 恢复高级选项下拉菜单的展开状态
-if (advancedOptionsDropdown && vscodeState.advancedOptionsExpanded) {
-    advancedOptionsDropdown.style.display = 'block';
+// 恢复设置下拉菜单的展开状态
+if (settingsMenuDropdown && vscodeState.settingsMenuExpanded) {
+    settingsMenuDropdown.style.display = 'block';
 }
 // 初始化模式按钮UI
 if (viewModeBtn && pointModeBtn && lineModeBtn && polygonModeBtn && rectangleModeBtn) {
@@ -2380,20 +2380,24 @@ function resetLabelColor(label) {
     draw();
 }
 
-// --- Advanced Options ---
+// --- Sidebar Dropdown Toggle ---
 
-// 切换高级选项下拉菜单
-function toggleAdvancedOptions() {
-    if (advancedOptionsDropdown) {
-        const isVisible = advancedOptionsDropdown.style.display !== 'none';
-        const newState = isVisible ? 'none' : 'block';
-        advancedOptionsDropdown.style.display = newState;
+// Generic toggle for sidebar dropdowns — opening one closes the other
+function toggleSidebarDropdown(dropdown, otherDropdown) {
+    if (!dropdown) return;
+    const isVisible = dropdown.style.display !== 'none';
+    const newState = isVisible ? 'none' : 'block';
+    dropdown.style.display = newState;
 
-        // Save state to vscodeState
-        const state = vscode.getState() || {};
-        state.advancedOptionsExpanded = newState === 'block';
-        vscode.setState(state);
+    // Close the other dropdown
+    if (otherDropdown && newState === 'block') {
+        otherDropdown.style.display = 'none';
     }
+
+    // Save state to vscodeState
+    const state = vscode.getState() || {};
+    state.settingsMenuExpanded = settingsMenuDropdown ? settingsMenuDropdown.style.display !== 'none' : false;
+    vscode.setState(state);
 }
 // --- Theme Functions ---
 
@@ -2710,6 +2714,60 @@ if (saveBtn) {
     saveBtn.addEventListener('click', save);
 }
 
+// --- Tools Menu ---
+const toolsMenuBtn = document.getElementById('toolsMenuBtn');
+const toolsMenuDropdown = document.getElementById('toolsMenuDropdown');
+const exportSvgMenuItem = document.getElementById('exportSvgMenuItem');
+
+function exportSvg() {
+    // Close the menu
+    if (toolsMenuDropdown) toolsMenuDropdown.style.display = 'none';
+
+    // Guard: image must be fully loaded so dimensions are available
+    if (!img.width || !img.height) {
+        vscode.postMessage({ command: 'alert', text: 'Cannot export SVG: image has not finished loading yet. Please wait and try again.' });
+        return;
+    }
+
+    // Filter out visible field, same as save
+    const shapesToExport = shapes.map(shape => {
+        const { visible, ...shapeWithoutVisible } = shape;
+        return shapeWithoutVisible;
+    });
+
+    vscode.postMessage({
+        command: 'exportSvg',
+        data: {
+            shapes: shapesToExport,
+            imageHeight: img.height,
+            imageWidth: img.width
+        }
+    });
+}
+
+if (exportSvgMenuItem) {
+    exportSvgMenuItem.addEventListener('click', exportSvg);
+}
+
+// Close sidebar dropdowns when clicking outside
+document.addEventListener('click', (e) => {
+    // Settings dropdown
+    if (settingsMenuDropdown && settingsMenuDropdown.style.display !== 'none') {
+        if (!settingsMenuDropdown.contains(e.target) && e.target !== settingsMenuBtn) {
+            settingsMenuDropdown.style.display = 'none';
+            const state = vscode.getState() || {};
+            state.settingsMenuExpanded = false;
+            vscode.setState(state);
+        }
+    }
+    // Tools dropdown
+    if (toolsMenuDropdown && toolsMenuDropdown.style.display !== 'none') {
+        if (!toolsMenuDropdown.contains(e.target) && e.target !== toolsMenuBtn) {
+            toolsMenuDropdown.style.display = 'none';
+        }
+    }
+});
+
 // --- Labels Management Event Listeners ---
 
 // Color picker OK button
@@ -2730,11 +2788,22 @@ if (customColorInput) {
     });
 }
 
-// --- Advanced Options Event Listeners ---
+// --- Settings/Tools Dropdown Event Listeners ---
 
-// Advanced Options button
-if (advancedOptionsBtn) {
-    advancedOptionsBtn.onclick = toggleAdvancedOptions;
+// Settings button
+if (settingsMenuBtn) {
+    settingsMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSidebarDropdown(settingsMenuDropdown, toolsMenuDropdown);
+    });
+}
+
+// Tools button
+if (toolsMenuBtn) {
+    toolsMenuBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleSidebarDropdown(toolsMenuDropdown, settingsMenuDropdown);
+    });
 }
 
 // Border Width slider

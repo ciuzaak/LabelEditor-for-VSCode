@@ -2,6 +2,12 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.11.0] - 2026-03-17
+
+### Fixed
+- **SVG Export — Point Annotations**: Point-mode annotations are now correctly exported as SVG `<circle>` elements instead of being silently dropped
+- **SVG Export — Zero-Size Guard**: Export SVG is now blocked until the image finishes loading, preventing blank SVGs with `width="0"` and `height="0"`
+
 ## [0.10.6] - 2026-03-13
 
 ### Fixed

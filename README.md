@@ -192,6 +192,7 @@ Planned features for future releases:
 - [x] ~~Line (polyline) annotations~~ **Added in v0.9.2**
 - [x] ~~Unified Edit Mode~~ **Added in v0.10.0**
 - [x] ~~Context Menu (Rename/Hide/Delete)~~ **Added in v0.10.0**
+- [x] ~~SVG Export~~ **Added in v0.11.0**
 - [ ] Circle shapes
 - [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)

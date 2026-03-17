@@ -250,6 +250,9 @@ export class LabelMePanel {
                     case 'saveGlobalSettings':
                         await this._globalState.update(message.key, message.value);
                         return;
+                    case 'exportSvg':
+                        await this.exportSvg(message.data);
+                        return;
                     case 'navigateToImage':
                         await this._navigateToImageByPath(message.imagePath);
                         return;
@@ -610,32 +613,36 @@ export class LabelMePanel {
                                     <button id="pointModeBtn" class="mode-btn" title="Point Mode (O)">•</button>
                                 </div>
                                 <div class="sidebar-actions">
-                                    <button id="advancedOptionsBtn" class="sidebar-icon-btn" title="Advanced Options">⚙️</button>
+                                    <button id="settingsMenuBtn" class="sidebar-icon-btn" title="Settings">⚙️</button>
+                                    <button id="toolsMenuBtn" class="sidebar-icon-btn" title="Tools">🛠️</button>
                                     <button id="saveBtn" class="sidebar-icon-btn" title="Save (Ctrl+S)" disabled>💾</button>
                                 </div>
-                            </div>
-                            <div id="advancedOptionsDropdown" class="advanced-options-dropdown" style="display: none;">
-                                <div class="theme-control">
-                                    <label>Theme</label>
-                                    <div class="theme-toggle-group">
-                                        <button id="themeLightBtn" class="theme-btn" title="Light">☀️</button>
-                                        <button id="themeDarkBtn" class="theme-btn" title="Dark">🌙</button>
-                                        <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code">🔄</button>
+                                <div id="settingsMenuDropdown" class="sidebar-dropdown" style="display: none;">
+                                    <div class="theme-control">
+                                        <label>Theme</label>
+                                        <div class="theme-toggle-group">
+                                            <button id="themeLightBtn" class="theme-btn" title="Light">☀️</button>
+                                            <button id="themeDarkBtn" class="theme-btn" title="Dark">🌙</button>
+                                            <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code">🔄</button>
+                                        </div>
+                                    </div>
+                                    <div class="zoom-control">
+                                        <div class="zoom-header">
+                                            <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen">&#8634;</span></label>
+                                            <button id="zoomLockBtn" class="zoom-lock-btn" title="Lock: Keep zoom and position when switching images">🔓</button>
+                                        </div>
+                                    </div>
+                                    <div class="slider-control">
+                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                        <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
+                                    </div>
+                                    <div class="slider-control">
+                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                        <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
                                     </div>
                                 </div>
-                                <div class="zoom-control">
-                                    <div class="zoom-header">
-                                        <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen">&#8634;</span></label>
-                                        <button id="zoomLockBtn" class="zoom-lock-btn" title="Lock: Keep zoom and position when switching images">🔓</button>
-                                    </div>
-                                </div>
-                                <div class="slider-control">
-                                    <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                    <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
-                                </div>
-                                <div class="slider-control">
-                                    <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                    <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
+                                <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
+                                    <div class="sidebar-dropdown-item" id="exportSvgMenuItem">📐 Export SVG</div>
                                 </div>
                             </div>
                         </div>
@@ -738,6 +745,116 @@ export class LabelMePanel {
             this._panel.webview.postMessage({ command: 'saveFailed' });
         } finally {
             this._isSaving = false;
+        }
+    }
+
+    private async exportSvg(data: any) {
+        const svgPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, '') + '.svg';
+
+        const shapes: any[] = data.shapes || [];
+        const width = data.imageWidth;
+        const height = data.imageHeight;
+        const insertPoints = 3;
+
+        const pathElements: string[] = [];
+
+        for (let idx = 0; idx < shapes.length; idx++) {
+            let points: number[][] = shapes[idx].points;
+            const shapeType: string = shapes[idx].shape_type || 'polygon';
+            const isClosed = shapeType === 'polygon' || shapeType === 'rectangle';
+
+            // Rectangles are stored as 2 opposite corner points; expand to 4 corners
+            if (shapeType === 'rectangle' && points.length === 2) {
+                const [p1, p2] = points;
+                points = [p1, [p2[0], p1[1]], p2, [p1[0], p2[1]]];
+            }
+
+            // Handle point annotations as circles
+            if (shapeType === 'point' && points.length >= 1) {
+                const px = points[0][0].toFixed(2);
+                const py = points[0][1].toFixed(2);
+                const pointElement = `  <circle id="point${idx}"
+        cx="${px}" cy="${py}" r="5"
+        fill="none" stroke="black" stroke-width="1" />`;
+                pathElements.push(pointElement);
+                continue;
+            }
+
+            if (points.length < 2) continue;
+
+            // Insert interpolation points between consecutive vertices
+            if (insertPoints > 0) {
+                const n = points.length;
+                const numSegments = isClosed ? n : n - 1;
+                const expanded: number[][] = [];
+                for (let i = 0; i < numSegments; i++) {
+                    const p1 = points[i];
+                    const p2 = isClosed ? points[(i + 1) % n] : points[i + 1];
+                    expanded.push(p1);
+                    for (let j = 1; j <= insertPoints; j++) {
+                        const t = j / (insertPoints + 1);
+                        const x = p1[0] + t * (p2[0] - p1[0]);
+                        const y = p1[1] + t * (p2[1] - p1[1]);
+                        expanded.push([x, y]);
+                    }
+                }
+                if (!isClosed) {
+                    expanded.push(points[points.length - 1]);
+                }
+                points = expanded;
+            }
+
+            // Build path data
+            let pathData = `M ${points[0][0].toFixed(2)},${points[0][1].toFixed(2)}`;
+
+            let extendedPoints: number[][];
+            let numSegs: number;
+            if (isClosed) {
+                extendedPoints = [...points, points[0], points[1]];
+                numSegs = points.length;
+            } else {
+                extendedPoints = points;
+                numSegs = points.length - 1;
+            }
+
+            const lines: string[] = [];
+            for (let i = 0; i < numSegs; i++) {
+                const prevPt = extendedPoints[i];
+                const nextPt = extendedPoints[i + 1];
+                const coords = `${prevPt[0].toFixed(2)},${prevPt[1].toFixed(2)} ${nextPt[0].toFixed(2)},${nextPt[1].toFixed(2)} ${nextPt[0].toFixed(2)},${nextPt[1].toFixed(2)}`;
+                if (i === 0) {
+                    lines.push(`           C ${coords}`);
+                } else {
+                    lines.push(`             ${coords}`);
+                }
+            }
+
+            if (isClosed && lines.length > 0) {
+                lines[lines.length - 1] = lines[lines.length - 1] + ' Z';
+            }
+
+            pathData = pathData + '\n' + lines.join('\n');
+
+            const pathElement = `  <path id="path${idx}"
+        fill="none" stroke="black" stroke-width="1"
+        d="${pathData}" />`;
+            pathElements.push(pathElement);
+        }
+
+        const svg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg xmlns="http://www.w3.org/2000/svg"
+     xmlns:svg="http://www.w3.org/2000/svg"
+     version="1.1"
+     width="${width}" height="${height}"
+     viewBox="0 0 ${width} ${height}">
+${pathElements.join('\n')}
+</svg>`;
+
+        try {
+            await fs.writeFile(svgPath, svg, 'utf8');
+            vscode.window.showInformationMessage('SVG exported to ' + path.basename(svgPath));
+        } catch (err) {
+            vscode.window.showErrorMessage('Failed to export SVG: ' + (err as Error).message);
         }
     }
 

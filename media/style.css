@@ -625,12 +625,13 @@ canvas {
     border-radius: 3px;
 }
 
-.advanced-options-dropdown {
+.sidebar-dropdown {
     background-color: var(--color-bg-tertiary);
     border: 1px solid var(--color-border-secondary);
     border-radius: 4px;
-    padding: 12px;
-    margin-bottom: 10px;
+    padding: 4px 0;
+    margin-top: 4px;
+    box-shadow: 0 2px 8px var(--color-shadow);
 }
 
 .slider-control {
@@ -897,6 +898,33 @@ canvas {
 .sidebar-icon-btn.locked {
     background-color: var(--color-accent);
     color: white;
+}
+
+/* Sidebar Dropdown Menu */
+.sidebar-dropdown .theme-control,
+.sidebar-dropdown .zoom-control,
+.sidebar-dropdown .slider-control {
+    padding: 0 12px;
+}
+
+.sidebar-dropdown .theme-control:first-child {
+    padding-top: 8px;
+}
+
+.sidebar-dropdown .slider-control:last-child {
+    padding-bottom: 8px;
+}
+
+.sidebar-dropdown-item {
+    padding: 6px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    color: var(--color-text-primary);
+    white-space: nowrap;
+}
+
+.sidebar-dropdown-item:hover {
+    background-color: var(--color-bg-hover);
 }
 
 /* Image Browser Sidebar */
