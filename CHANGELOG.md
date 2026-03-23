@@ -2,6 +2,25 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.11.2] - 2026-03-23
+
+### Added
+- **ONNX Batch Inference**: Run ONNX segmentation models on workspace images via Tools → 🤖 ONNX Batch Infer
+  - Configurable model directory, Python interpreter, CPU/GPU device, RGB/BGR color format
+  - Scope selection: infer on all images or current image only
+  - Existing annotation handling: skip / merge / overwrite
+  - Browse buttons (📂) for model directory and Python interpreter selection via native dialog
+  - All settings persist across sessions (globalState)
+  - Progress and errors displayed in VS Code terminal (tqdm)
+  - Bundled Python script supports Chinese file paths, dynamic ONNX inputs, and smart resize
+  - labels.json format hint (ⓘ) and polygon-only output note in the modal
+  - Cross-platform terminal command (PowerShell `&` operator detection)
+- **Right-Click Copy Filename**: Right-click the filename in toolbar to copy just the filename (basename)
+  - Left-click still copies the absolute path
+
+### Fixed
+- **Modal Keyboard Shortcut Leak**: Global shortcuts (D, A, P, etc.) no longer fire when typing in the ONNX config or color picker modals
+
 ## [0.11.1] - 2026-03-23
 
 ### Added

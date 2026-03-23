@@ -56,7 +56,7 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 - **Zoom & Pan**: Smooth zooming with mouse-centered pivot and full scrolling
 - **Image Browser**: Quick access to all workspace images via sidebar (☰)
 - **Image Navigation**: Quick prev/next buttons + keyboard shortcuts (A/D)
-- **Copy Image Path** (New in v0.9.0): Click filename in toolbar to copy absolute path
+- **Copy Image Path** (New in v0.9.0): Click filename in toolbar to copy absolute path; right-click to copy filename only
 - **Manual Save**: Control when to save annotations (Ctrl+S)
 - **Unsaved Changes Protection**: Warning dialog when navigating with unsaved changes
 
@@ -69,6 +69,18 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
   - Omitted from JSON when empty (backward compatible)
 - **Delete Annotations**: Remove unwanted shapes (×)
 - **Visual Feedback**: Category-based color coding and smooth rendering
+
+### ONNX Batch Inference (New in v0.11.2)
+- **Automated Annotation**: Run ONNX segmentation models on workspace images
+  - Access via Tools → 🤖 ONNX Batch Infer
+  - Configurable: model directory, Python interpreter, CPU/GPU, RGB/BGR
+  - Scope: infer on all images or current image only
+  - Existing annotations: skip / merge / overwrite
+  - Browse buttons (📂) for path selection via native dialog
+  - All settings persist across sessions
+  - Progress displayed in VS Code terminal with tqdm
+  - Requires: Python with `onnxruntime`, `opencv-python`, `numpy`, `tqdm`
+  - Output: polygon annotations only (currently)
 
 ## 📦 Installation
 
@@ -162,7 +174,6 @@ Note: `visible` property is not saved to JSON - it's a session-only UI state. `d
 This extension is still under active development. Some known limitations include:
 
 - No support for circle/ellipse shape types yet
-- No batch annotation features
 - No import from other formats
 - Performance may degrade with very large images (10000x10000+)
 - No support for video frame annotation
@@ -199,8 +210,8 @@ Planned features for future releases:
 - [x] ~~Context Menu (Rename/Hide/Delete)~~ **Added in v0.10.0**
 - [x] ~~SVG Export~~ **Added in v0.11.0**
 - [x] ~~Instance Description~~ **Added in v0.11.1**
+- [x] ~~ONNX Batch Inference~~ **Added in v0.11.2**
 - [ ] Circle shapes
-- [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)
 - [ ] Image pre-processing (brightness, contrast)
 - [ ] Keyboard shortcuts customization

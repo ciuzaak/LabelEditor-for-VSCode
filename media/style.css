@@ -1157,3 +1157,117 @@ canvas {
 .vertex-handle:hover {
     filter: brightness(1.2);
 }
+
+/* ONNX Batch Inference Modal */
+.onnx-infer-content {
+    width: 380px;
+}
+
+.onnx-note {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-bottom: 12px;
+    font-style: italic;
+}
+
+.onnx-hint {
+    cursor: help;
+    color: var(--color-text-muted);
+    font-size: 12px;
+    text-transform: none;
+}
+
+.onnx-form-group {
+    margin-bottom: 12px;
+}
+
+.onnx-form-group > label {
+    display: block;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+}
+
+.onnx-path-input {
+    display: flex;
+    gap: 4px;
+}
+
+.onnx-path-input input {
+    flex: 1;
+    padding: 6px 8px;
+    background-color: var(--color-bg-input);
+    border: 1px solid var(--color-border-input);
+    color: var(--color-text-primary);
+    box-sizing: border-box;
+    font-size: 12px;
+    margin: 0;
+}
+
+.onnx-browse-btn {
+    padding: 4px 8px;
+    font-size: 14px;
+    margin: 0;
+    background-color: var(--color-bg-tertiary);
+    border: 1px solid var(--color-border-input);
+    border-radius: 3px;
+    cursor: pointer;
+    flex-shrink: 0;
+    line-height: 1;
+}
+
+.onnx-browse-btn:hover {
+    background-color: var(--color-bg-input);
+}
+
+.onnx-radio-group {
+    display: flex;
+    gap: 0;
+    border: 1px solid var(--color-border-input);
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.onnx-radio {
+    flex: 1;
+    text-align: center;
+    padding: 5px 8px;
+    font-size: 12px;
+    cursor: pointer;
+    background-color: var(--color-bg-tertiary);
+    border-right: 1px solid var(--color-border-input);
+    margin: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+}
+
+.onnx-radio:last-child {
+    border-right: none;
+}
+
+.onnx-radio:hover {
+    background-color: var(--color-bg-input);
+}
+
+.onnx-radio input[type="radio"] {
+    display: none;
+}
+
+.onnx-radio:has(input:checked) {
+    background-color: var(--color-accent);
+    color: white;
+}
+
+.onnx-image-count {
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    margin-top: 8px;
+    margin-bottom: 4px;
+}
+
+.onnx-image-count strong {
+    color: var(--color-text-primary);
+}

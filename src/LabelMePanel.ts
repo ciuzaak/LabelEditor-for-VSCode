@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
+import * as os from 'os';
 
 export class LabelMePanel {
     public static currentPanel: LabelMePanel | undefined;
@@ -253,6 +254,46 @@ export class LabelMePanel {
                     case 'exportSvg':
                         await this.exportSvg(message.data);
                         return;
+                    case 'onnxBatchInfer':
+                        await this._runOnnxBatchInfer(message.config);
+                        return;
+                    case 'browseOnnxModelDir': {
+                        const folderUris = await vscode.window.showOpenDialog({
+                            canSelectFolders: true,
+                            canSelectFiles: false,
+                            canSelectMany: false,
+                            openLabel: 'Select Model Directory',
+                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                        });
+                        if (folderUris && folderUris.length > 0) {
+                            this._panel.webview.postMessage({
+                                command: 'onnxBrowseResult',
+                                field: 'modelDir',
+                                value: folderUris[0].fsPath
+                            });
+                        }
+                        return;
+                    }
+                    case 'browseOnnxPythonPath': {
+                        const fileUris = await vscode.window.showOpenDialog({
+                            canSelectFolders: false,
+                            canSelectFiles: true,
+                            canSelectMany: false,
+                            openLabel: 'Select Python Interpreter',
+                            filters: process.platform === 'win32'
+                                ? { 'Executable': ['exe'] }
+                                : undefined,
+                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                        });
+                        if (fileUris && fileUris.length > 0) {
+                            this._panel.webview.postMessage({
+                                command: 'onnxBrowseResult',
+                                field: 'pythonPath',
+                                value: fileUris[0].fsPath
+                            });
+                        }
+                        return;
+                    }
                     case 'navigateToImage':
                         await this._navigateToImageByPath(message.imagePath);
                         return;
@@ -585,7 +626,7 @@ export class LabelMePanel {
                             <button id="imageBrowserToggleBtn" class="nav-btn" title="Toggle Image Browser">☰</button>
                             <button id="prevImageBtn" class="nav-btn" title="Previous Image (A)">◀</button>
                             <button id="nextImageBtn" class="nav-btn" title="Next Image (D)">▶</button>
-                            <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" title="Click to copy absolute path">${currentImageRelativePath || path.basename(this._imageUri.fsPath)}</span>
+                            <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" title="Left click: copy absolute path | Right click: copy filename">${currentImageRelativePath || path.basename(this._imageUri.fsPath)}</span>
                             <span id="status"></span>
                         </div>
                         <div class="canvas-container">
@@ -643,6 +684,7 @@ export class LabelMePanel {
                                 </div>
                                 <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
                                     <div class="sidebar-dropdown-item" id="exportSvgMenuItem">📐 Export SVG</div>
+                                    <div class="sidebar-dropdown-item" id="onnxBatchInferMenuItem">🤖 ONNX Batch Infer</div>
                                 </div>
                             </div>
                         </div>
@@ -690,6 +732,62 @@ export class LabelMePanel {
                     </div>
                 </div>
 
+                <!-- Modal for ONNX Batch Inference -->
+                <div id="onnxInferModal" class="modal">
+                    <div class="modal-content onnx-infer-content">
+                        <h3>🤖 ONNX Batch Inference</h3>
+                        <div class="onnx-note">Output: polygon only</div>
+                        <div class="onnx-form-group">
+                            <label>Model Directory <span class="onnx-hint" title='Requires .onnx model file and labels.json in the same directory.&#10;&#10;labels.json format:&#10;[&#10;  { &quot;value&quot;: 1, &quot;name&quot;: &quot;defect_A&quot; },&#10;  { &quot;value&quot;: 2, &quot;name&quot;: &quot;defect_B&quot; }&#10;]&#10;&#10;value: mask pixel value (skip 0 = background)&#10;name: label name for annotation'>ⓘ</span></label>
+                            <div class="onnx-path-input">
+                                <input type="text" id="onnxModelDir" placeholder="Path to directory with .onnx and labels.json" />
+                                <button id="onnxModelDirBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label>Python Interpreter</label>
+                            <div class="onnx-path-input">
+                                <input type="text" id="onnxPythonPath" placeholder="python" />
+                                <button id="onnxPythonPathBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label>Device</label>
+                            <div class="onnx-radio-group">
+                                <label class="onnx-radio"><input type="radio" name="onnxDevice" value="cpu" checked /> CPU</label>
+                                <label class="onnx-radio"><input type="radio" name="onnxDevice" value="gpu" /> GPU</label>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label>Color Format</label>
+                            <div class="onnx-radio-group">
+                                <label class="onnx-radio"><input type="radio" name="onnxColor" value="rgb" checked /> RGB</label>
+                                <label class="onnx-radio"><input type="radio" name="onnxColor" value="bgr" /> BGR</label>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label>Scope</label>
+                            <div class="onnx-radio-group">
+                                <label class="onnx-radio"><input type="radio" name="onnxScope" value="all" checked /> All Images</label>
+                                <label class="onnx-radio"><input type="radio" name="onnxScope" value="current" /> Current Image</label>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label>Existing Annotations</label>
+                            <div class="onnx-radio-group">
+                                <label class="onnx-radio"><input type="radio" name="onnxMode" value="skip" checked /> Skip</label>
+                                <label class="onnx-radio"><input type="radio" name="onnxMode" value="merge" /> Merge</label>
+                                <label class="onnx-radio"><input type="radio" name="onnxMode" value="overwrite" /> Overwrite</label>
+                            </div>
+                        </div>
+                        <div class="onnx-image-count">Images to process: <strong id="onnxImageCount">0</strong></div>
+                        <div class="modal-buttons">
+                            <button id="onnxInferOkBtn">Run</button>
+                            <button id="onnxInferCancelBtn">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
                 <script>
                     const vscode = acquireVsCodeApi();
                     const imageUrl = "${imageUri}";
@@ -705,7 +803,13 @@ export class LabelMePanel {
                         recentLabels: ${JSON.stringify(this._globalState.get('recentLabels') || [])},
                         theme: "${this._globalState.get('theme') ?? 'auto'}",
                         lockViewEnabled: ${this._globalState.get('lockViewEnabled') ?? false},
-                        vscodeThemeKind: ${vscode.window.activeColorTheme.kind}
+                        vscodeThemeKind: ${vscode.window.activeColorTheme.kind},
+                        onnxModelDir: ${JSON.stringify(this._globalState.get('onnxModelDir') || '')},
+                        onnxPythonPath: ${JSON.stringify(this._globalState.get('onnxPythonPath') || '')},
+                        onnxDevice: ${JSON.stringify(this._globalState.get('onnxDevice') || 'cpu')},
+                        onnxColor: ${JSON.stringify(this._globalState.get('onnxColor') || 'rgb')},
+                        onnxScope: ${JSON.stringify(this._globalState.get('onnxScope') || 'all')},
+                        onnxMode: ${JSON.stringify(this._globalState.get('onnxMode') || 'skip')}
                     };
                 </script>
                 <script src="${scriptUri}"></script>
@@ -874,5 +978,98 @@ ${pathElements.join('\n')}
             this.updateImage(vscode.Uri.file(absolutePath));
             this._pendingNavigationPath = undefined;
         }
+    }
+
+    /**
+     * Run ONNX batch inference via external Python script in a VS Code terminal.
+     */
+    private async _runOnnxBatchInfer(config: {
+        modelDir: string;
+        pythonPath: string;
+        device: string;
+        colorFormat: string;
+        mode: string;
+        scope: string;
+    }) {
+        // Validate model directory
+        if (!config.modelDir || !existsSync(config.modelDir)) {
+            vscode.window.showErrorMessage('ONNX Batch Infer: Model directory does not exist.');
+            return;
+        }
+
+        // Check for .onnx file
+        const dirEntries = await fs.readdir(config.modelDir);
+        const hasOnnx = dirEntries.some(f => f.endsWith('.onnx'));
+        if (!hasOnnx) {
+            vscode.window.showErrorMessage('ONNX Batch Infer: No .onnx file found in model directory.');
+            return;
+        }
+
+        // Check for labels.json
+        if (!existsSync(path.join(config.modelDir, 'labels.json'))) {
+            vscode.window.showErrorMessage('ONNX Batch Infer: labels.json not found in model directory.');
+            return;
+        }
+
+        // Build image paths list based on scope
+        let absoluteImagePaths: string[];
+        if (config.scope === 'current') {
+            absoluteImagePaths = [this._imageUri.fsPath];
+        } else {
+            // Ensure workspace images are scanned
+            if (this._workspaceImages.length === 0) {
+                await this._scanWorkspaceImages();
+            }
+            if (this._workspaceImages.length === 0) {
+                vscode.window.showWarningMessage('ONNX Batch Infer: No images found in workspace.');
+                return;
+            }
+            absoluteImagePaths = this._workspaceImages.map(rel => path.join(this._rootPath, rel));
+        }
+
+        // Write image list to a temp JSON file
+        const tmpDir = os.tmpdir();
+        const tmpFile = path.join(tmpDir, `labeleditor_onnx_images_${Date.now()}.json`);
+        await fs.writeFile(tmpFile, JSON.stringify(absoluteImagePaths, null, 2), 'utf8');
+
+        // Locate the bundled Python script
+        const scriptPath = path.join(this._extensionUri.fsPath, 'scripts', 'onnx_batch_infer.py');
+        if (!existsSync(scriptPath)) {
+            vscode.window.showErrorMessage('ONNX Batch Infer: Inference script not found at ' + scriptPath);
+            return;
+        }
+
+        // Determine Python interpreter
+        const pythonPath = config.pythonPath || 'python';
+
+        // Build command
+        const args = [
+            `"${scriptPath}"`,
+            `--model_dir "${config.modelDir}"`,
+            `--images_json "${tmpFile}"`,
+            `--device ${config.device}`,
+            `--color_format ${config.colorFormat}`,
+            `--mode ${config.mode}`
+        ];
+
+        // PowerShell requires & (call operator) for quoted executable paths;
+        // bash/zsh/cmd do not need it.
+        const shell = vscode.env.shell.toLowerCase();
+        const isPowerShell = shell.includes('powershell') || shell.includes('pwsh');
+        const command = isPowerShell
+            ? `& "${pythonPath}" ${args.join(' ')}`
+            : `"${pythonPath}" ${args.join(' ')}`;
+
+        // Create terminal and run
+        const terminal = vscode.window.createTerminal({
+            name: 'ONNX Batch Infer',
+            hideFromUser: false
+        });
+        terminal.show();
+        terminal.sendText(command);
+
+        vscode.window.showInformationMessage(
+            `ONNX Batch Infer started: ${absoluteImagePaths.length} images. Check the terminal for progress.`
+        );
     }
 }

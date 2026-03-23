@@ -770,6 +770,13 @@ window.addEventListener('message', event => {
         case 'updateImageList':
             handleUpdateImageList(message);
             break;
+        case 'onnxBrowseResult':
+            if (message.field === 'modelDir' && onnxModelDirInput) {
+                onnxModelDirInput.value = message.value;
+            } else if (message.field === 'pythonPath' && onnxPythonPathInput) {
+                onnxPythonPathInput.value = message.value;
+            }
+            break;
     }
 });
 
@@ -806,7 +813,7 @@ function handleImageUpdate(message) {
     const fileNameSpan = document.getElementById('fileName');
     if (fileNameSpan) {
         fileNameSpan.textContent = newCurrentImageRelativePath || newImageName;
-        fileNameSpan.title = 'Click to copy absolute path: ' + newImagePath;
+        fileNameSpan.title = 'Left click: copy absolute path | Right click: copy filename';
     }
 
     // Update mutable absolute path for copy feature
@@ -961,8 +968,10 @@ function updateImageBrowserHighlight(newRelativePath) {
 // --- Shortcuts ---
 
 document.addEventListener('keydown', (e) => {
-    // Ignore shortcuts if modal is open (except Enter/Esc handled in input)
+    // Ignore shortcuts if any modal is open (except Enter/Esc handled in input)
     if (labelModal.style.display === 'flex') return;
+    if (onnxInferModal && onnxInferModal.style.display === 'flex') return;
+    if (colorPickerModal && colorPickerModal.style.display === 'flex') return;
 
     // Ctrl+F: Search
     if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
@@ -2792,6 +2801,161 @@ if (exportSvgMenuItem) {
     exportSvgMenuItem.addEventListener('click', exportSvg);
 }
 
+// --- ONNX Batch Inference ---
+const onnxBatchInferMenuItem = document.getElementById('onnxBatchInferMenuItem');
+const onnxInferModal = document.getElementById('onnxInferModal');
+const onnxModelDirInput = document.getElementById('onnxModelDir');
+const onnxPythonPathInput = document.getElementById('onnxPythonPath');
+const onnxModelDirBrowse = document.getElementById('onnxModelDirBrowse');
+const onnxPythonPathBrowse = document.getElementById('onnxPythonPathBrowse');
+const onnxImageCountSpan = document.getElementById('onnxImageCount');
+const onnxInferOkBtn = document.getElementById('onnxInferOkBtn');
+const onnxInferCancelBtn = document.getElementById('onnxInferCancelBtn');
+
+function updateOnnxImageCount() {
+    if (!onnxImageCountSpan) return;
+    const scope = document.querySelector('input[name="onnxScope"]:checked')?.value || 'all';
+    if (scope === 'current') {
+        onnxImageCountSpan.textContent = '1';
+    } else {
+        onnxImageCountSpan.textContent = (typeof workspaceImages !== 'undefined' ? workspaceImages.length : 0).toString();
+    }
+}
+
+function showOnnxInferModal() {
+    // Close the tools menu
+    if (toolsMenuDropdown) toolsMenuDropdown.style.display = 'none';
+
+    // Restore saved settings from globalState (persisted across sessions)
+    const gs = (typeof initialGlobalSettings !== 'undefined') ? initialGlobalSettings : {};
+    // vscodeState overrides for within-session changes
+    const savedState = vscode.getState() || {};
+
+    if (onnxModelDirInput) {
+        onnxModelDirInput.value = savedState.onnxModelDir ?? gs.onnxModelDir ?? '';
+    }
+    if (onnxPythonPathInput) {
+        onnxPythonPathInput.value = savedState.onnxPythonPath ?? gs.onnxPythonPath ?? '';
+    }
+
+    // Restore radio selections
+    const restoreRadio = (name, savedValue) => {
+        if (!savedValue) return;
+        const radio = document.querySelector(`input[name="${name}"][value="${savedValue}"]`);
+        if (radio) radio.checked = true;
+    };
+    restoreRadio('onnxDevice', savedState.onnxDevice ?? gs.onnxDevice);
+    restoreRadio('onnxColor', savedState.onnxColor ?? gs.onnxColor);
+    restoreRadio('onnxScope', savedState.onnxScope ?? gs.onnxScope);
+    restoreRadio('onnxMode', savedState.onnxMode ?? gs.onnxMode);
+
+    // Update image count based on scope
+    updateOnnxImageCount();
+
+    // Show modal
+    if (onnxInferModal) onnxInferModal.style.display = 'flex';
+    if (onnxModelDirInput && !onnxModelDirInput.value) onnxModelDirInput.focus();
+}
+
+function hideOnnxInferModal() {
+    if (onnxInferModal) onnxInferModal.style.display = 'none';
+}
+
+function saveOnnxSettings(settings) {
+    // Save to vscode webview state (within session, survives HTML regeneration)
+    const state = vscode.getState() || {};
+    Object.assign(state, settings);
+    vscode.setState(state);
+
+    // Save each setting to globalState (persists across sessions/restarts)
+    for (const [key, value] of Object.entries(settings)) {
+        vscode.postMessage({ command: 'saveGlobalSettings', key: key, value: value });
+    }
+}
+
+function submitOnnxInfer() {
+    const modelDir = onnxModelDirInput ? onnxModelDirInput.value.trim() : '';
+    const pythonPath = onnxPythonPathInput ? onnxPythonPathInput.value.trim() : '';
+    const device = document.querySelector('input[name="onnxDevice"]:checked')?.value || 'cpu';
+    const colorFormat = document.querySelector('input[name="onnxColor"]:checked')?.value || 'rgb';
+    const scope = document.querySelector('input[name="onnxScope"]:checked')?.value || 'all';
+    const mode = document.querySelector('input[name="onnxMode"]:checked')?.value || 'skip';
+
+    if (!modelDir) {
+        if (onnxModelDirInput) onnxModelDirInput.focus();
+        return;
+    }
+
+    // Persist all settings
+    saveOnnxSettings({
+        onnxModelDir: modelDir,
+        onnxPythonPath: pythonPath,
+        onnxDevice: device,
+        onnxColor: colorFormat,
+        onnxScope: scope,
+        onnxMode: mode
+    });
+
+    // Send to extension backend
+    vscode.postMessage({
+        command: 'onnxBatchInfer',
+        config: {
+            modelDir: modelDir,
+            pythonPath: pythonPath,
+            device: device,
+            colorFormat: colorFormat,
+            scope: scope,
+            mode: mode
+        }
+    });
+
+    hideOnnxInferModal();
+}
+
+if (onnxBatchInferMenuItem) {
+    onnxBatchInferMenuItem.addEventListener('click', showOnnxInferModal);
+}
+if (onnxInferOkBtn) {
+    onnxInferOkBtn.addEventListener('click', submitOnnxInfer);
+}
+if (onnxInferCancelBtn) {
+    onnxInferCancelBtn.addEventListener('click', hideOnnxInferModal);
+}
+// Browse buttons
+if (onnxModelDirBrowse) {
+    onnxModelDirBrowse.addEventListener('click', () => {
+        vscode.postMessage({
+            command: 'browseOnnxModelDir',
+            currentValue: onnxModelDirInput ? onnxModelDirInput.value.trim() : ''
+        });
+    });
+}
+if (onnxPythonPathBrowse) {
+    onnxPythonPathBrowse.addEventListener('click', () => {
+        vscode.postMessage({
+            command: 'browseOnnxPythonPath',
+            currentValue: onnxPythonPathInput ? onnxPythonPathInput.value.trim() : ''
+        });
+    });
+}
+// Scope radio change updates image count
+document.querySelectorAll('input[name="onnxScope"]').forEach(radio => {
+    radio.addEventListener('change', updateOnnxImageCount);
+});
+// Allow Enter key to submit in model dir input
+if (onnxModelDirInput) {
+    onnxModelDirInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitOnnxInfer();
+        if (e.key === 'Escape') hideOnnxInferModal();
+    });
+}
+// Close ONNX modal on Escape or click-outside
+if (onnxInferModal) {
+    onnxInferModal.addEventListener('click', (e) => {
+        if (e.target === onnxInferModal) hideOnnxInferModal();
+    });
+}
+
 // Close sidebar dropdowns when clicking outside
 document.addEventListener('click', (e) => {
     // Settings dropdown
@@ -2958,17 +3122,24 @@ if (fileNameSpan) {
     fileNameSpan.onclick = () => {
         if (currentAbsoluteImagePath) {
             navigator.clipboard.writeText(currentAbsoluteImagePath).then(() => {
-                // Visual feedback - append checkmark
                 const originalText = fileNameSpan.textContent;
                 fileNameSpan.textContent = originalText + ' ✓';
-                setTimeout(() => {
-                    fileNameSpan.textContent = originalText;
-                }, 1000);
-            }).catch(err => {
-                console.error('Failed to copy path:', err);
-            });
+                setTimeout(() => { fileNameSpan.textContent = originalText; }, 1000);
+            }).catch(err => console.error('Failed to copy path:', err));
         }
     };
+    // Right-click to copy filename only
+    fileNameSpan.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        if (currentAbsoluteImagePath) {
+            const baseName = currentAbsoluteImagePath.split(/[\\/]/).pop() || currentAbsoluteImagePath;
+            navigator.clipboard.writeText(baseName).then(() => {
+                const originalText = fileNameSpan.textContent;
+                fileNameSpan.textContent = originalText + ' ✓';
+                setTimeout(() => { fileNameSpan.textContent = originalText; }, 1000);
+            }).catch(err => console.error('Failed to copy filename:', err));
+        }
+    });
 }
 
 // --- Mode Toggle Event Listeners ---
