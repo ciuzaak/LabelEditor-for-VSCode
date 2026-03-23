@@ -63,6 +63,10 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 ### Instance Management
 - **Visibility Toggle**: Show/hide individual shapes (👁️)
 - **Edit Labels**: In-place label editing (✎)
+- **Instance Description** (New in v0.11.1): Optional description text for each annotation
+  - Add descriptions when creating or editing annotations
+  - Shown as subtitle in the sidebar instances list
+  - Omitted from JSON when empty (backward compatible)
 - **Delete Annotations**: Remove unwanted shapes (×)
 - **Visual Feedback**: Category-based color coding and smooth rendering
 
@@ -140,7 +144,8 @@ Annotations are saved in LabelMe JSON format:
       "points": [[x1, y1], [x2, y2], ...],
       "group_id": null,
       "shape_type": "polygon",
-      "flags": {}
+      "flags": {},
+      "description": "optional annotation note"
     }
   ],
   "imagePath": "image.jpg",
@@ -150,7 +155,7 @@ Annotations are saved in LabelMe JSON format:
 }
 \`\`\`
 
-Note: `visible` property is not saved to JSON - it's a session-only UI state.
+Note: `visible` property is not saved to JSON - it's a session-only UI state. `description` is only included when non-empty.
 
 ## 🛠️ Known Limitations
 
@@ -193,6 +198,7 @@ Planned features for future releases:
 - [x] ~~Unified Edit Mode~~ **Added in v0.10.0**
 - [x] ~~Context Menu (Rename/Hide/Delete)~~ **Added in v0.10.0**
 - [x] ~~SVG Export~~ **Added in v0.11.0**
+- [x] ~~Instance Description~~ **Added in v0.11.1**
 - [ ] Circle shapes
 - [ ] Batch annotation mode
 - [ ] Export to other formats (COCO, YOLO, etc.)

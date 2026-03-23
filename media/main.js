@@ -7,6 +7,7 @@ const statusSpan = document.getElementById('status');
 const shapeList = document.getElementById('shapeList');
 const labelModal = document.getElementById('labelModal');
 const labelInput = document.getElementById('labelInput');
+const descriptionInput = document.getElementById('descriptionInput');
 const modalOkBtn = document.getElementById('modalOkBtn');
 const modalCancelBtn = document.getElementById('modalCancelBtn');
 const recentLabelsDiv = document.getElementById('recentLabels');
@@ -1832,8 +1833,10 @@ function showLabelModal(editIndex = -1) {
 
     if (editIndex !== -1) {
         labelInput.value = shapes[editIndex].label;
+        descriptionInput.value = shapes[editIndex].description || '';
     } else {
         labelInput.value = '';
+        descriptionInput.value = '';
     }
 
     labelInput.focus();
@@ -1881,7 +1884,11 @@ function renderRecentLabels() {
             chip.textContent = label;
             chip.onclick = () => {
                 labelInput.value = label;
-                confirmLabel();
+                // Highlight the selected chip
+                currentChips.querySelectorAll('.label-chip').forEach(c => c.classList.remove('selected'));
+                chip.classList.add('selected');
+                // Focus description field so user can optionally fill it before confirming
+                descriptionInput.focus();
             };
             currentChips.appendChild(chip);
         });
@@ -1907,7 +1914,11 @@ function renderRecentLabels() {
             chip.textContent = label;
             chip.onclick = () => {
                 labelInput.value = label;
-                confirmLabel();
+                // Highlight the selected chip
+                historyChips.querySelectorAll('.label-chip').forEach(c => c.classList.remove('selected'));
+                chip.classList.add('selected');
+                // Focus description field so user can optionally fill it before confirming
+                descriptionInput.focus();
             };
             historyChips.appendChild(chip);
         });
@@ -1931,9 +1942,16 @@ function confirmLabel() {
     // 持久化到全局状态（同时保存到vscodeState和extension globalState）
     saveGlobalSettings('recentLabels', recentLabels);
 
+    const description = descriptionInput.value.trim();
+
     if (editingShapeIndex !== -1) {
         // Editing existing shape
         shapes[editingShapeIndex].label = label;
+        if (description) {
+            shapes[editingShapeIndex].description = description;
+        } else {
+            delete shapes[editingShapeIndex].description;
+        }
         editingShapeIndex = -1;
     } else {
         // Creating new shape - determine shape_type based on current mode
@@ -1946,14 +1964,18 @@ function confirmLabel() {
             shapeType = 'rectangle';
         }
 
-        shapes.push({
+        const newShape = {
             label: label,
             points: currentPoints,
             group_id: null,
             shape_type: shapeType,
             flags: {},
             visible: true
-        });
+        };
+        if (description) {
+            newShape.description = description;
+        }
+        shapes.push(newShape);
         currentPoints = [];
     }
 
@@ -2022,7 +2044,21 @@ function renderShapeList() {
 
     shapes.forEach((shape, index) => {
         const li = document.createElement('li');
-        li.textContent = shape.label;
+
+        // Label text
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'shape-label-text';
+        labelSpan.textContent = shape.label;
+        li.appendChild(labelSpan);
+
+        // Description subtitle (if present)
+        if (shape.description) {
+            const descSpan = document.createElement('span');
+            descSpan.className = 'shape-description';
+            descSpan.textContent = shape.description;
+            descSpan.title = shape.description;
+            li.appendChild(descSpan);
+        }
 
         const colors = getColorsForLabel(shape.label);
         li.style.borderLeftColor = colors.stroke;
@@ -2696,6 +2732,10 @@ function save() {
     // 过滤掉visible字段,不保存到JSON中
     const shapesToSave = shapes.map(shape => {
         const { visible, ...shapeWithoutVisible } = shape;
+        // Strip empty/undefined description so it doesn't appear in JSON
+        if (!shapeWithoutVisible.description) {
+            delete shapeWithoutVisible.description;
+        }
         return shapeWithoutVisible;
     });
 
@@ -2732,6 +2772,9 @@ function exportSvg() {
     // Filter out visible field, same as save
     const shapesToExport = shapes.map(shape => {
         const { visible, ...shapeWithoutVisible } = shape;
+        if (!shapeWithoutVisible.description) {
+            delete shapeWithoutVisible.description;
+        }
         return shapeWithoutVisible;
     });
 

@@ -665,6 +665,7 @@ export class LabelMePanel {
                     <div class="modal-content">
                         <h3>Enter Label</h3>
                         <input type="text" id="labelInput" placeholder="Enter label name">
+                        <textarea id="descriptionInput" placeholder="Add description (optional)" rows="2"></textarea>
                         <div id="recentLabels"></div>
                         <div class="modal-buttons">
                             <button id="modalOkBtn">OK</button>

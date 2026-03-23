@@ -236,7 +236,7 @@ body {
     cursor: pointer;
     border-radius: 3px;
     display: flex;
-    justify-content: space-between;
+    flex-wrap: wrap;
     align-items: center;
     border-left: 3px solid transparent;
     margin-bottom: 2px;
@@ -248,6 +248,24 @@ body {
 
 #shapeList li.active {
     background-color: var(--color-bg-active);
+}
+
+.shape-label-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.shape-description {
+    width: 100%;
+    font-size: 11px;
+    color: var(--color-text-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-top: 1px;
+    order: 10;
 }
 
 .delete-btn {
@@ -398,6 +416,21 @@ canvas {
     box-sizing: border-box;
 }
 
+.modal-content textarea {
+    width: 100%;
+    padding: 8px;
+    margin: 0 0 5px 0;
+    background-color: var(--color-bg-input);
+    border: 1px solid var(--color-border-input);
+    color: var(--color-text-primary);
+    box-sizing: border-box;
+    font-family: inherit;
+    font-size: inherit;
+    resize: vertical;
+    min-height: 36px;
+    max-height: 120px;
+}
+
 .modal-buttons {
     display: flex;
     justify-content: flex-end;
@@ -441,6 +474,12 @@ canvas {
 
 .label-chip:hover {
     background-color: var(--color-bg-hover-input);
+}
+
+.label-chip.selected {
+    border-color: var(--color-accent);
+    background-color: var(--color-accent);
+    color: white;
 }
 
 /* Labels Section Styles */

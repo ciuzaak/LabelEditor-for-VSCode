@@ -2,6 +2,16 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.11.1] - 2026-03-23
+
+### Added
+- **Instance Description Field**: Optional description for each annotation instance
+  - New textarea in the label modal, below the label input
+  - Description is saved to JSON only when non-empty (backward compatible)
+  - Displayed as a grey subtitle in the sidebar instances list
+  - Pre-filled when editing existing annotations
+  - Label chips now fill input without auto-submitting, allowing description entry
+
 ## [0.11.0] - 2026-03-17
 
 ### Fixed
