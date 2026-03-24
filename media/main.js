@@ -1934,11 +1934,15 @@ function renderRecentLabels() {
             chip.textContent = label;
             chip.onclick = () => {
                 labelInput.value = label;
-                // Highlight the selected chip
-                currentChips.querySelectorAll('.label-chip').forEach(c => c.classList.remove('selected'));
+                // Highlight the selected chip (clear ALL sections to avoid cross-section dual highlight)
+                recentLabelsDiv.querySelectorAll('.label-chip').forEach(c => c.classList.remove('selected'));
                 chip.classList.add('selected');
                 // Focus description field so user can optionally fill it before confirming
                 descriptionInput.focus();
+            };
+            chip.ondblclick = () => {
+                labelInput.value = label;
+                confirmLabel();
             };
             currentChips.appendChild(chip);
         });
@@ -1964,11 +1968,15 @@ function renderRecentLabels() {
             chip.textContent = label;
             chip.onclick = () => {
                 labelInput.value = label;
-                // Highlight the selected chip
-                historyChips.querySelectorAll('.label-chip').forEach(c => c.classList.remove('selected'));
+                // Highlight the selected chip (clear ALL sections to avoid cross-section dual highlight)
+                recentLabelsDiv.querySelectorAll('.label-chip').forEach(c => c.classList.remove('selected'));
                 chip.classList.add('selected');
                 // Focus description field so user can optionally fill it before confirming
                 descriptionInput.focus();
+            };
+            chip.ondblclick = () => {
+                labelInput.value = label;
+                confirmLabel();
             };
             historyChips.appendChild(chip);
         });
@@ -2095,12 +2103,61 @@ labelInput.addEventListener('keydown', (e) => {
     }
 });
 
-// 在document级别监听ESC键，当modal显示时响应
+// 在document级别监听ESC/Enter键，当任意modal显示时响应
+// Enter不拦截焦点在BUTTON/TEXTAREA上的情况（让浏览器正常激活按钮/换行）
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && labelModal.style.display === 'flex') {
-        e.preventDefault();
-        e.stopPropagation();
-        cancelLabelInput();
+    const activeTag = document.activeElement?.tagName;
+    // Label modal
+    if (labelModal.style.display === 'flex') {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            cancelLabelInput();
+        } else if (e.key === 'Enter' && activeTag !== 'TEXTAREA' && activeTag !== 'BUTTON') {
+            e.preventDefault();
+            e.stopPropagation();
+            confirmLabel();
+        }
+        return;
+    }
+    // Color picker modal
+    if (colorPickerModal && colorPickerModal.style.display === 'flex') {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            hideColorPicker();
+        } else if (e.key === 'Enter' && activeTag !== 'BUTTON') {
+            e.preventDefault();
+            e.stopPropagation();
+            confirmColorPicker();
+        }
+        return;
+    }
+    // ONNX infer modal
+    if (onnxInferModal && onnxInferModal.style.display === 'flex') {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            hideOnnxInferModal();
+        } else if (e.key === 'Enter' && activeTag !== 'BUTTON') {
+            e.preventDefault();
+            e.stopPropagation();
+            submitOnnxInfer();
+        }
+        return;
+    }
+    // SAM config modal
+    if (samConfigModal && samConfigModal.style.display === 'flex') {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            hideSamConfigModal();
+        } else if (e.key === 'Enter' && activeTag !== 'BUTTON') {
+            e.preventDefault();
+            e.stopPropagation();
+            submitSamConfig();
+        }
+        return;
     }
 });
 
@@ -2381,7 +2438,7 @@ function showColorPicker(label) {
         palette.removeEventListener('click', paletteClickHandler);
     }
 
-    // 使用事件委托处理颜色选择
+    // 使用事件委托处理颜色选择（单击选中，双击确认）
     paletteClickHandler = (e) => {
         const target = e.target;
         if (target.classList.contains('color-option')) {
@@ -2391,6 +2448,13 @@ function showColorPicker(label) {
         }
     };
     palette.addEventListener('click', paletteClickHandler);
+    palette.addEventListener('dblclick', (e) => {
+        const target = e.target;
+        if (target.classList.contains('color-option')) {
+            customColorInput.value = target.dataset.color;
+            confirmColorPicker();
+        }
+    });
 
     // 设置当前颜色 - 转换为#XXXXXX格式
     const currentColors = getColorsForLabel(label);

@@ -23,6 +23,12 @@ All notable changes to the "LabelEditor for VSCode" extension will be documented
   - Requires: Python with `onnxruntime`, `opencv-python`, `numpy`
   - Recommended models: [SAM2 ONNX Models](https://huggingface.co/vietanhdev/segment-anything-2-onnx-models)
 
+### Fixed
+- **Label/Color Dialog Double-Click**: Double-clicking a recommended label chip or a preset color now immediately confirms the dialog
+- **Label Dialog Cross-Section Highlight**: Clicking a label chip in "Current Image" then in "History" (or vice versa) no longer leaves both highlighted simultaneously
+- **Modal Keyboard Shortcuts**: All popup dialogs (Label, Color Picker, ONNX Infer, SAM Config) now consistently support ESC to cancel and Enter to confirm
+  - Enter is not intercepted when focus is on a button (Cancel, Browse) or textarea (Description), preserving native behavior
+
 ## [0.11.2] - 2026-03-23
 
 ### Added
