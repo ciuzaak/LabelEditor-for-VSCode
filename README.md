@@ -82,6 +82,35 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
   - Requires: Python with `onnxruntime`, `opencv-python`, `numpy`, `tqdm`
   - Output: polygon annotations only (currently)
 
+### SAM AI Annotation (New in v0.12.0)
+- **Interactive Segmentation**: Annotate with the Segment Anything Model (SAM)
+  - Enter SAM mode via toolbar button (🧠) or keyboard shortcut (`I`)
+  - **Left click**: Positive point prompt
+  - **Shift+Left click**: Negative point prompt
+  - **Left click + Drag**: Rectangle (box) prompt
+  - **Right click**: Undo last prompt
+  - **Double click**: Confirm annotation and enter label
+  - Real-time mask preview with SVG overlay
+  - Lazy encoding: image embedding computed on first interaction for efficiency
+  - Supports SAM1 and SAM2 ONNX models with automatic detection
+  - Configuration: model directory, Python interpreter, device (CPU/GPU), port
+  - All settings persist across sessions
+  - SAM service runs as a standalone Python HTTP server in VS Code terminal
+  - Requires: Python with `onnxruntime`, `opencv-python`, `numpy`
+
+#### SAM Model Setup
+1. Download SAM2 ONNX models from [HuggingFace](https://huggingface.co/vietanhdev/segment-anything-2-onnx-models)
+2. Place the encoder and decoder `.onnx` files in the same folder:
+   ```
+   sam_model/
+   ├── encoder.onnx    (or any filename containing "encoder")
+   └── decoder.onnx    (or any filename containing "decoder")
+   ```
+   > If the filenames don't contain "encoder"/"decoder", the service will assume the larger file is the encoder.
+3. In VS Code, press `I` to enter SAM mode
+4. If the SAM service is not running, a configuration modal will appear — select the model folder and Python interpreter, then click OK to start the service
+5. The service runs in a terminal tab and persists until you manually close it
+
 ## 📦 Installation
 
 ### From OpenVSX
@@ -128,6 +157,7 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 - **R**: Switch to Rectangle Mode
 - **L**: Switch to Line Mode
 - **O**: Switch to Point Mode
+- **I**: Switch to SAM AI Mode
 - **Ctrl+Z** (`Cmd+Z` on Mac): Undo last action
 - **Ctrl+Shift+Z** or **Ctrl+Y**: Redo action
 - **ESC**: Cancel current drawing
@@ -138,7 +168,7 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 
 ### Toolbar Buttons
 - **◀ / ▶**: Navigate between images
-- **👁️ / ⬠ / ▭ / ⟋ / •**: Switch between View, Polygon, Rectangle, Line, and Point modes
+- **👁️ / ⬠ / ▭ / ⟋ / • / 🧠**: Switch between View, Polygon, Rectangle, Line, Point, and SAM modes
 - **⚙️**: Open advanced rendering options
 - **Save**: Save current annotations
 
@@ -177,6 +207,7 @@ This extension is still under active development. Some known limitations include
 - No import from other formats
 - Performance may degrade with very large images (10000x10000+)
 - No support for video frame annotation
+- SAM mode requires a local Python environment with ONNX Runtime
 
 ## 🤖 Development
 
@@ -211,6 +242,7 @@ Planned features for future releases:
 - [x] ~~SVG Export~~ **Added in v0.11.0**
 - [x] ~~Instance Description~~ **Added in v0.11.1**
 - [x] ~~ONNX Batch Inference~~ **Added in v0.11.2**
+- [x] ~~SAM AI Annotation~~ **Added in v0.12.0**
 - [ ] Circle shapes
 - [ ] Export to other formats (COCO, YOLO, etc.)
 - [ ] Image pre-processing (brightness, contrast)

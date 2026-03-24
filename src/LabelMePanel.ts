@@ -304,6 +304,46 @@ export class LabelMePanel {
                         // Webview confirmed it is clean after save — now safe to navigate
                         this._executePendingNavigation();
                         return;
+                    case 'samStartService':
+                        await this._runSamService(message.config);
+                        return;
+                    case 'browseSamModelDir': {
+                        const samFolderUris = await vscode.window.showOpenDialog({
+                            canSelectFolders: true,
+                            canSelectFiles: false,
+                            canSelectMany: false,
+                            openLabel: 'Select SAM Model Directory',
+                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                        });
+                        if (samFolderUris && samFolderUris.length > 0) {
+                            this._panel.webview.postMessage({
+                                command: 'samBrowseResult',
+                                field: 'modelDir',
+                                value: samFolderUris[0].fsPath
+                            });
+                        }
+                        return;
+                    }
+                    case 'browseSamPythonPath': {
+                        const samFileUris = await vscode.window.showOpenDialog({
+                            canSelectFolders: false,
+                            canSelectFiles: true,
+                            canSelectMany: false,
+                            openLabel: 'Select Python Interpreter',
+                            filters: process.platform === 'win32'
+                                ? { 'Executable': ['exe'] }
+                                : undefined,
+                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                        });
+                        if (samFileUris && samFileUris.length > 0) {
+                            this._panel.webview.postMessage({
+                                command: 'samBrowseResult',
+                                field: 'pythonPath',
+                                value: samFileUris[0].fsPath
+                            });
+                        }
+                        return;
+                    }
                 }
             },
             null,
@@ -652,6 +692,7 @@ export class LabelMePanel {
                                     <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)">▭</button>
                                     <button id="lineModeBtn" class="mode-btn" title="Line Mode (L)">⟋</button>
                                     <button id="pointModeBtn" class="mode-btn" title="Point Mode (O)">•</button>
+                                    <button id="samModeBtn" class="mode-btn" title="SAM AI Mode (I)">🤖</button>
                                 </div>
                                 <div class="sidebar-actions">
                                     <button id="settingsMenuBtn" class="sidebar-icon-btn" title="Settings">⚙️</button>
@@ -788,6 +829,43 @@ export class LabelMePanel {
                     </div>
                 </div>
 
+                <!-- Modal for SAM AI Service Config -->
+                <div id="samConfigModal" class="modal">
+                    <div class="modal-content onnx-infer-content">
+                        <h3>🤖 SAM AI Annotation</h3>
+                        <div class="onnx-note">Configure SAM service for interactive annotation</div>
+                        <div class="onnx-form-group">
+                            <label>Model Directory <span class="onnx-hint" title='Directory containing encoder and decoder ONNX model files.&#10;&#10;Expected files:&#10;- *encoder*.onnx&#10;- *decoder*.onnx&#10;&#10;Supports SAM1 and SAM2 models (auto-detected).'>ⓘ</span></label>
+                            <div class="onnx-path-input">
+                                <input type="text" id="samModelDir" placeholder="Path to directory with encoder.onnx and decoder.onnx" />
+                                <button id="samModelDirBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label>Python Interpreter</label>
+                            <div class="onnx-path-input">
+                                <input type="text" id="samPythonPath" placeholder="python" />
+                                <button id="samPythonPathBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label>Device</label>
+                            <div class="onnx-radio-group">
+                                <label class="onnx-radio"><input type="radio" name="samDevice" value="cpu" checked /> CPU</label>
+                                <label class="onnx-radio"><input type="radio" name="samDevice" value="gpu" /> GPU</label>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label>Port</label>
+                            <input type="number" id="samPort" value="8765" min="1024" max="65535" style="width:80px" />
+                        </div>
+                        <div class="modal-buttons">
+                            <button id="samConfigOkBtn">Start Service</button>
+                            <button id="samConfigCancelBtn">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
                 <script>
                     const vscode = acquireVsCodeApi();
                     const imageUrl = "${imageUri}";
@@ -809,7 +887,11 @@ export class LabelMePanel {
                         onnxDevice: ${JSON.stringify(this._globalState.get('onnxDevice') || 'cpu')},
                         onnxColor: ${JSON.stringify(this._globalState.get('onnxColor') || 'rgb')},
                         onnxScope: ${JSON.stringify(this._globalState.get('onnxScope') || 'all')},
-                        onnxMode: ${JSON.stringify(this._globalState.get('onnxMode') || 'skip')}
+                        onnxMode: ${JSON.stringify(this._globalState.get('onnxMode') || 'skip')},
+                        samModelDir: ${JSON.stringify(this._globalState.get('samModelDir') || '')},
+                        samPythonPath: ${JSON.stringify(this._globalState.get('samPythonPath') || '')},
+                        samDevice: ${JSON.stringify(this._globalState.get('samDevice') || 'cpu')},
+                        samPort: ${this._globalState.get('samPort') ?? 8765}
                     };
                 </script>
                 <script src="${scriptUri}"></script>
@@ -1070,6 +1152,67 @@ ${pathElements.join('\n')}
 
         vscode.window.showInformationMessage(
             `ONNX Batch Infer started: ${absoluteImagePaths.length} images. Check the terminal for progress.`
+        );
+    }
+
+    /**
+     * Run SAM service via external Python script in a VS Code terminal.
+     */
+    private async _runSamService(config: {
+        modelDir: string;
+        pythonPath: string;
+        device: string;
+        port: number;
+    }) {
+        // Validate model directory
+        if (!config.modelDir || !existsSync(config.modelDir)) {
+            vscode.window.showErrorMessage('SAM Service: Model directory does not exist.');
+            return;
+        }
+
+        // Check for encoder/decoder ONNX files
+        const dirEntries = await fs.readdir(config.modelDir);
+        const onnxFiles = dirEntries.filter(f => f.toLowerCase().endsWith('.onnx'));
+        if (onnxFiles.length < 2) {
+            vscode.window.showErrorMessage('SAM Service: Need at least 2 ONNX files (encoder + decoder) in model directory.');
+            return;
+        }
+
+        // Locate the bundled Python script
+        const scriptPath = path.join(this._extensionUri.fsPath, 'scripts', 'sam_service.py');
+        if (!existsSync(scriptPath)) {
+            vscode.window.showErrorMessage('SAM Service: Service script not found at ' + scriptPath);
+            return;
+        }
+
+        // Determine Python interpreter
+        const pythonPath = config.pythonPath || 'python';
+
+        // Build command
+        const args = [
+            `"${scriptPath}"`,
+            `--model_dir "${config.modelDir}"`,
+            `--device ${config.device}`,
+            `--port ${config.port}`
+        ];
+
+        // PowerShell requires & (call operator) for quoted executable paths
+        const shell = vscode.env.shell.toLowerCase();
+        const isPowerShell = shell.includes('powershell') || shell.includes('pwsh');
+        const command = isPowerShell
+            ? `& "${pythonPath}" ${args.join(' ')}`
+            : `"${pythonPath}" ${args.join(' ')}`;
+
+        // Create terminal and run
+        const terminal = vscode.window.createTerminal({
+            name: 'SAM Service',
+            hideFromUser: false
+        });
+        terminal.show();
+        terminal.sendText(command);
+
+        vscode.window.showInformationMessage(
+            `SAM Service starting on port ${config.port}. Check the terminal for status.`
         );
     }
 }

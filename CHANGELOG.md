@@ -2,6 +2,27 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.12.0] - 2026-03-24
+
+### Added
+- **SAM AI Annotation Mode**: Interactive annotation powered by Segment Anything Model (SAM)
+  - New toolbar button (🧠) and keyboard shortcut (`I`) to enter SAM mode
+  - Supports both SAM1 and SAM2 ONNX models with automatic variant detection
+  - **Left click**: Positive point prompt
+  - **Shift+Left click**: Negative point prompt
+  - **Left click + Drag**: Rectangle (box) prompt
+  - **Right click**: Undo last prompt
+  - **Double click**: Confirm annotation and enter label
+  - Point and box prompts are mutually exclusive (adding one clears the other)
+  - Real-time SVG overlay visualization for prompts and generated mask contours
+  - Lazy encoding: image embedding is computed on first interaction, not on mode entry
+  - Stale decode invalidation: fast prompt changes won't apply outdated results
+  - Configuration modal for model directory, Python interpreter, device (CPU/GPU), and port
+  - All SAM settings persist across sessions (globalState)
+  - SAM service runs as a standalone Python HTTP server in VS Code terminal
+  - Requires: Python with `onnxruntime`, `opencv-python`, `numpy`
+  - Recommended models: [SAM2 ONNX Models](https://huggingface.co/vietanhdev/segment-anything-2-onnx-models)
+
 ## [0.11.2] - 2026-03-23
 
 ### Added

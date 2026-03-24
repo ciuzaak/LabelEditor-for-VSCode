@@ -29,6 +29,7 @@ const pointModeBtn = document.getElementById('pointModeBtn');
 const lineModeBtn = document.getElementById('lineModeBtn');
 const polygonModeBtn = document.getElementById('polygonModeBtn');
 const rectangleModeBtn = document.getElementById('rectangleModeBtn');
+const samModeBtn = document.getElementById('samModeBtn');
 
 
 // Labels management elements
@@ -75,8 +76,23 @@ let recentLabels = initialGlobalSettings.recentLabels || [];
 // Dirty State
 let isDirty = false;
 
-// Current interaction mode ('view', 'point', 'line', 'polygon', or 'rectangle')
+// Current interaction mode ('view', 'point', 'line', 'polygon', 'rectangle', or 'sam')
 let currentMode = 'view'; // 默认为view模式
+
+// --- SAM State ---
+let samServicePort = 8765;
+let samServiceRunning = false;
+let samCurrentImagePath = null;   // 当前已 encode 的图片路径
+let samPrompts = [];              // 当前的 prompt 列表
+let samPromptType = null;         // 'point' | 'box'
+let samMaskContour = null;        // 当前推理结果（轮廓点数组）
+let samIsDragging = false;        // 是否正在拖拽框选
+let samDragStart = null;          // 框选起点 {x, y}
+let samDragCurrent = null;        // 框选当前位置
+let samIsEncoding = false;        // 是否正在 encode
+let samIsDecoding = false;        // 是否正在 decode
+let samDecodeVersion = 0;         // 用于无效化过期的 decode 响应
+const SAM_DRAG_THRESHOLD = 5;     // 拖拽阈值（像素）
 
 // Zoom & Pan variables
 let zoomLevel = 1;
@@ -235,6 +251,7 @@ if (viewModeBtn && pointModeBtn && lineModeBtn && polygonModeBtn && rectangleMod
     lineModeBtn.classList.remove('active');
     polygonModeBtn.classList.remove('active');
     rectangleModeBtn.classList.remove('active');
+    if (samModeBtn) samModeBtn.classList.remove('active');
 
     if (currentMode === 'view') {
         viewModeBtn.classList.add('active');
@@ -246,6 +263,8 @@ if (viewModeBtn && pointModeBtn && lineModeBtn && polygonModeBtn && rectangleMod
         polygonModeBtn.classList.add('active');
     } else if (currentMode === 'rectangle') {
         rectangleModeBtn.classList.add('active');
+    } else if (currentMode === 'sam') {
+        if (samModeBtn) samModeBtn.classList.add('active');
     }
 }
 
@@ -777,6 +796,16 @@ window.addEventListener('message', event => {
                 onnxPythonPathInput.value = message.value;
             }
             break;
+        case 'samBrowseResult': {
+            const samModelDirInput = document.getElementById('samModelDir');
+            const samPythonPathInput = document.getElementById('samPythonPath');
+            if (message.field === 'modelDir' && samModelDirInput) {
+                samModelDirInput.value = message.value;
+            } else if (message.field === 'pythonPath' && samPythonPathInput) {
+                samPythonPathInput.value = message.value;
+            }
+            break;
+        }
     }
 });
 
@@ -972,6 +1001,7 @@ document.addEventListener('keydown', (e) => {
     if (labelModal.style.display === 'flex') return;
     if (onnxInferModal && onnxInferModal.style.display === 'flex') return;
     if (colorPickerModal && colorPickerModal.style.display === 'flex') return;
+    if (samConfigModal && samConfigModal.style.display === 'flex') return;
 
     // Ctrl+F: Search
     if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
@@ -1090,6 +1120,11 @@ document.addEventListener('keydown', (e) => {
     // R: Rectangle Mode
     if (e.key === 'r' || e.key === 'R') {
         setMode('rectangle');
+    }
+
+    // I: SAM AI Mode
+    if (e.key === 'i' || e.key === 'I') {
+        setMode('sam');
     }
 });
 
@@ -1224,6 +1259,7 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 // Rectangle starts with one point, we'll expand it in mousemove
                 currentPoints = [[x, y]];
             }
+            // SAM mode is handled separately below
         } else {
             if (currentMode === 'line') {
                 // Line mode: check if double-clicking the last point
@@ -1268,6 +1304,11 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         draw();
     } else if (e.button === 2) { // Right click
         e.preventDefault(); // 阻止浏览器默认的上下文菜单
+        if (currentMode === 'sam') {
+            // SAM mode right click: undo last prompt
+            samUndoLastPrompt();
+            return;
+        }
         if (isDrawing) {
             if (currentMode === 'polygon' || currentMode === 'line') {
                 if (currentPoints.length > 0) {
@@ -1971,6 +2012,8 @@ function confirmLabel() {
             shapeType = 'linestrip';
         } else if (currentMode === 'rectangle') {
             shapeType = 'rectangle';
+        } else if (currentMode === 'sam') {
+            shapeType = 'polygon'; // SAM always produces polygon shapes
         }
 
         const newShape = {
@@ -1989,6 +2032,8 @@ function confirmLabel() {
     }
 
     hideLabelModal();
+    // Clear saved SAM state after successful confirm
+    if (typeof samSavedStateBeforeConfirm !== 'undefined') samSavedStateBeforeConfirm = null;
     markDirty();
     saveHistory(); // 保存历史记录以支持撤销/恢复
     renderShapeList();
@@ -2019,6 +2064,19 @@ function cancelLabelInput() {
 
     // 对于其他模式（polygon, line, rectangle），回到继续绘制状态（不删除任何点）
     // 因为完成标注的操作是"闭合多边形"或"确定矩形"，取消只是撤销这个完成操作
+    if (currentMode === 'sam') {
+        // SAM mode: restore prompts and mask so user can continue editing
+        if (samSavedStateBeforeConfirm) {
+            samPrompts = samSavedStateBeforeConfirm.prompts;
+            samPromptType = samSavedStateBeforeConfirm.promptType;
+            samMaskContour = samSavedStateBeforeConfirm.maskContour;
+            samSavedStateBeforeConfirm = null;
+        }
+        currentPoints = [];
+        draw();
+        return;
+    }
+
     if (currentPoints.length > 0) {
         isDrawing = true;
     }
@@ -2510,29 +2568,47 @@ function setMode(mode) {
     // 隐藏上下文菜单
     hideShapeContextMenu();
 
+    // Clear SAM state when leaving SAM mode
+    if (currentMode === 'sam' && mode !== 'sam') {
+        samClearState();
+    }
+
+    // If entering SAM mode, check service availability
+    if (mode === 'sam') {
+        samCheckAndEnterMode();
+        return; // samCheckAndEnterMode will call the rest of setMode internally
+    }
+
     currentMode = mode;
 
     // 保存到vscode state
     saveState();
 
     // 更新按钮状态
+    updateModeButtons();
+}
+
+function updateModeButtons() {
     if (viewModeBtn && pointModeBtn && lineModeBtn && polygonModeBtn && rectangleModeBtn) {
         viewModeBtn.classList.remove('active');
         pointModeBtn.classList.remove('active');
         lineModeBtn.classList.remove('active');
         polygonModeBtn.classList.remove('active');
         rectangleModeBtn.classList.remove('active');
+        if (samModeBtn) samModeBtn.classList.remove('active');
 
-        if (mode === 'view') {
+        if (currentMode === 'view') {
             viewModeBtn.classList.add('active');
-        } else if (mode === 'point') {
+        } else if (currentMode === 'point') {
             pointModeBtn.classList.add('active');
-        } else if (mode === 'line') {
+        } else if (currentMode === 'line') {
             lineModeBtn.classList.add('active');
-        } else if (mode === 'polygon') {
+        } else if (currentMode === 'polygon') {
             polygonModeBtn.classList.add('active');
-        } else if (mode === 'rectangle') {
+        } else if (currentMode === 'rectangle') {
             rectangleModeBtn.classList.add('active');
+        } else if (currentMode === 'sam') {
+            if (samModeBtn) samModeBtn.classList.add('active');
         }
     }
 }
@@ -2576,6 +2652,11 @@ function drawSVGAnnotations(mouseEvent) {
 
         drawSVGShape(shape.shape_type, points, strokeColor, fillColor, false, index);
     });
+
+    // Draw SAM overlay (prompts and mask)
+    if (currentMode === 'sam') {
+        drawSAMOverlay();
+    }
 
     // 绘制正在创建的形状
     if (isDrawing) {
@@ -3613,3 +3694,535 @@ document.addEventListener('mouseup', () => {
         }
     }
 });
+
+// ============================================================================
+// SAM AI Annotation Mode
+// ============================================================================
+
+// --- SAM Config Modal ---
+const samConfigModal = document.getElementById('samConfigModal');
+const samConfigOkBtn = document.getElementById('samConfigOkBtn');
+const samConfigCancelBtn = document.getElementById('samConfigCancelBtn');
+const samModelDirBrowseBtn = document.getElementById('samModelDirBrowse');
+const samPythonPathBrowseBtn = document.getElementById('samPythonPathBrowse');
+
+function showSamConfigModal() {
+    const gs = (typeof initialGlobalSettings !== 'undefined') ? initialGlobalSettings : {};
+    const savedState = vscode.getState() || {};
+
+    const modelDirInput = document.getElementById('samModelDir');
+    const pythonPathInput = document.getElementById('samPythonPath');
+    const portInput = document.getElementById('samPort');
+
+    if (modelDirInput) modelDirInput.value = savedState.samModelDir ?? gs.samModelDir ?? '';
+    if (pythonPathInput) pythonPathInput.value = savedState.samPythonPath ?? gs.samPythonPath ?? '';
+    if (portInput) portInput.value = savedState.samPort ?? gs.samPort ?? 8765;
+
+    const restoreRadio = (name, savedValue) => {
+        if (!savedValue) return;
+        const radio = document.querySelector(`input[name="${name}"][value="${savedValue}"]`);
+        if (radio) radio.checked = true;
+    };
+    restoreRadio('samDevice', savedState.samDevice ?? gs.samDevice);
+
+    if (samConfigModal) samConfigModal.style.display = 'flex';
+    if (modelDirInput && !modelDirInput.value) modelDirInput.focus();
+}
+
+function hideSamConfigModal() {
+    if (samConfigModal) samConfigModal.style.display = 'none';
+}
+
+function submitSamConfig() {
+    const modelDir = document.getElementById('samModelDir')?.value.trim() || '';
+    const pythonPath = document.getElementById('samPythonPath')?.value.trim() || '';
+    const device = document.querySelector('input[name="samDevice"]:checked')?.value || 'cpu';
+    const port = parseInt(document.getElementById('samPort')?.value) || 8765;
+
+    if (!modelDir) {
+        const input = document.getElementById('samModelDir');
+        if (input) input.focus();
+        return;
+    }
+
+    // Persist settings
+    const settings = { samModelDir: modelDir, samPythonPath: pythonPath, samDevice: device, samPort: port };
+    const state = vscode.getState() || {};
+    Object.assign(state, settings);
+    vscode.setState(state);
+    for (const [key, value] of Object.entries(settings)) {
+        vscode.postMessage({ command: 'saveGlobalSettings', key, value });
+    }
+
+    samServicePort = port;
+
+    // Send to extension to start service
+    vscode.postMessage({
+        command: 'samStartService',
+        config: { modelDir, pythonPath, device, port }
+    });
+
+    hideSamConfigModal();
+
+    // Now enter SAM mode
+    currentMode = 'sam';
+    saveState();
+    updateModeButtons();
+    draw();
+
+    // Wait briefly for service to start, then mark running
+    setTimeout(() => {
+        samPingService().then(ok => {
+            samServiceRunning = ok;
+        });
+    }, 3000);
+}
+
+if (samConfigOkBtn) samConfigOkBtn.addEventListener('click', submitSamConfig);
+if (samConfigCancelBtn) samConfigCancelBtn.addEventListener('click', hideSamConfigModal);
+if (samModelDirBrowseBtn) {
+    samModelDirBrowseBtn.addEventListener('click', () => {
+        vscode.postMessage({
+            command: 'browseSamModelDir',
+            currentValue: document.getElementById('samModelDir')?.value.trim() || ''
+        });
+    });
+}
+if (samPythonPathBrowseBtn) {
+    samPythonPathBrowseBtn.addEventListener('click', () => {
+        vscode.postMessage({
+            command: 'browseSamPythonPath',
+            currentValue: document.getElementById('samPythonPath')?.value.trim() || ''
+        });
+    });
+}
+if (samConfigModal) {
+    samConfigModal.addEventListener('click', (e) => {
+        if (e.target === samConfigModal) hideSamConfigModal();
+    });
+}
+// Enter/Escape in SAM config modal
+const samModelDirInput_ = document.getElementById('samModelDir');
+if (samModelDirInput_) {
+    samModelDirInput_.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') submitSamConfig();
+        if (e.key === 'Escape') hideSamConfigModal();
+    });
+}
+
+// --- SAM Service Communication ---
+
+async function samPingService() {
+    try {
+        const resp = await fetch(`http://127.0.0.1:${samServicePort}/ping`, { signal: AbortSignal.timeout(100) });
+        const data = await resp.json();
+        return data.ok === true;
+    } catch {
+        return false;
+    }
+}
+
+let samEncodePromise = null; // Serialization chain for encode requests
+
+async function samEncode(imagePath) {
+    // If an encode is already in flight, wait for it to finish, then re-check
+    if (samEncodePromise) {
+        await samEncodePromise;
+        // After previous encode settled, check if this image is already cached
+        if (samCurrentImagePath === imagePath) return;
+    }
+
+    const doEncode = async () => {
+        samIsEncoding = true;
+        statusSpan.textContent = 'SAM Encoding...';
+        statusSpan.style.color = 'orange';
+        try {
+            const resp = await fetch(`http://127.0.0.1:${samServicePort}/encode`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ image_path: imagePath })
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                samCurrentImagePath = imagePath;
+                statusSpan.textContent = `SAM Ready (${data.time_ms || 0}ms)`;
+                statusSpan.style.color = 'limegreen';
+            } else {
+                statusSpan.textContent = 'SAM Encode Error';
+                statusSpan.style.color = 'red';
+            }
+        } catch (err) {
+            statusSpan.textContent = 'SAM Service Error';
+            statusSpan.style.color = 'red';
+        } finally {
+            samIsEncoding = false;
+            samEncodePromise = null;
+        }
+    };
+
+    samEncodePromise = doEncode();
+    await samEncodePromise;
+}
+
+async function samDecode() {
+    if (samPrompts.length === 0) return;
+
+    // Capture version BEFORE any async work to detect state changes during encode
+    const preEncodeVersion = samDecodeVersion;
+
+    // Lazy encode: ensure current image is encoded before first decode
+    const requestPath = currentAbsoluteImagePath || imagePath;
+    if (samCurrentImagePath !== requestPath) {
+        await samEncode(requestPath);
+        // After encode, revalidate: has the state been cleared or image changed?
+        if (preEncodeVersion !== samDecodeVersion) return;
+        const activePath = currentAbsoluteImagePath || imagePath;
+        if (activePath !== requestPath) return;
+        if (samCurrentImagePath !== requestPath) return;
+    }
+
+    // Capture version at request time to detect stale responses
+    const requestVersion = ++samDecodeVersion;
+    samIsDecoding = true;
+    try {
+        const resp = await fetch(`http://127.0.0.1:${samServicePort}/decode`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompts: samPrompts })
+        });
+        const data = await resp.json();
+        // Only apply if this is still the latest request
+        if (requestVersion !== samDecodeVersion) return;
+        if (data.ok) {
+            samMaskContour = data.contour;
+            statusSpan.textContent = `SAM Decoded (${data.time_ms || 0}ms)`;
+            statusSpan.style.color = 'limegreen';
+            draw();
+        }
+    } catch (err) {
+        if (requestVersion !== samDecodeVersion) return;
+        statusSpan.textContent = 'SAM Decode Error';
+        statusSpan.style.color = 'red';
+    } finally {
+        samIsDecoding = false;
+    }
+}
+
+// --- SAM Mode Logic ---
+
+function samClearState() {
+    samDecodeVersion++;  // Invalidate any in-flight decode
+    samPrompts = [];
+    samPromptType = null;
+    samMaskContour = null;
+    samIsDragging = false;
+    samDragStart = null;
+    samDragCurrent = null;
+    statusSpan.textContent = '';
+    statusSpan.style.color = '';
+    draw();
+}
+
+async function samCheckAndEnterMode() {
+    // Restore port from saved state
+    const savedState = vscode.getState() || {};
+    const gs = (typeof initialGlobalSettings !== 'undefined') ? initialGlobalSettings : {};
+    samServicePort = savedState.samPort ?? gs.samPort ?? 8765;
+
+    // Try to ping the service
+    const ok = await samPingService();
+    if (ok) {
+        samServiceRunning = true;
+        currentMode = 'sam';
+        saveState();
+        updateModeButtons();
+        draw();
+    } else {
+        // Show config modal
+        showSamConfigModal();
+    }
+}
+
+function samEnsureEncoded() {
+    if (!samServiceRunning) return;
+    const currentPath = currentAbsoluteImagePath || imagePath;
+    if (samCurrentImagePath !== currentPath) {
+        samEncode(currentPath);
+    }
+}
+
+function samUndoLastPrompt() {
+    if (samPrompts.length > 0) {
+        samPrompts.pop();
+        if (samPrompts.length === 0) {
+            samDecodeVersion++;  // Invalidate any in-flight decode
+            samPromptType = null;
+            samMaskContour = null;
+            draw();
+        } else {
+            samDecode();
+        }
+    }
+}
+
+let samSavedStateBeforeConfirm = null; // For restoring on modal cancel
+
+function samConfirmAnnotation() {
+    if (!samMaskContour || samMaskContour.length < 3) return;
+
+    // Save SAM state so we can restore if user cancels the label modal
+    samSavedStateBeforeConfirm = {
+        prompts: JSON.parse(JSON.stringify(samPrompts)),
+        promptType: samPromptType,
+        maskContour: JSON.parse(JSON.stringify(samMaskContour)),
+    };
+
+    // Convert mask contour to polygon points
+    currentPoints = samMaskContour.map(p => [p[0], p[1]]);
+    currentMode = 'sam'; // Stay in SAM mode
+
+    // Clear SAM prompt state but keep service running
+    samPrompts = [];
+    samPromptType = null;
+    samMaskContour = null;
+    samIsDragging = false;
+    samDragStart = null;
+    samDragCurrent = null;
+
+    // Show label modal (same as finishPolygon)
+    isDrawing = false;
+    showLabelModal();
+}
+
+// --- SAM Mouse Events ---
+
+let samClickTimer = null; // Timer to debounce single-click vs double-click
+let samPendingClick = null; // Pending click data
+
+// SAM mousedown handler (integrate into existing canvasWrapper mousedown)
+canvasWrapper.addEventListener('mousedown', (e) => {
+    if (currentMode !== 'sam' || e.button !== 0) return;
+
+    // If context menu is visible, hide it
+    if (shapeContextMenu && shapeContextMenu.style.display !== 'none') {
+        hideShapeContextMenu();
+        return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoomLevel;
+    const y = (e.clientY - rect.top) / zoomLevel;
+
+    // Record drag start
+    samIsDragging = false;
+    samDragStart = { x, y };
+    samDragCurrent = { x, y };
+
+    e.stopPropagation();
+    e.preventDefault();
+});
+
+canvasWrapper.addEventListener('mousemove', (e) => {
+    if (currentMode !== 'sam' || !samDragStart) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoomLevel;
+    const y = (e.clientY - rect.top) / zoomLevel;
+
+    const dx = x - samDragStart.x;
+    const dy = y - samDragStart.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+
+    if (dist > SAM_DRAG_THRESHOLD) {
+        samIsDragging = true;
+        samDragCurrent = { x, y };
+        // Draw drag rectangle preview
+        draw();
+    }
+});
+
+canvasWrapper.addEventListener('mouseup', (e) => {
+    if (currentMode !== 'sam' || e.button !== 0 || !samDragStart) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoomLevel;
+    const y = (e.clientY - rect.top) / zoomLevel;
+
+    if (samIsDragging) {
+        // Box prompt: clear all previous prompts (box and points don't coexist)
+        const x1 = Math.min(samDragStart.x, x);
+        const y1 = Math.min(samDragStart.y, y);
+        const x2 = Math.max(samDragStart.x, x);
+        const y2 = Math.max(samDragStart.y, y);
+
+        samPrompts = [{ type: 'rectangle', data: [x1, y1, x2, y2] }];
+        samPromptType = 'box';
+        samDragStart = null;
+        samDragCurrent = null;
+        samIsDragging = false;
+        draw();
+        samDecode();
+    } else {
+        // Click (not drag): defer to distinguish from double-click
+        const shiftKey = e.shiftKey;
+        samDragStart = null;
+        samDragCurrent = null;
+
+        // Cancel any pending click timer
+        if (samClickTimer) {
+            clearTimeout(samClickTimer);
+            samClickTimer = null;
+        }
+
+        // Store pending click; process after 200ms if no dblclick fires
+        samPendingClick = { x, y, shiftKey };
+        samClickTimer = setTimeout(() => {
+            if (samPendingClick) {
+                const label = samPendingClick.shiftKey ? 0 : 1;
+
+                // If previous was box, clear it (point and box don't coexist)
+                if (samPromptType === 'box') {
+                    samPrompts = [];
+                }
+                samPromptType = 'point';
+
+                samPrompts.push({ type: 'point', data: [samPendingClick.x, samPendingClick.y], label: label });
+                samPendingClick = null;
+                draw();
+                samDecode();
+            }
+            samClickTimer = null;
+        }, 200);
+    }
+
+    e.stopPropagation();
+    e.preventDefault();
+});
+
+// SAM double-click to confirm
+canvasWrapper.addEventListener('dblclick', (e) => {
+    if (currentMode !== 'sam' || e.button !== 0) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    // Cancel pending single-click timer to prevent adding unwanted point
+    if (samClickTimer) {
+        clearTimeout(samClickTimer);
+        samClickTimer = null;
+        samPendingClick = null;
+    }
+
+    samConfirmAnnotation();
+});
+
+// SAM mode button click
+if (samModeBtn) {
+    samModeBtn.addEventListener('click', () => setMode('sam'));
+}
+
+// When image changes, clear SAM prompts (encoder cache will be refreshed on next interaction)
+const originalHandleImageUpdate = handleImageUpdate;
+window._samOnImageUpdate = function() {
+    if (currentMode === 'sam') {
+        samDecodeVersion++;  // Invalidate any in-flight decode
+        samPrompts = [];
+        samPromptType = null;
+        samMaskContour = null;
+        samIsDragging = false;
+        samDragStart = null;
+        samDragCurrent = null;
+        // Clear samCurrentImagePath so lazy encode triggers on next interaction
+        samCurrentImagePath = null;
+    }
+};
+// Patch handleImageUpdate
+const _origHandleImageUpdate = handleImageUpdate;
+handleImageUpdate = function(message) {
+    _origHandleImageUpdate(message);
+    if (window._samOnImageUpdate) window._samOnImageUpdate();
+};
+
+// --- SAM SVG Drawing ---
+
+function drawSAMOverlay() {
+    const sw = borderWidth / zoomLevel; // Scale-independent stroke width
+
+    // Draw mask contour
+    if (samMaskContour && samMaskContour.length >= 3) {
+        const polygon = document.createElementNS(SVG_NS, 'polygon');
+        const pointsStr = samMaskContour.map(p => `${p[0]},${p[1]}`).join(' ');
+        polygon.setAttribute('points', pointsStr);
+        polygon.setAttribute('fill', 'rgba(30, 144, 255, 0.35)');
+        polygon.setAttribute('stroke', 'rgba(30, 144, 255, 0.9)');
+        polygon.setAttribute('stroke-width', sw * 1.5);
+        polygon.style.pointerEvents = 'none';
+        svgOverlay.appendChild(polygon);
+    }
+
+    // Draw prompts
+    samPrompts.forEach(prompt => {
+        if (prompt.type === 'point') {
+            const circle = document.createElementNS(SVG_NS, 'circle');
+            circle.setAttribute('cx', prompt.data[0]);
+            circle.setAttribute('cy', prompt.data[1]);
+            circle.setAttribute('r', 6 / zoomLevel);
+            if (prompt.label === 1) {
+                // Positive: green
+                circle.setAttribute('fill', 'rgba(0, 255, 0, 0.8)');
+                circle.setAttribute('stroke', 'white');
+            } else {
+                // Negative: red
+                circle.setAttribute('fill', 'rgba(255, 0, 0, 0.8)');
+                circle.setAttribute('stroke', 'white');
+            }
+            circle.setAttribute('stroke-width', sw * 0.5);
+            circle.style.pointerEvents = 'none';
+            svgOverlay.appendChild(circle);
+        } else if (prompt.type === 'rectangle') {
+            const [x1, y1, x2, y2] = prompt.data;
+            const rect = document.createElementNS(SVG_NS, 'rect');
+            rect.setAttribute('x', x1);
+            rect.setAttribute('y', y1);
+            rect.setAttribute('width', x2 - x1);
+            rect.setAttribute('height', y2 - y1);
+            rect.setAttribute('fill', 'rgba(0, 200, 0, 0.1)');
+            rect.setAttribute('stroke', 'rgba(0, 200, 0, 0.8)');
+            rect.setAttribute('stroke-width', sw);
+            rect.setAttribute('stroke-dasharray', `${4 / zoomLevel}`);
+            rect.style.pointerEvents = 'none';
+            svgOverlay.appendChild(rect);
+        }
+    });
+
+    // Draw drag-in-progress rectangle
+    if (samIsDragging && samDragStart && samDragCurrent) {
+        const x1 = Math.min(samDragStart.x, samDragCurrent.x);
+        const y1 = Math.min(samDragStart.y, samDragCurrent.y);
+        const x2 = Math.max(samDragStart.x, samDragCurrent.x);
+        const y2 = Math.max(samDragStart.y, samDragCurrent.y);
+
+        const rect = document.createElementNS(SVG_NS, 'rect');
+        rect.setAttribute('x', x1);
+        rect.setAttribute('y', y1);
+        rect.setAttribute('width', x2 - x1);
+        rect.setAttribute('height', y2 - y1);
+        rect.setAttribute('fill', 'rgba(0, 200, 0, 0.1)');
+        rect.setAttribute('stroke', 'rgba(0, 200, 0, 0.8)');
+        rect.setAttribute('stroke-width', sw);
+        rect.setAttribute('stroke-dasharray', `${4 / zoomLevel}`);
+        rect.style.pointerEvents = 'none';
+        svgOverlay.appendChild(rect);
+    }
+
+    // Status indicator
+    if (samIsEncoding) {
+        const text = document.createElementNS(SVG_NS, 'text');
+        text.setAttribute('x', 10 / zoomLevel);
+        text.setAttribute('y', 30 / zoomLevel);
+        text.setAttribute('font-size', `${16 / zoomLevel}px`);
+        text.setAttribute('fill', 'orange');
+        text.textContent = 'Encoding...';
+        text.style.pointerEvents = 'none';
+        svgOverlay.appendChild(text);
+    }
+}
