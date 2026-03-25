@@ -307,6 +307,21 @@ export class LabelMePanel {
                     case 'samStartService':
                         await this._runSamService(message.config);
                         return;
+                    case 'detectGpuCount': {
+                        // Run nvidia-smi -L to detect GPU list (async to avoid blocking extension host)
+                        const { exec } = require('child_process');
+                        exec('nvidia-smi -L', { encoding: 'utf-8', timeout: 5000 }, (err: any, stdout: string) => {
+                            let gpuList: string[] = [];
+                            if (!err && stdout) {
+                                gpuList = stdout.trim().split('\n').filter((l: string) => l.startsWith('GPU '));
+                            }
+                            this._panel.webview.postMessage({
+                                command: 'gpuDetectResult',
+                                gpus: gpuList
+                            });
+                        });
+                        return;
+                    }
                     case 'browseSamModelDir': {
                         const samFolderUris = await vscode.window.showOpenDialog({
                             canSelectFolders: true,
@@ -798,6 +813,10 @@ export class LabelMePanel {
                                 <label class="onnx-radio"><input type="radio" name="onnxDevice" value="cpu" checked /> CPU</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxDevice" value="gpu" /> GPU</label>
                             </div>
+                            <div id="onnxGpuIndexGroup" style="display:none; margin-top:6px">
+                                <label style="font-size:0.9em">GPU</label>
+                                <select id="onnxGpuIndex" style="margin-left:6px; min-width:180px"></select>
+                            </div>
                         </div>
                         <div class="onnx-form-group">
                             <label>Color Format</label>
@@ -854,10 +873,10 @@ export class LabelMePanel {
                                 <label class="onnx-radio"><input type="radio" name="samDevice" value="cpu" checked /> CPU</label>
                                 <label class="onnx-radio"><input type="radio" name="samDevice" value="gpu" /> GPU</label>
                             </div>
-                        </div>
-                        <div class="onnx-form-group">
-                            <label>Port</label>
-                            <input type="number" id="samPort" value="8765" min="1024" max="65535" style="width:80px" />
+                            <div id="samGpuIndexGroup" style="display:none; margin-top:6px">
+                                <label style="font-size:0.9em">GPU</label>
+                                <select id="samGpuIndex" style="margin-left:6px; min-width:180px"></select>
+                            </div>
                         </div>
                         <div class="onnx-form-group">
                             <label>Encode Mode <span class="onnx-hint" title='Full Image: encode the entire image (default, works well for large targets).&#10;&#10;Local Crop: encode only the currently visible viewport region when zoomed in. Better accuracy for small targets in large images. Falls back to full image when not zoomed in.'>ⓘ</span></label>
@@ -865,6 +884,10 @@ export class LabelMePanel {
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="full" checked /> Full Image</label>
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="local" /> Local Crop</label>
                             </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label>Port</label>
+                            <input type="number" id="samPort" value="8765" min="1024" max="65535" style="width:80px" />
                         </div>
                         <div class="modal-buttons">
                             <button id="samConfigOkBtn">Start Service</button>
@@ -899,7 +922,9 @@ export class LabelMePanel {
                         samPythonPath: ${JSON.stringify(this._globalState.get('samPythonPath') || '')},
                         samDevice: ${JSON.stringify(this._globalState.get('samDevice') || 'cpu')},
                         samPort: ${this._globalState.get('samPort') ?? 8765},
-                        samEncodeMode: ${JSON.stringify(this._globalState.get('samEncodeMode') || 'full')}
+                        samEncodeMode: ${JSON.stringify(this._globalState.get('samEncodeMode') || 'full')},
+                        samGpuIndex: ${this._globalState.get('samGpuIndex') ?? -1},
+                        onnxGpuIndex: ${this._globalState.get('onnxGpuIndex') ?? -1}
                     };
                 </script>
                 <script src="${scriptUri}"></script>
@@ -1080,6 +1105,7 @@ ${pathElements.join('\n')}
         colorFormat: string;
         mode: string;
         scope: string;
+        gpuIndex?: number;
     }) {
         // Validate model directory
         if (!config.modelDir || !existsSync(config.modelDir)) {
@@ -1151,9 +1177,14 @@ ${pathElements.join('\n')}
             : `"${pythonPath}" ${args.join(' ')}`;
 
         // Create terminal and run
+        const onnxEnv: { [key: string]: string } = {};
+        if (config.device === 'gpu' && config.gpuIndex !== undefined && config.gpuIndex >= 0) {
+            onnxEnv['CUDA_VISIBLE_DEVICES'] = String(config.gpuIndex);
+        }
         const terminal = vscode.window.createTerminal({
             name: 'ONNX Batch Infer',
-            hideFromUser: false
+            hideFromUser: false,
+            env: Object.keys(onnxEnv).length > 0 ? onnxEnv : undefined
         });
         terminal.show();
         terminal.sendText(command);
@@ -1171,6 +1202,7 @@ ${pathElements.join('\n')}
         pythonPath: string;
         device: string;
         port: number;
+        gpuIndex?: number;
     }) {
         // Validate model directory
         if (!config.modelDir || !existsSync(config.modelDir)) {
@@ -1212,9 +1244,14 @@ ${pathElements.join('\n')}
             : `"${pythonPath}" ${args.join(' ')}`;
 
         // Create terminal and run
+        const env: { [key: string]: string } = {};
+        if (config.device === 'gpu' && config.gpuIndex !== undefined && config.gpuIndex >= 0) {
+            env['CUDA_VISIBLE_DEVICES'] = String(config.gpuIndex);
+        }
         const terminal = vscode.window.createTerminal({
             name: 'SAM Service',
-            hideFromUser: false
+            hideFromUser: false,
+            env: Object.keys(env).length > 0 ? env : undefined
         });
         terminal.show();
         terminal.sendText(command);

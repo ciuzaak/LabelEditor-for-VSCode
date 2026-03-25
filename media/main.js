@@ -821,6 +821,35 @@ window.addEventListener('message', event => {
             }
             break;
         }
+        case 'gpuDetectResult': {
+            // Populate BOTH ONNX and SAM GPU dropdowns (whichever modal is open)
+            const gpuGroups = [
+                { group: document.getElementById('samGpuIndexGroup'), select: document.getElementById('samGpuIndex') },
+                { group: document.getElementById('onnxGpuIndexGroup'), select: document.getElementById('onnxGpuIndex') }
+            ];
+            for (const { group, select } of gpuGroups) {
+                if (group && select && message.gpus && message.gpus.length > 1) {
+                    select.innerHTML = '';
+                    message.gpus.forEach((gpu, idx) => {
+                        const opt = document.createElement('option');
+                        opt.value = idx;
+                        const match = gpu.match(/^GPU\s+(\d+):\s*(.+?)(?:\s*\(UUID.*)?$/);
+                        opt.textContent = match ? `GPU ${match[1]}: ${match[2]}` : gpu;
+                        select.appendChild(opt);
+                    });
+                    group.style.display = '';
+                    // Restore saved GPU index if available
+                    const pendingIdx = group.__pendingGpuIndex;
+                    if (pendingIdx !== undefined && pendingIdx >= 0 && pendingIdx < message.gpus.length) {
+                        select.value = pendingIdx;
+                    }
+                    delete group.__pendingGpuIndex;
+                } else if (group) {
+                    group.style.display = 'none';
+                }
+            }
+            break;
+        }
     }
 });
 
@@ -1092,6 +1121,13 @@ document.addEventListener('keydown', (e) => {
 
     // ESC: Cancel drawing or exit drag/edit mode
     if (e.key === 'Escape') {
+        // Skip if an input/textarea/select element is focused (e.g. search box)
+        // Let those controls handle their own Escape behavior without side-effects
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
+            return;
+        }
+
         // First priority: hide context menu if visible
         if (shapeContextMenu && shapeContextMenu.style.display !== 'none') {
             hideShapeContextMenu();
@@ -1109,6 +1145,12 @@ document.addEventListener('keydown', (e) => {
             isDrawing = false;
             currentPoints = [];
             draw();
+            return;
+        }
+
+        // Fourth priority: clear SAM prompts (ESC clears all points/box at once)
+        if (currentMode === 'sam' && (samPrompts.length > 0 || samMaskContour)) {
+            samClearState();
         }
     }
 
@@ -3015,6 +3057,18 @@ function showOnnxInferModal() {
     // Update image count based on scope
     updateOnnxImageCount();
 
+    // Trigger GPU detection if GPU is selected
+    const onnxGpuGroup = document.getElementById('onnxGpuIndexGroup');
+    const onnxSelectedDevice = document.querySelector('input[name="onnxDevice"]:checked')?.value || 'cpu';
+    // Store pending GPU index to restore after detection result arrives
+    const pendingOnnxGpuIndex = savedState.onnxGpuIndex ?? gs.onnxGpuIndex ?? -1;
+    if (onnxSelectedDevice === 'gpu') {
+        document.getElementById('onnxGpuIndexGroup').__pendingGpuIndex = pendingOnnxGpuIndex;
+        vscode.postMessage({ command: 'detectGpuCount' });
+    } else if (onnxGpuGroup) {
+        onnxGpuGroup.style.display = 'none';
+    }
+
     // Show modal
     if (onnxInferModal) onnxInferModal.style.display = 'flex';
     if (onnxModelDirInput && !onnxModelDirInput.value) onnxModelDirInput.focus();
@@ -3043,6 +3097,15 @@ function submitOnnxInfer() {
     const colorFormat = document.querySelector('input[name="onnxColor"]:checked')?.value || 'rgb';
     const scope = document.querySelector('input[name="onnxScope"]:checked')?.value || 'all';
     const mode = document.querySelector('input[name="onnxMode"]:checked')?.value || 'skip';
+    const onnxGpuSelect = document.getElementById('onnxGpuIndex');
+    const onnxGpuGroup = document.getElementById('onnxGpuIndexGroup');
+    // Use dropdown value if populated, otherwise fall back to saved/persisted index
+    const savedState = vscode.getState() || {};
+    const gpuIndex = (device === 'gpu')
+        ? (onnxGpuGroup && onnxGpuGroup.style.display !== 'none' && onnxGpuSelect
+            ? parseInt(onnxGpuSelect.value)
+            : (savedState.onnxGpuIndex ?? (typeof initialGlobalSettings !== 'undefined' ? initialGlobalSettings.onnxGpuIndex : undefined) ?? 0))
+        : undefined;
 
     if (!modelDir) {
         if (onnxModelDirInput) onnxModelDirInput.focus();
@@ -3056,7 +3119,8 @@ function submitOnnxInfer() {
         onnxDevice: device,
         onnxColor: colorFormat,
         onnxScope: scope,
-        onnxMode: mode
+        onnxMode: mode,
+        onnxGpuIndex: gpuIndex ?? -1
     });
 
     // Send to extension backend
@@ -3068,7 +3132,8 @@ function submitOnnxInfer() {
             device: device,
             colorFormat: colorFormat,
             scope: scope,
-            mode: mode
+            mode: mode,
+            gpuIndex: gpuIndex
         }
     });
 
@@ -3104,6 +3169,17 @@ if (onnxPythonPathBrowse) {
 // Scope radio change updates image count
 document.querySelectorAll('input[name="onnxScope"]').forEach(radio => {
     radio.addEventListener('change', updateOnnxImageCount);
+});
+// Device radio change: toggle GPU index dropdown
+document.querySelectorAll('input[name="onnxDevice"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        const onnxGpuGroup = document.getElementById('onnxGpuIndexGroup');
+        if (e.target.value === 'gpu') {
+            vscode.postMessage({ command: 'detectGpuCount' });
+        } else if (onnxGpuGroup) {
+            onnxGpuGroup.style.display = 'none';
+        }
+    });
 });
 // Allow Enter key to submit in model dir input
 if (onnxModelDirInput) {
@@ -3808,6 +3884,18 @@ function showSamConfigModal() {
     restoreRadio('samDevice', savedState.samDevice ?? gs.samDevice);
     restoreRadio('samEncodeMode', savedState.samEncodeMode ?? gs.samEncodeMode ?? 'full');
 
+    // Trigger GPU detection if GPU is selected
+    const gpuGroup = document.getElementById('samGpuIndexGroup');
+    const selectedDevice = document.querySelector('input[name="samDevice"]:checked')?.value || 'cpu';
+    // Store pending GPU index to restore after detection result arrives
+    const pendingSamGpuIndex = savedState.samGpuIndex ?? gs.samGpuIndex ?? -1;
+    if (selectedDevice === 'gpu') {
+        document.getElementById('samGpuIndexGroup')?.__pendingGpuIndex = pendingSamGpuIndex;
+        vscode.postMessage({ command: 'detectGpuCount' });
+    } else if (gpuGroup) {
+        gpuGroup.style.display = 'none';
+    }
+
     if (samConfigModal) samConfigModal.style.display = 'flex';
     if (modelDirInput && !modelDirInput.value) modelDirInput.focus();
 }
@@ -3822,6 +3910,15 @@ function submitSamConfig() {
     const device = document.querySelector('input[name="samDevice"]:checked')?.value || 'cpu';
     const port = parseInt(document.getElementById('samPort')?.value) || 8765;
     const encodeMode = document.querySelector('input[name="samEncodeMode"]:checked')?.value || 'full';
+    const gpuSelect = document.getElementById('samGpuIndex');
+    const gpuGroup = document.getElementById('samGpuIndexGroup');
+    // Use dropdown value if populated, otherwise fall back to saved/persisted index
+    const samSavedState = vscode.getState() || {};
+    const gpuIndex = (device === 'gpu')
+        ? (gpuGroup && gpuGroup.style.display !== 'none' && gpuSelect
+            ? parseInt(gpuSelect.value)
+            : (samSavedState.samGpuIndex ?? (typeof initialGlobalSettings !== 'undefined' ? initialGlobalSettings.samGpuIndex : undefined) ?? 0))
+        : undefined;
 
     if (!modelDir) {
         const input = document.getElementById('samModelDir');
@@ -3830,7 +3927,7 @@ function submitSamConfig() {
     }
 
     // Persist settings
-    const settings = { samModelDir: modelDir, samPythonPath: pythonPath, samDevice: device, samPort: port, samEncodeMode: encodeMode };
+    const settings = { samModelDir: modelDir, samPythonPath: pythonPath, samDevice: device, samPort: port, samEncodeMode: encodeMode, samGpuIndex: gpuIndex ?? -1 };
     const state = vscode.getState() || {};
     Object.assign(state, settings);
     vscode.setState(state);
@@ -3844,7 +3941,7 @@ function submitSamConfig() {
     // Send to extension to start service
     vscode.postMessage({
         command: 'samStartService',
-        config: { modelDir, pythonPath, device, port }
+        config: { modelDir, pythonPath, device, port, gpuIndex }
     });
 
     hideSamConfigModal();
@@ -3886,6 +3983,17 @@ if (samConfigModal) {
         if (e.target === samConfigModal) hideSamConfigModal();
     });
 }
+// Device radio change: toggle GPU index dropdown
+document.querySelectorAll('input[name="samDevice"]').forEach(radio => {
+    radio.addEventListener('change', (e) => {
+        const gpuGroup = document.getElementById('samGpuIndexGroup');
+        if (e.target.value === 'gpu') {
+            vscode.postMessage({ command: 'detectGpuCount' });
+        } else if (gpuGroup) {
+            gpuGroup.style.display = 'none';
+        }
+    });
+});
 // Enter/Escape in SAM config modal
 const samModelDirInput_ = document.getElementById('samModelDir');
 if (samModelDirInput_) {

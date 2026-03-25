@@ -2,6 +2,19 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.12.2] - 2026-03-25
+
+### Added
+- **GPU Selection for ONNX/SAM**: Multi-GPU machines now show a GPU dropdown in ONNX Batch Infer and SAM Config modals
+  - GPU selection persists across sessions via globalState
+  - Automatically falls back to GPU 0 if the previously selected GPU is no longer available
+- **ESC Clears SAM Prompts**: Pressing ESC in SAM mode now clears all active points, boxes, and mask previews at once
+
+### Fixed
+- **SAM ESC vs Search Conflict**: Pressing ESC to close the sidebar search box in SAM mode no longer accidentally clears in-progress SAM prompts
+- **GPU Detection Blocking**: GPU detection (`nvidia-smi`) now runs asynchronously, preventing the extension host from freezing for up to 5 seconds
+- **GPU Submit Before Detection**: Submitting ONNX/SAM config before GPU detection completes now correctly uses the persisted GPU index instead of defaulting to undefined
+
 ## [0.12.1] - 2026-03-25
 
 ### Added
