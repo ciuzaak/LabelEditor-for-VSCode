@@ -2,6 +2,11 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.12.3] - 2026-03-25
+
+### Fixed
+- **Critical: Plugin Fails to Load**: Fixed JavaScript syntax error (`Invalid left-hand side in assignment`) caused by optional chaining `?.` on the left side of an assignment in SAM GPU config
+
 ## [0.12.2] - 2026-03-25
 
 ### Added

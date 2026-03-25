@@ -3890,7 +3890,8 @@ function showSamConfigModal() {
     // Store pending GPU index to restore after detection result arrives
     const pendingSamGpuIndex = savedState.samGpuIndex ?? gs.samGpuIndex ?? -1;
     if (selectedDevice === 'gpu') {
-        document.getElementById('samGpuIndexGroup')?.__pendingGpuIndex = pendingSamGpuIndex;
+        const samGpuGroup = document.getElementById('samGpuIndexGroup');
+        if (samGpuGroup) samGpuGroup.__pendingGpuIndex = pendingSamGpuIndex;
         vscode.postMessage({ command: 'detectGpuCount' });
     } else if (gpuGroup) {
         gpuGroup.style.display = 'none';
