@@ -2,6 +2,13 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.12.5] - 2026-03-26
+
+### Fixed
+- **SAM Mode Left-Click Selection**: Left-clicking an existing annotation in SAM idle state now selects it (consistent with other modes)
+  - Only applies when SAM is idle (no active prompts, mask, or pending click); during active annotation, left-click still adds SAM prompts as before
+- **SAM Mode Deselection**: Clicking empty space to start SAM annotation now properly clears any previously selected shape highlight
+
 ## [0.12.4] - 2026-03-26
 
 ### Fixed

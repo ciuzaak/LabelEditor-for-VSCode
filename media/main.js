@@ -4372,6 +4372,21 @@ canvasWrapper.addEventListener('mousedown', (e) => {
     const x = (e.clientX - rect.left) / zoomLevel;
     const y = (e.clientY - rect.top) / zoomLevel;
 
+    // If SAM is idle (no prompts, no mask, no pending click), check if clicking
+    // on an existing shape. If so, let the main mousedown handler select it.
+    if (samPrompts.length === 0 && !samMaskContour && !samPendingClick && !samClickTimer) {
+        const overlappingShapes = findAllShapesAt(x, y);
+        if (overlappingShapes.length > 0) {
+            return; // Don't stopPropagation — main handler will select the shape
+        }
+    }
+
+    // Clear any existing shape selection since we're starting SAM interaction
+    if (selectedShapeIndex !== -1) {
+        selectedShapeIndex = -1;
+        renderShapeList();
+        draw();
+    }
 
     // Record drag start
     samIsDragging = false;
