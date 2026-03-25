@@ -381,6 +381,9 @@ class SAMHandler(BaseHTTPRequestHandler):
         # Apply crop if specified
         if crop:
             x, y, w, h = int(crop["x"]), int(crop["y"]), int(crop["w"]), int(crop["h"])
+            # Read floating-point viewport origin (falls back to integer x/y for compatibility)
+            origin_x = float(crop.get("originX", x))
+            origin_y = float(crop.get("originY", y))
             img_h, img_w = cv_image.shape[:2]
             # Clamp to image bounds
             x = max(0, min(x, img_w - 1))
@@ -390,7 +393,18 @@ class SAMHandler(BaseHTTPRequestHandler):
             if w <= 0 or h <= 0:
                 self._send_json({"error": "Invalid crop region"}, 400)
                 return
-            cv_image = cv_image[y:y + h, x:x + w]
+            # Subpixel crop: extract outer region, then warpAffine to shift by fractional remainder
+            fx = origin_x - x
+            fy = origin_y - y
+            if abs(fx) > 1e-3 or abs(fy) > 1e-3:
+                # Need subpixel shift: extract slightly larger region
+                src = cv_image[y:min(y + h + 1, img_h), x:min(x + w + 1, img_w)]
+                M = np.array([[1, 0, -fx], [0, 1, -fy]], dtype=np.float32)
+                cv_image = cv2.warpAffine(src, M, (w, h),
+                                          flags=cv2.INTER_LINEAR,
+                                          borderMode=cv2.BORDER_REPLICATE)
+            else:
+                cv_image = cv_image[y:y + h, x:x + w]
 
         # Encode
         if SAMHandler.model is None:
@@ -450,6 +464,8 @@ class SAMHandler(BaseHTTPRequestHandler):
         # Ensure it's a list of [x, y] pairs
         if isinstance(contour_points[0], (int, float)):
             contour_points = [contour_points]
+        # Align mask-derived polygon points with pixel centers in display space
+        contour_points = [[p[0] + 0.5, p[1] + 0.5] for p in contour_points]
 
         self.log_message("Decoded in %.0fms, contour points: %d", (t1 - t0) * 1000, len(contour_points))
         self._send_json({

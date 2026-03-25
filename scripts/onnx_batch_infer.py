@@ -33,6 +33,8 @@ def mask_to_shapes(mask, value2label):
             points = contour.squeeze().tolist()
             if isinstance(points[0], int):
                 continue
+            # Align mask-derived polygon points with pixel centers in display space
+            points = [[p[0] + 0.5, p[1] + 0.5] for p in points]
             shapes.append({
                 "label": label_name,
                 "points": points,

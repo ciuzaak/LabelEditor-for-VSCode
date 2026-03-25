@@ -692,7 +692,7 @@ export class LabelMePanel {
                                     <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)">▭</button>
                                     <button id="lineModeBtn" class="mode-btn" title="Line Mode (L)">⟋</button>
                                     <button id="pointModeBtn" class="mode-btn" title="Point Mode (O)">•</button>
-                                    <button id="samModeBtn" class="mode-btn" title="SAM AI Mode (I)">🤖</button>
+                                    <button id="samModeBtn" class="mode-btn" title="SAM AI Mode (I)">🧠</button>
                                 </div>
                                 <div class="sidebar-actions">
                                     <button id="settingsMenuBtn" class="sidebar-icon-btn" title="Settings">⚙️</button>

@@ -2,6 +2,20 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.12.1] - 2026-03-25
+
+### Added
+- **SAM Local Crop Mode**: Optional viewport-based encoding for improved accuracy on small targets
+  - Select "Full Image" or "Local Crop" encode mode when configuring SAM service
+  - In local mode, zoomed-in viewport is used as the encoding region instead of the full image
+  - Visual indicator (yellow dashed rectangle) shows the currently encoded crop region
+  - Subpixel-accurate crop extraction preserves fractional viewport origin via `cv2.warpAffine`
+  - Smart state machine: fresh sequence detection, prompt-aware cache, modal cancel/restore
+
+### Fixed
+- **Mask Polygon Alignment**: Added +0.5 pixel-center offset to mask-derived contour points in both SAM and ONNX batch inference, fixing systematic upper-left bias when zoomed in
+- **SAM Toolbar Icon**: Changed SAM mode button from 🤖 to 🧠 to match README and CHANGELOG documentation
+
 ## [0.12.0] - 2026-03-24
 
 ### Added

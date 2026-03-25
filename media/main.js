@@ -2088,13 +2088,14 @@ function cancelLabelInput() {
     // 对于其他模式（polygon, line, rectangle），回到继续绘制状态（不删除任何点）
     // 因为完成标注的操作是"闭合多边形"或"确定矩形"，取消只是撤销这个完成操作
     if (currentMode === 'sam') {
-        // SAM mode: restore prompts, mask, crop and sequence state
+        // SAM mode: restore prompts, mask, crop, sequence state, and embedding identity
         if (samSavedStateBeforeConfirm) {
             samPrompts = samSavedStateBeforeConfirm.prompts;
             samPromptType = samSavedStateBeforeConfirm.promptType;
             samMaskContour = samSavedStateBeforeConfirm.maskContour;
             samCachedCrop = samSavedStateBeforeConfirm.cachedCrop;
             samIsFreshSequence = samSavedStateBeforeConfirm.isFreshSequence;
+            samCurrentImagePath = samSavedStateBeforeConfirm.currentImagePath;
             samSavedStateBeforeConfirm = null;
         }
         currentPoints = [];
@@ -3924,10 +3925,13 @@ function samGetVisibleCrop() {
     }
 
     // Calculate crop in original image coordinates
-    // Compute right/bottom edges separately to guarantee full viewport coverage
-    // even when zoom/scroll values are fractional.
-    let x = Math.floor(scrollX / zoomLevel);
-    let y = Math.floor(scrollY / zoomLevel);
+    // Store both integer bounds (for backend raster extraction) and true floating origin
+    // (for accurate prompt/contour coordinate translation)
+    const originX = scrollX / zoomLevel;
+    const originY = scrollY / zoomLevel;
+
+    let x = Math.floor(originX);
+    let y = Math.floor(originY);
     let right = Math.ceil((scrollX + viewportW) / zoomLevel);
     let bottom = Math.ceil((scrollY + viewportH) / zoomLevel);
 
@@ -3940,14 +3944,14 @@ function samGetVisibleCrop() {
     let w = right - x;
     let h = bottom - y;
 
-    return { x, y, w, h };
+    return { x, y, w, h, originX, originY };
 }
 
 // Check if a point (in original image coords) falls within a crop region
 function samPointInCrop(px, py, crop) {
     if (!crop) return true; // No crop = full image, always in range
-    return px >= crop.x && px <= crop.x + crop.w &&
-           py >= crop.y && py <= crop.y + crop.h;
+    return px >= crop.originX && px <= crop.originX + crop.w &&
+           py >= crop.originY && py <= crop.originY + crop.h;
 }
 
 async function samEncode(imagePath, crop) {
@@ -4058,16 +4062,16 @@ async function samDecode() {
         if (samCurrentImagePath !== requestPath) return;
     }
 
-    // Translate prompt coordinates if crop is active
+    // Translate prompt coordinates using floating origin if crop is active
     let decodedPrompts = samPrompts;
     if (samCachedCrop) {
         decodedPrompts = samPrompts.map(p => {
             if (p.type === 'point') {
-                return { ...p, data: [p.data[0] - samCachedCrop.x, p.data[1] - samCachedCrop.y] };
+                return { ...p, data: [p.data[0] - samCachedCrop.originX, p.data[1] - samCachedCrop.originY] };
             } else if (p.type === 'rectangle') {
                 return { ...p, data: [
-                    p.data[0] - samCachedCrop.x, p.data[1] - samCachedCrop.y,
-                    p.data[2] - samCachedCrop.x, p.data[3] - samCachedCrop.y
+                    p.data[0] - samCachedCrop.originX, p.data[1] - samCachedCrop.originY,
+                    p.data[2] - samCachedCrop.originX, p.data[3] - samCachedCrop.originY
                 ] };
             }
             return p;
@@ -4087,9 +4091,9 @@ async function samDecode() {
         // Only apply if this is still the latest request
         if (requestVersion !== samDecodeVersion) return;
         if (data.ok) {
-            // Translate contour coordinates back to full-image space if crop is active
+            // Translate contour coordinates back to full-image space using floating origin
             if (samCachedCrop && data.contour) {
-                samMaskContour = data.contour.map(p => [p[0] + samCachedCrop.x, p[1] + samCachedCrop.y]);
+                samMaskContour = data.contour.map(p => [p[0] + samCachedCrop.originX, p[1] + samCachedCrop.originY]);
             } else {
                 samMaskContour = data.contour;
             }
@@ -4184,7 +4188,8 @@ function samConfirmAnnotation() {
         promptType: samPromptType,
         maskContour: JSON.parse(JSON.stringify(samMaskContour)),
         cachedCrop: samCachedCrop ? JSON.parse(JSON.stringify(samCachedCrop)) : null,
-        isFreshSequence: samIsFreshSequence
+        isFreshSequence: samIsFreshSequence,
+        currentImagePath: samCurrentImagePath
     };
 
     // Convert mask contour to polygon points
