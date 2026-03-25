@@ -301,6 +301,7 @@ class SAMHandler(BaseHTTPRequestHandler):
     model = None
     cached_embedding = None
     cached_image_path = None
+    cached_crop = None  # {"x": int, "y": int, "w": int, "h": int} or None
 
     def log_message(self, format, *args):
         """Override to add timestamp and flush."""
@@ -357,9 +358,16 @@ class SAMHandler(BaseHTTPRequestHandler):
             self._send_json({"error": f"Image not found: {image_path}"}, 400)
             return
 
-        # Check cache
-        if SAMHandler.cached_image_path == image_path and SAMHandler.cached_embedding is not None:
-            self.log_message("Encoder cache hit: %s", os.path.basename(image_path))
+        # Parse optional crop region
+        crop = body.get("crop", None)  # {"x": int, "y": int, "w": int, "h": int}
+
+        # Check cache (must match both image path and crop region)
+        if (SAMHandler.cached_image_path == image_path
+                and SAMHandler.cached_embedding is not None
+                and SAMHandler.cached_crop == crop):
+            self.log_message("Encoder cache hit: %s%s",
+                             os.path.basename(image_path),
+                             f" crop={crop}" if crop else "")
             self._send_json({"ok": True, "cached": True})
             return
 
@@ -370,6 +378,20 @@ class SAMHandler(BaseHTTPRequestHandler):
             self._send_json({"error": f"Failed to read image: {image_path}"}, 400)
             return
 
+        # Apply crop if specified
+        if crop:
+            x, y, w, h = int(crop["x"]), int(crop["y"]), int(crop["w"]), int(crop["h"])
+            img_h, img_w = cv_image.shape[:2]
+            # Clamp to image bounds
+            x = max(0, min(x, img_w - 1))
+            y = max(0, min(y, img_h - 1))
+            w = min(w, img_w - x)
+            h = min(h, img_h - y)
+            if w <= 0 or h <= 0:
+                self._send_json({"error": "Invalid crop region"}, 400)
+                return
+            cv_image = cv_image[y:y + h, x:x + w]
+
         # Encode
         if SAMHandler.model is None:
             self._send_json({"error": "Model not loaded"}, 500)
@@ -379,8 +401,11 @@ class SAMHandler(BaseHTTPRequestHandler):
 
         SAMHandler.cached_embedding = embedding
         SAMHandler.cached_image_path = image_path
+        SAMHandler.cached_crop = crop
 
-        self.log_message("Encoded %s in %.0fms", os.path.basename(image_path), (t1 - t0) * 1000)
+        crop_info = f" crop=({x},{y},{w},{h})" if crop else ""
+        self.log_message("Encoded %s%s in %.0fms",
+                         os.path.basename(image_path), crop_info, (t1 - t0) * 1000)
         self._send_json({"ok": True, "cached": False, "time_ms": round((t1 - t0) * 1000)})
 
     def _handle_decode(self, body):

@@ -859,6 +859,13 @@ export class LabelMePanel {
                             <label>Port</label>
                             <input type="number" id="samPort" value="8765" min="1024" max="65535" style="width:80px" />
                         </div>
+                        <div class="onnx-form-group">
+                            <label>Encode Mode <span class="onnx-hint" title='Full Image: encode the entire image (default, works well for large targets).&#10;&#10;Local Crop: encode only the currently visible viewport region when zoomed in. Better accuracy for small targets in large images. Falls back to full image when not zoomed in.'>ⓘ</span></label>
+                            <div class="onnx-radio-group">
+                                <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="full" checked /> Full Image</label>
+                                <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="local" /> Local Crop</label>
+                            </div>
+                        </div>
                         <div class="modal-buttons">
                             <button id="samConfigOkBtn">Start Service</button>
                             <button id="samConfigCancelBtn">Cancel</button>
@@ -891,7 +898,8 @@ export class LabelMePanel {
                         samModelDir: ${JSON.stringify(this._globalState.get('samModelDir') || '')},
                         samPythonPath: ${JSON.stringify(this._globalState.get('samPythonPath') || '')},
                         samDevice: ${JSON.stringify(this._globalState.get('samDevice') || 'cpu')},
-                        samPort: ${this._globalState.get('samPort') ?? 8765}
+                        samPort: ${this._globalState.get('samPort') ?? 8765},
+                        samEncodeMode: ${JSON.stringify(this._globalState.get('samEncodeMode') || 'full')}
                     };
                 </script>
                 <script src="${scriptUri}"></script>

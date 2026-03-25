@@ -93,6 +93,9 @@ let samIsEncoding = false;        // 是否正在 encode
 let samIsDecoding = false;        // 是否正在 decode
 let samDecodeVersion = 0;         // 用于无效化过期的 decode 响应
 const SAM_DRAG_THRESHOLD = 5;     // 拖拽阈值（像素）
+let samEncodeMode = 'full';       // 'full' | 'local' — encode entire image or visible viewport
+let samCachedCrop = null;         // { x, y, w, h } — crop region of the currently cached encoding (null = full image)
+let samIsFreshSequence = true;    // True if we are starting a new prompt sequence and can adopt a new crop
 
 // Zoom & Pan variables
 let zoomLevel = 1;
@@ -228,6 +231,18 @@ if (vscodeState && vscodeState.lockViewEnabled !== undefined) {
 }
 if (vscodeState && vscodeState.lockedViewState) {
     lockedViewState = vscodeState.lockedViewState;
+}
+
+// 从vscode state恢复SAM配置 (先从vscode state，再从globalSettings)
+if (vscodeState && vscodeState.samEncodeMode) {
+    samEncodeMode = vscodeState.samEncodeMode;
+} else if (initialGlobalSettings.samEncodeMode) {
+    samEncodeMode = initialGlobalSettings.samEncodeMode;
+}
+if (vscodeState && vscodeState.samPort !== undefined) {
+    samServicePort = vscodeState.samPort;
+} else if (initialGlobalSettings.samPort !== undefined) {
+    samServicePort = initialGlobalSettings.samPort;
 }
 
 // 初始化UI显示值
@@ -2073,11 +2088,13 @@ function cancelLabelInput() {
     // 对于其他模式（polygon, line, rectangle），回到继续绘制状态（不删除任何点）
     // 因为完成标注的操作是"闭合多边形"或"确定矩形"，取消只是撤销这个完成操作
     if (currentMode === 'sam') {
-        // SAM mode: restore prompts and mask so user can continue editing
+        // SAM mode: restore prompts, mask, crop and sequence state
         if (samSavedStateBeforeConfirm) {
             samPrompts = samSavedStateBeforeConfirm.prompts;
             samPromptType = samSavedStateBeforeConfirm.promptType;
             samMaskContour = samSavedStateBeforeConfirm.maskContour;
+            samCachedCrop = samSavedStateBeforeConfirm.cachedCrop;
+            samIsFreshSequence = samSavedStateBeforeConfirm.isFreshSequence;
             samSavedStateBeforeConfirm = null;
         }
         currentPoints = [];
@@ -3788,6 +3805,7 @@ function showSamConfigModal() {
         if (radio) radio.checked = true;
     };
     restoreRadio('samDevice', savedState.samDevice ?? gs.samDevice);
+    restoreRadio('samEncodeMode', savedState.samEncodeMode ?? gs.samEncodeMode ?? 'full');
 
     if (samConfigModal) samConfigModal.style.display = 'flex';
     if (modelDirInput && !modelDirInput.value) modelDirInput.focus();
@@ -3802,6 +3820,7 @@ function submitSamConfig() {
     const pythonPath = document.getElementById('samPythonPath')?.value.trim() || '';
     const device = document.querySelector('input[name="samDevice"]:checked')?.value || 'cpu';
     const port = parseInt(document.getElementById('samPort')?.value) || 8765;
+    const encodeMode = document.querySelector('input[name="samEncodeMode"]:checked')?.value || 'full';
 
     if (!modelDir) {
         const input = document.getElementById('samModelDir');
@@ -3810,7 +3829,7 @@ function submitSamConfig() {
     }
 
     // Persist settings
-    const settings = { samModelDir: modelDir, samPythonPath: pythonPath, samDevice: device, samPort: port };
+    const settings = { samModelDir: modelDir, samPythonPath: pythonPath, samDevice: device, samPort: port, samEncodeMode: encodeMode };
     const state = vscode.getState() || {};
     Object.assign(state, settings);
     vscode.setState(state);
@@ -3819,6 +3838,7 @@ function submitSamConfig() {
     }
 
     samServicePort = port;
+    samEncodeMode = encodeMode;
 
     // Send to extension to start service
     vscode.postMessage({
@@ -3888,12 +3908,55 @@ async function samPingService() {
 
 let samEncodePromise = null; // Serialization chain for encode requests
 
-async function samEncode(imagePath) {
+// Calculate the current visible viewport region in original image coordinates
+function samGetVisibleCrop() {
+    const scrollX = canvasContainer.scrollLeft;
+    const scrollY = canvasContainer.scrollTop;
+    const viewportW = canvasContainer.clientWidth;
+    const viewportH = canvasContainer.clientHeight;
+
+    const imageW = img.width * zoomLevel;
+    const imageH = img.height * zoomLevel;
+
+    // If image fits in viewport (no scroll needed), return null (use full image)
+    if (imageW <= viewportW && imageH <= viewportH) {
+        return null;
+    }
+
+    // Calculate crop in original image coordinates
+    // Compute right/bottom edges separately to guarantee full viewport coverage
+    // even when zoom/scroll values are fractional.
+    let x = Math.floor(scrollX / zoomLevel);
+    let y = Math.floor(scrollY / zoomLevel);
+    let right = Math.ceil((scrollX + viewportW) / zoomLevel);
+    let bottom = Math.ceil((scrollY + viewportH) / zoomLevel);
+
+    // Clamp to image bounds
+    x = Math.max(0, Math.min(x, img.width - 1));
+    y = Math.max(0, Math.min(y, img.height - 1));
+    right = Math.min(right, img.width);
+    bottom = Math.min(bottom, img.height);
+
+    let w = right - x;
+    let h = bottom - y;
+
+    return { x, y, w, h };
+}
+
+// Check if a point (in original image coords) falls within a crop region
+function samPointInCrop(px, py, crop) {
+    if (!crop) return true; // No crop = full image, always in range
+    return px >= crop.x && px <= crop.x + crop.w &&
+           py >= crop.y && py <= crop.y + crop.h;
+}
+
+async function samEncode(imagePath, crop) {
     // If an encode is already in flight, wait for it to finish, then re-check
     if (samEncodePromise) {
         await samEncodePromise;
-        // After previous encode settled, check if this image is already cached
-        if (samCurrentImagePath === imagePath) return;
+        // After previous encode settled, check if cache matches
+        if (samCurrentImagePath === imagePath &&
+            JSON.stringify(samCachedCrop) === JSON.stringify(crop)) return;
     }
 
     const doEncode = async () => {
@@ -3901,15 +3964,20 @@ async function samEncode(imagePath) {
         statusSpan.textContent = 'SAM Encoding...';
         statusSpan.style.color = 'orange';
         try {
+            const payload = { image_path: imagePath };
+            if (crop) payload.crop = crop;
+
             const resp = await fetch(`http://127.0.0.1:${samServicePort}/encode`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ image_path: imagePath })
+                body: JSON.stringify(payload)
             });
             const data = await resp.json();
             if (data.ok) {
                 samCurrentImagePath = imagePath;
-                statusSpan.textContent = `SAM Ready (${data.time_ms || 0}ms)`;
+                samCachedCrop = crop || null;
+                const modeLabel = crop ? 'Local' : 'Full';
+                statusSpan.textContent = `SAM Ready [${modeLabel}] (${data.time_ms || 0}ms)`;
                 statusSpan.style.color = 'limegreen';
             } else {
                 statusSpan.textContent = 'SAM Encode Error';
@@ -3934,15 +4002,76 @@ async function samDecode() {
     // Capture version BEFORE any async work to detect state changes during encode
     const preEncodeVersion = samDecodeVersion;
 
-    // Lazy encode: ensure current image is encoded before first decode
+    // Determine encode parameters based on mode
     const requestPath = currentAbsoluteImagePath || imagePath;
-    if (samCurrentImagePath !== requestPath) {
-        await samEncode(requestPath);
+    let requestCrop = null;
+    if (samEncodeMode === 'local') {
+        requestCrop = samGetVisibleCrop(); // null if no scrollbars (falls back to full)
+    }
+
+    // Lazy encode: ensure current image is encoded before first decode
+    // In local mode, also re-encode when:
+    //   1. This is a fresh sequence AND the current viewport crop differs from cached
+    //   2. Any prompt falls outside the existing cached crop (user scrolled away)
+    let needEncode = (samCurrentImagePath !== requestPath);
+    if (!needEncode && samEncodeMode === 'local') {
+        const cropMismatched = JSON.stringify(requestCrop) !== JSON.stringify(samCachedCrop);
+        
+        if (samIsFreshSequence && cropMismatched) {
+            // Fresh sequence: safe to adopt current viewport as new crop
+            needEncode = true;
+        } else {
+            // Sequence in progress: stick to the existing cached crop to avoid orphaning old prompts.
+            // Only re-encode if a prompt actually falls outside that cached region.
+            for (const prompt of samPrompts) {
+                if (prompt.type === 'point') {
+                    if (!samPointInCrop(prompt.data[0], prompt.data[1], samCachedCrop)) {
+                        needEncode = true;
+                        break;
+                    }
+                } else if (prompt.type === 'rectangle') {
+                    if (!samPointInCrop(prompt.data[0], prompt.data[1], samCachedCrop) ||
+                        !samPointInCrop(prompt.data[2], prompt.data[3], samCachedCrop)) {
+                        needEncode = true;
+                        break;
+                    }
+                }
+            }
+            
+            // If re-encoding is needed because prompts were outside, clear older prompts.
+            if (needEncode) {
+                samPrompts = [samPrompts[samPrompts.length - 1]]; // Keep only the latest prompt
+                samMaskContour = null;
+                samIsFreshSequence = true; // We are essentially starting over
+            }
+        }
+    }
+
+    if (needEncode) {
+        await samEncode(requestPath, requestCrop);
+        // After encode success/fail, reset fresh flag (it will be true again on clear/confirm)
+        samIsFreshSequence = false;
         // After encode, revalidate: has the state been cleared or image changed?
         if (preEncodeVersion !== samDecodeVersion) return;
         const activePath = currentAbsoluteImagePath || imagePath;
         if (activePath !== requestPath) return;
         if (samCurrentImagePath !== requestPath) return;
+    }
+
+    // Translate prompt coordinates if crop is active
+    let decodedPrompts = samPrompts;
+    if (samCachedCrop) {
+        decodedPrompts = samPrompts.map(p => {
+            if (p.type === 'point') {
+                return { ...p, data: [p.data[0] - samCachedCrop.x, p.data[1] - samCachedCrop.y] };
+            } else if (p.type === 'rectangle') {
+                return { ...p, data: [
+                    p.data[0] - samCachedCrop.x, p.data[1] - samCachedCrop.y,
+                    p.data[2] - samCachedCrop.x, p.data[3] - samCachedCrop.y
+                ] };
+            }
+            return p;
+        });
     }
 
     // Capture version at request time to detect stale responses
@@ -3952,14 +4081,20 @@ async function samDecode() {
         const resp = await fetch(`http://127.0.0.1:${samServicePort}/decode`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompts: samPrompts })
+            body: JSON.stringify({ prompts: decodedPrompts })
         });
         const data = await resp.json();
         // Only apply if this is still the latest request
         if (requestVersion !== samDecodeVersion) return;
         if (data.ok) {
-            samMaskContour = data.contour;
-            statusSpan.textContent = `SAM Decoded (${data.time_ms || 0}ms)`;
+            // Translate contour coordinates back to full-image space if crop is active
+            if (samCachedCrop && data.contour) {
+                samMaskContour = data.contour.map(p => [p[0] + samCachedCrop.x, p[1] + samCachedCrop.y]);
+            } else {
+                samMaskContour = data.contour;
+            }
+            const modeLabel = samCachedCrop ? 'Local' : 'Full';
+            statusSpan.textContent = `SAM Decoded [${modeLabel}] (${data.time_ms || 0}ms)`;
             statusSpan.style.color = 'limegreen';
             draw();
         }
@@ -3982,16 +4117,20 @@ function samClearState() {
     samIsDragging = false;
     samDragStart = null;
     samDragCurrent = null;
+    samCachedCrop = null;
+    samCurrentImagePath = null;
+    samIsFreshSequence = true;
     statusSpan.textContent = '';
     statusSpan.style.color = '';
     draw();
 }
 
 async function samCheckAndEnterMode() {
-    // Restore port from saved state
+    // Restore port and encode mode from saved state
     const savedState = vscode.getState() || {};
     const gs = (typeof initialGlobalSettings !== 'undefined') ? initialGlobalSettings : {};
     samServicePort = savedState.samPort ?? gs.samPort ?? 8765;
+    samEncodeMode = savedState.samEncodeMode ?? gs.samEncodeMode ?? 'full';
 
     // Try to ping the service
     const ok = await samPingService();
@@ -4010,8 +4149,10 @@ async function samCheckAndEnterMode() {
 function samEnsureEncoded() {
     if (!samServiceRunning) return;
     const currentPath = currentAbsoluteImagePath || imagePath;
-    if (samCurrentImagePath !== currentPath) {
-        samEncode(currentPath);
+    const crop = (samEncodeMode === 'local') ? samGetVisibleCrop() : null;
+    if (samCurrentImagePath !== currentPath ||
+        JSON.stringify(samCachedCrop) !== JSON.stringify(crop)) {
+        samEncode(currentPath, crop);
     }
 }
 
@@ -4022,6 +4163,9 @@ function samUndoLastPrompt() {
             samDecodeVersion++;  // Invalidate any in-flight decode
             samPromptType = null;
             samMaskContour = null;
+            samCachedCrop = null;
+            samCurrentImagePath = null;
+            samIsFreshSequence = true;
             draw();
         } else {
             samDecode();
@@ -4039,6 +4183,8 @@ function samConfirmAnnotation() {
         prompts: JSON.parse(JSON.stringify(samPrompts)),
         promptType: samPromptType,
         maskContour: JSON.parse(JSON.stringify(samMaskContour)),
+        cachedCrop: samCachedCrop ? JSON.parse(JSON.stringify(samCachedCrop)) : null,
+        isFreshSequence: samIsFreshSequence
     };
 
     // Convert mask contour to polygon points
@@ -4052,6 +4198,9 @@ function samConfirmAnnotation() {
     samIsDragging = false;
     samDragStart = null;
     samDragCurrent = null;
+    samCachedCrop = null;
+    samCurrentImagePath = null;
+    samIsFreshSequence = true;
 
     // Show label modal (same as finishPolygon)
     isDrawing = false;
@@ -4195,6 +4344,7 @@ window._samOnImageUpdate = function() {
         samIsDragging = false;
         samDragStart = null;
         samDragCurrent = null;
+        samCachedCrop = null;
         // Clear samCurrentImagePath so lazy encode triggers on next interaction
         samCurrentImagePath = null;
     }
@@ -4276,6 +4426,21 @@ function drawSAMOverlay() {
         rect.setAttribute('stroke-dasharray', `${4 / zoomLevel}`);
         rect.style.pointerEvents = 'none';
         svgOverlay.appendChild(rect);
+    }
+
+    // Draw encoded region indicator in local mode
+    if (samCachedCrop && samEncodeMode === 'local') {
+        const cropRect = document.createElementNS(SVG_NS, 'rect');
+        cropRect.setAttribute('x', samCachedCrop.x);
+        cropRect.setAttribute('y', samCachedCrop.y);
+        cropRect.setAttribute('width', samCachedCrop.w);
+        cropRect.setAttribute('height', samCachedCrop.h);
+        cropRect.setAttribute('fill', 'none');
+        cropRect.setAttribute('stroke', 'rgba(255, 200, 0, 0.5)');
+        cropRect.setAttribute('stroke-width', sw);
+        cropRect.setAttribute('stroke-dasharray', `${6 / zoomLevel} ${3 / zoomLevel}`);
+        cropRect.style.pointerEvents = 'none';
+        svgOverlay.appendChild(cropRect);
     }
 
     // Status indicator
