@@ -213,8 +213,14 @@ This extension is still under active development. Some known limitations include
 
 **All code in this extension was written by AI:**
 - **Gemini 3 Pro**
+- **Gemini 3.1 Pro**
 - **Claude Sonnet 4.5**
 - **Claude Opus 4.5**
+- **Claude Opus 4.6**
+
+**Code review by AI:**
+- **GPT 5.3 Codex**
+- **GPT 5.4**
 
 This project serves as a demonstration of AI-assisted development capabilities.
 

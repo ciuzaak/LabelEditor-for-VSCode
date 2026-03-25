@@ -2,6 +2,16 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.12.4] - 2026-03-26
+
+### Fixed
+- **SAM Mode Right-Click Context Menu**: Right-clicking an existing annotation in SAM mode now shows the context menu (Edit/Rename/Hide/Delete) instead of undoing the last SAM prompt, consistent with other modes
+  - Only applies when SAM is idle (no active prompts or mask); during active annotation, right-click still undoes prompts as before
+  - Properly handles edge cases: context menu dismiss, edit mode exit, and pending click debounce window
+
+### Changed
+- **Updated Extension Icon**: New icon design
+
 ## [0.12.3] - 2026-03-25
 
 ### Fixed

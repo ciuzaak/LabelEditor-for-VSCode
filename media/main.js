@@ -1362,7 +1362,28 @@ canvasWrapper.addEventListener('mousedown', (e) => {
     } else if (e.button === 2) { // Right click
         e.preventDefault(); // 阻止浏览器默认的上下文菜单
         if (currentMode === 'sam') {
-            // SAM mode right click: undo last prompt
+            // Hide context menu if visible, then fall through to check for new shape target
+            if (shapeContextMenu && shapeContextMenu.style.display !== 'none') {
+                hideShapeContextMenu();
+            }
+            // SAM mode right click: if not actively annotating, check for shape first
+            if (samPrompts.length === 0 && !samMaskContour && !samPendingClick && !samClickTimer) {
+                const rect = canvas.getBoundingClientRect();
+                const mx = e.clientX - rect.left;
+                const my = e.clientY - rect.top;
+                const x = mx / zoomLevel;
+                const y = my / zoomLevel;
+
+                const clickedShapeIndex = findShapeIndexAt(x, y);
+                if (clickedShapeIndex !== -1) {
+                    selectedShapeIndex = clickedShapeIndex;
+                    renderShapeList();
+                    draw();
+                    showShapeContextMenu(e.clientX, e.clientY, clickedShapeIndex);
+                    return;
+                }
+            }
+            // Actively annotating or not on a shape: undo last SAM prompt
             samUndoLastPrompt();
             return;
         }
@@ -4330,15 +4351,27 @@ let samPendingClick = null; // Pending click data
 canvasWrapper.addEventListener('mousedown', (e) => {
     if (currentMode !== 'sam' || e.button !== 0) return;
 
-    // If context menu is visible, hide it
+    // Skip if event was already consumed by another capture-phase handler (e.g. edit mode exit)
+    if (e.defaultPrevented) return;
+
+    // If click is on the context menu itself, let it handle the click
+    if (shapeContextMenu && shapeContextMenu.contains(e.target)) {
+        return;
+    }
+
+    // If context menu is visible and click is outside it, hide it and consume the event
+    // so it doesn't start a SAM annotation
     if (shapeContextMenu && shapeContextMenu.style.display !== 'none') {
         hideShapeContextMenu();
+        e.stopPropagation();
+        e.preventDefault();
         return;
     }
 
     const rect = canvas.getBoundingClientRect();
     const x = (e.clientX - rect.left) / zoomLevel;
     const y = (e.clientY - rect.top) / zoomLevel;
+
 
     // Record drag start
     samIsDragging = false;
@@ -4347,7 +4380,7 @@ canvasWrapper.addEventListener('mousedown', (e) => {
 
     e.stopPropagation();
     e.preventDefault();
-});
+}, true); // Use capture phase to run before main mousedown handler
 
 canvasWrapper.addEventListener('mousemove', (e) => {
     if (currentMode !== 'sam' || !samDragStart) return;
