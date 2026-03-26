@@ -18,6 +18,9 @@ export class LabelMePanel {
     private _pendingNavigationPath: string | undefined;
     private _workspaceImages: string[] = [];
     private _rootPath: string; // The single source of truth for the image scanning root
+    private _panelTitle: string; // Title set once at creation, never changed during navigation
+    private _scanGeneration = 0; // Incremented on each scan start to detect stale results
+    private _isScanFinished = false; // Tracks if the initial background scan has completed
 
     private readonly _globalState: vscode.Memento;
 
@@ -43,6 +46,12 @@ export class LabelMePanel {
             panel._rootPath = rootPath;
             panel._imageUri = imageUri;
             panel._workspaceImages = workspaceImages;
+            // Invalidate any in-flight folder scan so it won't overwrite our single-image list
+            panel._scanGeneration++;
+            panel._isScanFinished = true; // Mark as scan-complete for single-image mode
+            // Update title to image filename for single-image mode
+            panel._panelTitle = path.basename(imageUri.fsPath);
+            panel._panel.title = panel._panelTitle;
             panel.updateWebviewOptions();
             await panel._update();
             return;
@@ -59,9 +68,11 @@ export class LabelMePanel {
         });
 
         // Create a new panel with only the single image
+        // Title = image filename for single-image mode
+        const panelTitle = path.basename(imageUri.fsPath);
         const panel = vscode.window.createWebviewPanel(
             LabelMePanel.viewType,
-            'LabelMe',
+            panelTitle,
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -70,7 +81,7 @@ export class LabelMePanel {
             }
         );
 
-        LabelMePanel.currentPanel = new LabelMePanel(panel, context.extensionUri, imageUri, context.globalState, rootPath, workspaceImages);
+        LabelMePanel.currentPanel = new LabelMePanel(panel, context.extensionUri, imageUri, context.globalState, rootPath, workspaceImages, panelTitle);
     }
 
     /**
@@ -84,62 +95,53 @@ export class LabelMePanel {
             ? vscode.window.activeTextEditor.viewColumn
             : undefined;
 
-        // Scan folder for images
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp'];
-        const images: string[] = [];
         const rootPath = folderUri.fsPath;
 
-        const scanDirectory = async (dirPath: string): Promise<void> => {
-            try {
-                const entries = await fs.readdir(dirPath, { withFileTypes: true });
-                for (const entry of entries) {
-                    const fullPath = path.join(dirPath, entry.name);
-                    if (entry.isDirectory()) {
-                        // Skip hidden directories and common non-image directories
-                        if (!entry.name.startsWith('.') &&
-                            entry.name !== 'node_modules' &&
-                            entry.name !== 'out') {
-                            await scanDirectory(fullPath);
-                        }
-                    } else if (entry.isFile()) {
-                        const ext = path.extname(entry.name).toLowerCase();
-                        if (imageExtensions.includes(ext)) {
-                            // Only store absolute paths here for simplicity in sorting, later use relative if needed
-                            images.push(fullPath);
+        // Quick-find first image for immediate display.
+        // Uses DFS and stops at the first image found — much faster than a full recursive scan.
+        // Note: the first found image may differ from the sorted list's first entry,
+        // but this is acceptable — user sees a real image immediately while the full
+        // sorted list loads asynchronously.
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp'];
+        let initialImageUri: vscode.Uri | undefined = targetImageUri;
+
+        if (!initialImageUri) {
+            const findFirstImage = async (dirPath: string): Promise<string | undefined> => {
+                try {
+                    const entries = await fs.readdir(dirPath, { withFileTypes: true });
+                    // Sort entries for deterministic ordering
+                    entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+
+                    // First pass: check files in current directory
+                    for (const entry of entries) {
+                        if (entry.isFile()) {
+                            const ext = path.extname(entry.name).toLowerCase();
+                            if (imageExtensions.includes(ext)) {
+                                return path.join(dirPath, entry.name);
+                            }
                         }
                     }
+
+                    // Second pass: recurse into subdirectories (DFS with early exit)
+                    for (const entry of entries) {
+                        if (entry.isDirectory() &&
+                            !entry.name.startsWith('.') &&
+                            entry.name !== 'node_modules' &&
+                            entry.name !== 'out') {
+                            const found = await findFirstImage(path.join(dirPath, entry.name));
+                            if (found) return found;
+                        }
+                    }
+                } catch (e) {
+                    // Ignore inaccessible directories
                 }
-            } catch (e) {
-                // Ignore directories we can't access
+                return undefined;
+            };
+
+            const firstImagePath = await findFirstImage(rootPath);
+            if (firstImagePath) {
+                initialImageUri = vscode.Uri.file(firstImagePath);
             }
-        };
-
-        await scanDirectory(rootPath);
-
-        if (images.length === 0) {
-            vscode.window.showWarningMessage('No images found in the selected folder.');
-            return;
-        }
-
-        // Sort images (VS Code style: hierarchical natural sort)
-        // Compare path segments individually to ensure folders are also naturally sorted
-        images.sort((a, b) => {
-            const partsA = a.split(/[\\/]/);
-            const partsB = b.split(/[\\/]/);
-            const minLen = Math.min(partsA.length, partsB.length);
-            for (let i = 0; i < minLen; i++) {
-                const cmp = partsA[i].localeCompare(partsB[i], undefined, { numeric: true, sensitivity: 'base' });
-                if (cmp !== 0) return cmp;
-            }
-            return partsA.length - partsB.length;
-        });
-
-        // Determine which image to show: targetImageUri if provided and valid, otherwise first image
-        let initialImageUri: vscode.Uri;
-        if (targetImageUri && images.includes(targetImageUri.fsPath)) {
-            initialImageUri = targetImageUri;
-        } else {
-            initialImageUri = vscode.Uri.file(images[0]);
         }
 
         // Check if we have an existing panel
@@ -147,30 +149,31 @@ export class LabelMePanel {
             const panel = LabelMePanel.currentPanel;
             panel._panel.reveal(column);
 
-            // If the root path has changed, we must force a full re-initialization
-            // to ensure state consistency (especially workspaceImages const in HTML)
-            if (panel._rootPath !== rootPath) {
-                panel._rootPath = rootPath;
-                panel._imageUri = initialImageUri;
-                panel._workspaceImages = images.map(p => path.relative(rootPath, p)); // Use pre-scanned images
+            // Update root path and trigger async scan
+            const rootChanged = panel._rootPath !== rootPath;
+            panel._rootPath = rootPath;
+            // Apply initial image or dummy if no image found
+            panel._imageUri = initialImageUri || vscode.Uri.file(path.join(rootPath, '__no_image__'));
+            panel._workspaceImages = []; // Clear - will be populated by async scan
+            panel._isScanFinished = false; // Reset scan status for new root
+            // Update title to folder basename for folder mode
+            panel._panelTitle = path.basename(rootPath);
+            panel._panel.title = panel._panelTitle;
+            panel.updateWebviewOptions();
+            
+            // Clear sidebar immediately to avoid stale residue while scanning
+            panel._sendImageListUpdate();
 
-
-                // Update localResourceRoots to ensure the new image can be loaded
-                panel.updateWebviewOptions();
-
-                // Force full HTML regeneration
+            if (rootChanged) {
+                // Force full HTML regeneration for new root
                 await panel._update();
             } else {
-                // Same root path - always refresh workspaceImages from the new scan
-                // (handles transition from single-image mode to folder mode)
-                panel._workspaceImages = images.map(p => path.relative(rootPath, p));
-                panel._imageUri = initialImageUri;
-                panel.updateWebviewOptions();
-
-                // Send the updated image list and navigate to target image
-                panel._sendImageListUpdate();
+                // Send immediate image update
                 await panel._sendImageUpdate();
             }
+
+            // Scan in background and send file list
+            panel._scanAndSendImageList();
             return;
         }
 
@@ -184,13 +187,13 @@ export class LabelMePanel {
             localResourceRoots.push(folder.uri);
         });
 
-        // Create relative paths for the panel
-        const workspaceImages = images.map(p => path.relative(rootPath, p));
-
-        // Create a new panel
+        // Create a new panel IMMEDIATELY
+        // The file list will be sent asynchronously via postMessage after the panel opens
+        // Title = folder basename for folder-open mode
+        const panelTitle = path.basename(rootPath);
         const panel = vscode.window.createWebviewPanel(
             LabelMePanel.viewType,
-            'LabelMe',
+            panelTitle,
             column || vscode.ViewColumn.One,
             {
                 enableScripts: true,
@@ -199,24 +202,39 @@ export class LabelMePanel {
             }
         );
 
-        LabelMePanel.currentPanel = new LabelMePanel(panel, context.extensionUri, initialImageUri, context.globalState, rootPath, workspaceImages);
+        // If no image found at all, use a dummy URI — _scanAndSendImageList will
+        // navigate to the first real image once the full scan completes
+        const imageToShow = initialImageUri || vscode.Uri.file(path.join(rootPath, '__no_image__'));
+        LabelMePanel.currentPanel = new LabelMePanel(panel, context.extensionUri, imageToShow, context.globalState, rootPath, [], panelTitle);
     }
 
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, imageUri: vscode.Uri, globalState: vscode.Memento, rootPath: string, initialWorkspaceImages?: string[]) {
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, imageUri: vscode.Uri, globalState: vscode.Memento, rootPath: string, initialWorkspaceImages?: string[], panelTitle?: string) {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._imageUri = imageUri;
         this._globalState = globalState;
         this._rootPath = rootPath;
+        this._panelTitle = panelTitle || path.basename(rootPath);
         if (initialWorkspaceImages) {
             this._workspaceImages = initialWorkspaceImages;
         }
 
+        // Set panel title once — it stays fixed during image navigation
+        this._panel.title = this._panelTitle;
+
         // Set panel icon
         this._panel.iconPath = vscode.Uri.joinPath(extensionUri, 'icon.png');
 
-        // Set the webview's initial html content
+        // Set the webview's initial html content (with empty image list for fast startup)
         this._update();
+
+        // Only trigger async scan for folder mode (empty initial list).
+        // Single-image mode (createOrShow) already has the exact list it needs.
+        if (!initialWorkspaceImages || initialWorkspaceImages.length === 0) {
+            this._scanAndSendImageList();
+        } else {
+            this._isScanFinished = true; // No scan needed for single-image mode
+        }
 
         // Listen for when the panel is disposed
         this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -247,6 +265,15 @@ export class LabelMePanel {
                         return;
                     case 'prev':
                         await this.navigateImage(-1);
+                        return;
+                    case 'webviewReady':
+                        // The webview's JavaScript is now fully loaded and listening.
+                        // Re-send the image list ONLY IF the scan has finished.
+                        // This prevents the UI from incorrectly showing "(0)" for large folders
+                        // that are still being scanned.
+                        if (this._isScanFinished) {
+                            this._sendImageListUpdate();
+                        }
                         return;
                     case 'saveGlobalSettings':
                         await this._globalState.update(message.key, message.value);
@@ -516,8 +543,48 @@ export class LabelMePanel {
         this._panel.webview.postMessage({
             command: 'updateImageList',
             workspaceImages: this._workspaceImages,
-            currentImageRelativePath: currentImageRelativePath
+            currentImageRelativePath: currentImageRelativePath,
+            isScanFinished: this._isScanFinished
         });
+    }
+
+    /**
+     * Scan images in the background and send the file list to the webview.
+     * This is the core async loading mechanism: the panel opens instantly,
+     * and the file list arrives via postMessage once scanning is complete.
+     */
+    private async _scanAndSendImageList() {
+        // Capture the generation at the start of this scan.
+        const generation = ++this._scanGeneration;
+        const scanRoot = this._rootPath;
+        this._isScanFinished = false; // Mark scan as non-finished until complete
+
+        await this._scanWorkspaceImages();
+
+        // Discard results if the user switched folders while we were scanning
+        if (generation !== this._scanGeneration || this._rootPath !== scanRoot) {
+            return;
+        }
+
+        this._isScanFinished = true; // Scan is now complete
+
+        if (this._workspaceImages.length === 0) {
+            // Send empty list so the webview updates from "scanning..." to "(0)"
+            this._sendImageListUpdate();
+            return;
+        }
+
+        // If the initial image was a placeholder or not in the scanned list,
+        // navigate to the first image
+        const currentRel = path.relative(this._rootPath, this._imageUri.fsPath);
+        if (!this._workspaceImages.includes(currentRel) && this._workspaceImages.length > 0) {
+            const firstImage = vscode.Uri.file(path.join(this._rootPath, this._workspaceImages[0]));
+            this._imageUri = firstImage;
+            this.updateWebviewOptions();
+            await this._sendImageUpdate();
+        }
+
+        this._sendImageListUpdate();
     }
 
     private async _refreshWorkspaceImages() {
@@ -556,14 +623,25 @@ export class LabelMePanel {
         this._imageUri = imageUri;
         this.updateWebviewOptions();
 
-        // Update panel title
-        this._panel.title = path.basename(this._imageUri.fsPath);
+        // Title is set once at creation and does NOT change during navigation
 
         // Send incremental update via postMessage instead of full HTML regeneration
         await this._sendImageUpdate();
     }
 
     private async _sendImageUpdate() {
+        if (path.basename(this._imageUri.fsPath) === '__no_image__') {
+            this._panel.webview.postMessage({
+                command: 'updateImage',
+                imageUrl: '',
+                imageName: '',
+                imagePath: '',
+                currentImageRelativePath: '',
+                shapes: [],
+                labels: []
+            });
+            return; // No real image to send or load JSON for
+        }
         const webview = this._panel.webview;
 
         // Image URI for webview
@@ -613,7 +691,7 @@ export class LabelMePanel {
 
     private async _update() {
         const webview = this._panel.webview;
-        this._panel.title = path.basename(this._imageUri.fsPath);
+        // Title is set once at creation, not updated on HTML regeneration
         this._panel.webview.html = await this._getHtmlForWebview(webview);
     }
 
@@ -626,29 +704,30 @@ export class LabelMePanel {
         const stylePathOnDisk = vscode.Uri.joinPath(this._extensionUri, 'media', 'style.css');
         const styleUri = webview.asWebviewUri(stylePathOnDisk);
 
-        // Image URI
-        const imageUri = webview.asWebviewUri(this._imageUri);
+        // Image URI — empty string if no image found yet (async scan will provide the first image)
+        const isDummyImage = this._imageUri.fsPath.endsWith('__no_image__');
+        const imageUri = isDummyImage ? '' : webview.asWebviewUri(this._imageUri).toString();
 
-        // Use cached workspace images or scan if not available
-        if (this._workspaceImages.length === 0) {
-            await this._scanWorkspaceImages();
-        }
-        const workspaceImages = this._workspaceImages;
+        // Always pass empty array - the real file list is sent asynchronously
+        // via postMessage (updateImageList) after the panel opens.
+        // This ensures the panel opens instantly even with large image sets.
+        const workspaceImages: string[] = [];
 
         // Calculate current image relative path
-        let currentImageRelativePath = '';
-        currentImageRelativePath = path.relative(this._rootPath, this._imageUri.fsPath);
+        let currentImageRelativePath = isDummyImage ? '' : path.relative(this._rootPath, this._imageUri.fsPath);
 
-        // Load existing annotation if exists
+        // Skip loading annotation for dummy image
         let existingData = null;
-        const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
-        if (existsSync(jsonPath)) {
-            try {
-                const jsonContent = await fs.readFile(jsonPath, 'utf8');
-                existingData = JSON.parse(jsonContent);
-            } catch (e) {
-                console.error("Failed to load existing JSON", e);
-                vscode.window.showWarningMessage(`Failed to load annotation file: ${(e as Error).message}`);
+        if (!isDummyImage) {
+            const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
+            if (existsSync(jsonPath)) {
+                try {
+                    const jsonContent = await fs.readFile(jsonPath, 'utf8');
+                    existingData = JSON.parse(jsonContent);
+                } catch (e) {
+                    console.error("Failed to load existing JSON", e);
+                    vscode.window.showWarningMessage(`Failed to load annotation file: ${(e as Error).message}`);
+                }
             }
         }
 
@@ -681,7 +760,7 @@ export class LabelMePanel {
                             <button id="imageBrowserToggleBtn" class="nav-btn" title="Toggle Image Browser">☰</button>
                             <button id="prevImageBtn" class="nav-btn" title="Previous Image (A)">◀</button>
                             <button id="nextImageBtn" class="nav-btn" title="Next Image (D)">▶</button>
-                            <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" title="Left click: copy absolute path | Right click: copy filename">${currentImageRelativePath || path.basename(this._imageUri.fsPath)}</span>
+                            <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" title="Left click: copy absolute path | Right click: copy filename">${isDummyImage ? '' : (currentImageRelativePath || path.basename(this._imageUri.fsPath))}</span>
                             <span id="status"></span>
                         </div>
                         <div class="canvas-container">
@@ -899,8 +978,8 @@ export class LabelMePanel {
                 <script>
                     const vscode = acquireVsCodeApi();
                     const imageUrl = "${imageUri}";
-                    const imageName = "${path.basename(this._imageUri.fsPath)}";
-                    const imagePath = "${this._imageUri.fsPath.replace(/\\/g, '\\\\')}";
+                    const imageName = "${isDummyImage ? '' : path.basename(this._imageUri.fsPath)}";
+                    const imagePath = "${isDummyImage ? '' : this._imageUri.fsPath.replace(/\\/g, '\\\\')}";
                     const existingData = ${JSON.stringify(existingData)};
                     const workspaceImages = ${JSON.stringify(workspaceImages)};
                     const currentImageRelativePath = "${currentImageRelativePath.replace(/\\/g, '\\\\')}";

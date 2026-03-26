@@ -2,6 +2,22 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.12.6] - 2026-03-26
+
+### Fixed
+- **Async Startup Performance**: Opening large image folders no longer blocks the UI
+  - File scanning runs in the background; sidebar shows "(scanning...)" until complete
+  - `webviewReady` handshake ensures image list is only sent after the webview is fully initialized
+  - Scan generation tracking prevents stale results from overwriting the UI after rapid folder switches
+- **Panel Title**: Title now reflects the workspace folder name or single image filename, set once at creation and stable during navigation
+- **Empty Folder Handling**: Opening an empty folder correctly shows "(0)" and "No images found" without "Error loading image" flashes
+- **Panel Reuse State**: Reusing a panel for a single image no longer gets stuck in "(scanning...)" state
+- **Sidebar Residue**: Re-scanning the same folder immediately clears the old sidebar list instead of showing stale entries until the new scan completes
+
+### Changed
+- **Single Image Mode**: Opening a single image bypasses background scanning entirely for instant startup
+- **Incremental Image Updates**: Image switching uses `postMessage` instead of full HTML regeneration
+
 ## [0.12.5] - 2026-03-26
 
 ### Fixed

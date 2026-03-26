@@ -565,7 +565,10 @@ img.onerror = function () {
     if (initialLoadId !== currentImageLoadId) return;
     handleImageError();
 };
-img.src = imageUrl;
+// Only load if we have a real image URL (empty = no image found yet, waiting for async scan)
+if (imageUrl) {
+    img.src = imageUrl;
+}
 
 // 页面卸载时清理资源
 window.addEventListener('beforeunload', () => {
@@ -919,6 +922,23 @@ function handleImageUpdate(message) {
     // Update image browser list highlight
     updateImageBrowserHighlight(newCurrentImageRelativePath);
 
+    // If no image URL is provided (e.g., empty folder), clear the canvas and UI
+    if (!newImageUrl) {
+        img.src = '';
+        shapes = [];
+        currentPoints = [];
+        isDrawing = false;
+        selectedShapeIndex = -1;
+        editingShapeIndex = -1;
+        statusSpan.textContent = "No images found";
+        statusSpan.style.color = "orange";
+        draw();
+        renderShapeList();
+        renderLabelsList();
+        updateZoomUI();
+        return;
+    }
+
     // Load new image with stale callback protection
     img.onload = function () {
         // Check if this callback is for the current load request
@@ -948,8 +968,12 @@ function handleImageUpdate(message) {
     img.src = newImageUrl;
 }
 
+// Track whether the initial scan has completed (to distinguish scanning from empty results)
+let scanComplete = false;
+
 // Handle refreshed image list from extension
 function handleUpdateImageList(message) {
+    scanComplete = message.hasOwnProperty('isScanFinished') ? !!message.isScanFinished : true;
     // Update the global workspaceImages array
     // Note: workspaceImages is defined in the HTML as a const, so we need to modify it in place
     if (typeof workspaceImages !== 'undefined' && Array.isArray(workspaceImages)) {
@@ -3612,6 +3636,16 @@ function renderImageBrowserList() {
     // Use effective image list (filtered or full)
     const effectiveImages = getEffectiveImageList();
 
+    // Show scanning state if list is empty, no search is active, and scan hasn't completed yet
+    if (effectiveImages.length === 0 && !searchQuery && !scanComplete) {
+        // Just update the count area — no extra UI elements needed
+        const imageCountEl = document.getElementById('imageCount');
+        if (imageCountEl) {
+            imageCountEl.textContent = '(scanning...)';
+        }
+        return;
+    }
+
     // Create virtual scroll container structure
     // We need a container that maintains the full scroll height
     const totalHeight = effectiveImages.length * VIRTUAL_ITEM_HEIGHT;
@@ -3779,6 +3813,11 @@ document.addEventListener('mouseup', () => {
 
 // Initialize image browser list
 renderImageBrowserList();
+
+// Signal the extension that the webview is fully initialized and ready to receive messages.
+// This is critical: postMessage from the extension can be lost if sent before
+// the webview's JavaScript has finished loading and set up its message listener.
+vscode.postMessage({ command: 'webviewReady' });
 
 // Restore saved sidebar widths
 (function restoreSidebarWidths() {
