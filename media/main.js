@@ -103,9 +103,11 @@ let zoomAnimationFrameId = null; // 缩放节流
 
 // 常量定义
 const ZOOM_FIT_RATIO = 0.98;      // 适应屏幕时的缩放比例
-const ZOOM_MAX = 20;               // 最大缩放倍数
+const ZOOM_MAX = 100;               // 最大缩放倍数 (10000%)
 const ZOOM_MIN = 0.1;              // 最小缩放倍数
 const ZOOM_FACTOR = 1.1;           // 滚轮缩放因子
+const PIXEL_RENDER_THRESHOLD = 20; // zoomLevel >= 20 (2000%) 时启用像素块渲染+网格
+const PIXEL_VALUES_ZOOM = ZOOM_MAX; // 达到最大缩放时显示像素RGB/灰度值
 const CLOSE_DISTANCE_THRESHOLD = 100; // 多边形闭合距离阈值
 
 // Undo/Redo History (实例级别 - 只记录shapes的变化)
@@ -306,6 +308,7 @@ markClean();
 const zoomLockBtn = document.getElementById('zoomLockBtn');
 const zoomResetBtn = document.getElementById('zoomResetBtn');
 const zoomPercentageSpan = document.getElementById('zoomPercentage');
+const pixelGridOverlay = document.getElementById('pixelGridOverlay');
 
 // Update zoom UI state (lock button icon and reset button visibility)
 function updateZoomUI() {
@@ -419,6 +422,11 @@ function applyNormalizedViewState(state) {
 
     // Clamp zoomLevel to valid range
     zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, zoomLevel));
+
+    // Snap to integer when in pixel rendering mode (must match wheel zoom behavior)
+    if (zoomLevel >= PIXEL_RENDER_THRESHOLD) {
+        zoomLevel = Math.round(zoomLevel);
+    }
 
     updateCanvasTransform();
 
@@ -727,6 +735,8 @@ function updateCanvasTransform() {
     canvas.width = img.width;
     canvas.height = img.height;
 
+    // When zoomLevel >= PIXEL_RENDER_THRESHOLD it is already snapped to an integer,
+    // so img.width * zoomLevel produces exact integer display dimensions.
     const displayWidth = img.width * zoomLevel;
     const displayHeight = img.height * zoomLevel;
 
@@ -748,7 +758,42 @@ function updateCanvasTransform() {
     canvasWrapper.style.width = `${displayWidth}px`;
     canvasWrapper.style.height = `${displayHeight}px`;
 
+    updatePixelRendering();
     draw();
+}
+
+// --- Pixel-level Rendering (pixelated blocks, grid lines, pixel values) ---
+// Called when zoomLevel changes. Manages three features:
+// 1. image-rendering: pixelated on canvas (nearest-neighbor interpolation)
+// 2. CSS pixel grid lines overlay
+// 3. Pixel RGB values in SVG (handled in drawSVGAnnotations)
+function updatePixelRendering() {
+    // 1. Pixel-block rendering (nearest-neighbor)
+    if (zoomLevel >= PIXEL_RENDER_THRESHOLD) {
+        canvas.style.imageRendering = 'pixelated';
+    } else {
+        canvas.style.imageRendering = '';
+    }
+
+    // 2. Pixel grid lines via CSS background on overlay div
+    if (pixelGridOverlay) {
+        if (zoomLevel >= PIXEL_RENDER_THRESHOLD) {
+            // zoomLevel is snapped to an integer when >= PIXEL_RENDER_THRESHOLD,
+            // so each image pixel is exactly zoomLevel screen pixels.
+            // This makes a uniform CSS grid perfectly aligned.
+            const pixelSize = zoomLevel; // integer, exact match
+            const gridColor = document.body.classList.contains('theme-light')
+                ? 'rgba(0, 0, 0, 0.15)'
+                : 'rgba(255, 255, 255, 0.15)';
+            pixelGridOverlay.style.backgroundImage =
+                `linear-gradient(to right, ${gridColor} 1px, transparent 1px),` +
+                `linear-gradient(to bottom, ${gridColor} 1px, transparent 1px)`;
+            pixelGridOverlay.style.backgroundSize = `${pixelSize}px ${pixelSize}px`;
+            pixelGridOverlay.style.backgroundPosition = '0 0';
+        } else {
+            pixelGridOverlay.style.backgroundImage = 'none';
+        }
+    }
 }
 
 // Debounced resize handler for lock view state
@@ -764,6 +809,21 @@ window.addEventListener('resize', () => {
         updateZoomUI(); // Update zoom percentage (it's relative to fit-to-screen)
     }, 200);
 });
+
+// Refresh pixel value labels when the canvas viewport is resized.
+// This covers window resize, sidebar drag, and any layout change that
+// alters canvasContainer dimensions, ensuring newly exposed pixels show values.
+let viewportResizeRAF = null;
+const canvasContainerObserver = new ResizeObserver(() => {
+    if (zoomLevel >= PIXEL_VALUES_ZOOM) {
+        if (viewportResizeRAF) cancelAnimationFrame(viewportResizeRAF);
+        viewportResizeRAF = requestAnimationFrame(() => {
+            drawSVGAnnotations();
+            viewportResizeRAF = null;
+        });
+    }
+});
+canvasContainerObserver.observe(canvasContainer);
 
 window.addEventListener('message', event => {
     const message = event.data;
@@ -1486,14 +1546,23 @@ canvasWrapper.addEventListener('mousemove', (e) => {
     }
 });
 
-// Save locked view state on scroll (debounced)
+// Save locked view state on scroll (debounced) + update pixel values at max zoom
 let scrollSaveTimeout = null;
+let pixelValuesScrollTimeout = null;
 canvasContainer.addEventListener('scroll', () => {
     if (lockViewEnabled) {
         if (scrollSaveTimeout) clearTimeout(scrollSaveTimeout);
         scrollSaveTimeout = setTimeout(() => {
             saveLockedViewState();
         }, 200); // Debounce to avoid too frequent saves
+    }
+    // Update pixel values on scroll when at max zoom (debounced)
+    if (zoomLevel >= PIXEL_VALUES_ZOOM) {
+        if (pixelValuesScrollTimeout) cancelAnimationFrame(pixelValuesScrollTimeout);
+        pixelValuesScrollTimeout = requestAnimationFrame(() => {
+            drawSVGAnnotations();
+            pixelValuesScrollTimeout = null;
+        });
     }
 });
 
@@ -1532,6 +1601,13 @@ canvasContainer.addEventListener('wheel', (e) => {
                 if (zoomLevel < ZOOM_MIN) zoomLevel = ZOOM_MIN;
             }
 
+            // Snap to integer zoom when in pixel rendering mode.
+            // This ensures every image pixel maps to exactly N×N screen pixels,
+            // preventing non-uniform pixel sizes that cause grid misalignment.
+            if (zoomLevel >= PIXEL_RENDER_THRESHOLD) {
+                zoomLevel = Math.round(zoomLevel);
+            }
+
             // Update canvas wrapper size (整体缩放)
             const displayWidth = img.width * zoomLevel;
             const displayHeight = img.height * zoomLevel;
@@ -1555,6 +1631,9 @@ canvasContainer.addEventListener('wheel', (e) => {
             // Apply new scroll position
             canvasContainer.scrollLeft = newScrollLeft;
             canvasContainer.scrollTop = newScrollTop;
+
+            // 更新像素渲染模式（pixelated + grid）
+            updatePixelRendering();
 
             // 重绘SVG以更新线宽（保持视觉上的恒定粗细）
             drawSVGAnnotations();
@@ -2688,6 +2767,9 @@ function applyTheme(theme) {
 
     document.body.classList.add(`theme-${effectiveTheme}`);
     updateThemeButtonsUI();
+
+    // Refresh pixel grid overlay color to match the new theme
+    updatePixelRendering();
 }
 
 // Set theme and save preference
@@ -2854,6 +2936,84 @@ function drawSVGAnnotations(mouseEvent) {
             svgOverlay.appendChild(line);
         }
     }
+
+    // Draw pixel RGB values when at maximum zoom (4000%)
+    if (zoomLevel >= PIXEL_VALUES_ZOOM && img.width > 0 && img.height > 0) {
+        drawPixelValues();
+    }
+}
+
+// Draw pixel RGB value labels on the SVG overlay
+// Only renders values for pixels visible in the current viewport
+function drawPixelValues() {
+    // Calculate visible pixel range from scroll position and viewport size
+    const scrollX = canvasContainer.scrollLeft;
+    const scrollY = canvasContainer.scrollTop;
+    const viewportW = canvasContainer.clientWidth;
+    const viewportH = canvasContainer.clientHeight;
+
+    // Convert viewport bounds to image pixel coordinates
+    const startCol = Math.max(0, Math.floor(scrollX / zoomLevel));
+    const startRow = Math.max(0, Math.floor(scrollY / zoomLevel));
+    const endCol = Math.min(img.width, Math.ceil((scrollX + viewportW) / zoomLevel));
+    const endRow = Math.min(img.height, Math.ceil((scrollY + viewportH) / zoomLevel));
+
+    // Guard: skip if viewport collapsed to zero size (avoids getImageData IndexSizeError)
+    if (endCol <= startCol || endRow <= startRow) return;
+
+    // Get pixel data from canvas
+    const pixelData = ctx.getImageData(startCol, startRow, endCol - startCol, endRow - startRow);
+    const data = pixelData.data;
+
+    // Create a group for pixel values
+    const pvGroup = document.createElementNS(SVG_NS, 'g');
+    pvGroup.setAttribute('class', 'pixel-values-group');
+
+    // Font size in image coordinates (will be scaled by SVG viewBox)
+    // At zoomLevel=40, 1 image pixel = 40 screen pixels
+    // We want text to be about 9-10 screen pixels tall
+    const fontSize = 10 / zoomLevel;
+
+    // Determine display format: if any visible pixel has R≠G or G≠B, use RGB for all.
+    // This uses the already-loaded pixel data, so there is no extra cost.
+    let useGrayscale = true;
+    for (let i = 0; i < data.length; i += 4) {
+        if (data[i] !== data[i + 1] || data[i + 1] !== data[i + 2]) {
+            useGrayscale = false;
+            break;
+        }
+    }
+
+    for (let row = startRow; row < endRow; row++) {
+        for (let col = startCol; col < endCol; col++) {
+            const i = ((row - startRow) * (endCol - startCol) + (col - startCol)) * 4;
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+
+            // Determine text color based on pixel brightness for contrast
+            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
+            const textColor = brightness > 128 ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)';
+
+            // Consistent format for all pixels in the viewport
+            const label = useGrayscale ? `${r}` : `${r},${g},${b}`;
+
+            const text = document.createElementNS(SVG_NS, 'text');
+            text.setAttribute('x', col + 0.5); // Center in pixel
+            text.setAttribute('y', row + 0.5);
+            text.setAttribute('text-anchor', 'middle');
+            text.setAttribute('dominant-baseline', 'central');
+            text.setAttribute('fill', textColor);
+            text.setAttribute('font-size', fontSize);
+            text.setAttribute('font-family', 'monospace');
+            text.setAttribute('pointer-events', 'none');
+            text.textContent = label;
+
+            pvGroup.appendChild(text);
+        }
+    }
+
+    svgOverlay.appendChild(pvGroup);
 }
 
 function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = false, shapeIndex = -1) {
@@ -4120,7 +4280,7 @@ function samGetVisibleCrop() {
 function samPointInCrop(px, py, crop) {
     if (!crop) return true; // No crop = full image, always in range
     return px >= crop.originX && px <= crop.originX + crop.w &&
-           py >= crop.originY && py <= crop.originY + crop.h;
+        py >= crop.originY && py <= crop.originY + crop.h;
 }
 
 async function samEncode(imagePath, crop) {
@@ -4189,7 +4349,7 @@ async function samDecode() {
     let needEncode = (samCurrentImagePath !== requestPath);
     if (!needEncode && samEncodeMode === 'local') {
         const cropMismatched = JSON.stringify(requestCrop) !== JSON.stringify(samCachedCrop);
-        
+
         if (samIsFreshSequence && cropMismatched) {
             // Fresh sequence: safe to adopt current viewport as new crop
             needEncode = true;
@@ -4210,7 +4370,7 @@ async function samDecode() {
                     }
                 }
             }
-            
+
             // If re-encoding is needed because prompts were outside, clear older prompts.
             if (needEncode) {
                 samPrompts = [samPrompts[samPrompts.length - 1]]; // Keep only the latest prompt
@@ -4238,10 +4398,12 @@ async function samDecode() {
             if (p.type === 'point') {
                 return { ...p, data: [p.data[0] - samCachedCrop.originX, p.data[1] - samCachedCrop.originY] };
             } else if (p.type === 'rectangle') {
-                return { ...p, data: [
-                    p.data[0] - samCachedCrop.originX, p.data[1] - samCachedCrop.originY,
-                    p.data[2] - samCachedCrop.originX, p.data[3] - samCachedCrop.originY
-                ] };
+                return {
+                    ...p, data: [
+                        p.data[0] - samCachedCrop.originX, p.data[1] - samCachedCrop.originY,
+                        p.data[2] - samCachedCrop.originX, p.data[3] - samCachedCrop.originY
+                    ]
+                };
             }
             return p;
         });
@@ -4536,7 +4698,7 @@ if (samModeBtn) {
 
 // When image changes, clear SAM prompts (encoder cache will be refreshed on next interaction)
 const originalHandleImageUpdate = handleImageUpdate;
-window._samOnImageUpdate = function() {
+window._samOnImageUpdate = function () {
     if (currentMode === 'sam') {
         samDecodeVersion++;  // Invalidate any in-flight decode
         samPrompts = [];
@@ -4552,7 +4714,7 @@ window._samOnImageUpdate = function() {
 };
 // Patch handleImageUpdate
 const _origHandleImageUpdate = handleImageUpdate;
-handleImageUpdate = function(message) {
+handleImageUpdate = function (message) {
     _origHandleImageUpdate(message);
     if (window._samOnImageUpdate) window._samOnImageUpdate();
 };

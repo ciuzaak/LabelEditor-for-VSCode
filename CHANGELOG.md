@@ -2,6 +2,25 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.13.0] - 2026-03-29
+
+### Added
+- **High-Zoom Pixel Inspection**: Enhanced zoom for pixel-level annotation workflows
+  - Maximum zoom increased to 10,000% (100×)
+  - **Pixelated Rendering**: Nearest-neighbor interpolation activates at ≥2,000% zoom, showing sharp pixel blocks
+  - **Pixel Grid Overlay**: Dynamic grid lines appear at ≥2,000% zoom, precisely aligned with pixel boundaries
+  - **Pixel Value Display**: At maximum zoom (10,000%), each pixel shows its RGB or grayscale value
+    - Automatically uses grayscale (single value) when all visible pixels have R=G=B, otherwise shows R,G,B
+    - Text color adapts to pixel brightness for readability
+    - Only renders values for pixels in the current viewport for performance
+    - Updates on scroll and viewport resize
+
+### Fixed
+- **Pixel Grid Alignment**: Zoom level snaps to integer values in pixel rendering mode (≥2,000%), ensuring every image pixel maps to exactly N×N screen pixels for perfect grid alignment
+- **Grid Color on Theme Change**: Pixel grid overlay color now updates immediately when switching between light and dark themes
+- **Pixel Values on Viewport Resize**: Pixel value labels now refresh when the panel is resized (window resize, sidebar drag, etc.)
+- **Zero-Viewport Guard**: `drawPixelValues()` now safely handles collapsed viewport during aggressive panel resizing
+
 ## [0.12.6] - 2026-03-26
 
 ### Fixed

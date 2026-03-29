@@ -767,6 +767,7 @@ export class LabelMePanel {
                             <div id="canvasWrapper" class="canvas-wrapper">
                                 <canvas id="canvas"></canvas>
                                 <svg id="svgOverlay" class="svg-overlay"></svg>
+                                <div id="pixelGridOverlay" class="pixel-grid-overlay"></div>
                                 <div id="shapeContextMenu" class="shape-context-menu" style="display: none;">
                                     <div class="context-menu-item" id="contextMenuEdit">Edit</div>
                                     <div class="context-menu-item" id="contextMenuRename">Rename</div>
