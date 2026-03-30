@@ -66,6 +66,7 @@ const themeDarkBtn = document.getElementById('themeDarkBtn');
 const themeAutoBtn = document.getElementById('themeAutoBtn');
 
 let img = new Image();
+
 let shapes = [];
 let currentPoints = [];
 let isDrawing = false;
@@ -944,6 +945,8 @@ function handleImageUpdate(message) {
     const newImageName = message.imageName;
     const newImagePath = message.imagePath;
     const newCurrentImageRelativePath = message.currentImageRelativePath;
+
+
 
     // Update filename display
     const fileNameSpan = document.getElementById('fileName');
@@ -2974,16 +2977,6 @@ function drawPixelValues() {
     // We want text to be about 9-10 screen pixels tall
     const fontSize = 10 / zoomLevel;
 
-    // Determine display format: if any visible pixel has R≠G or G≠B, use RGB for all.
-    // This uses the already-loaded pixel data, so there is no extra cost.
-    let useGrayscale = true;
-    for (let i = 0; i < data.length; i += 4) {
-        if (data[i] !== data[i + 1] || data[i + 1] !== data[i + 2]) {
-            useGrayscale = false;
-            break;
-        }
-    }
-
     for (let row = startRow; row < endRow; row++) {
         for (let col = startCol; col < endCol; col++) {
             const i = ((row - startRow) * (endCol - startCol) + (col - startCol)) * 4;
@@ -2995,8 +2988,8 @@ function drawPixelValues() {
             const brightness = (r * 299 + g * 587 + b * 114) / 1000;
             const textColor = brightness > 128 ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)';
 
-            // Consistent format for all pixels in the viewport
-            const label = useGrayscale ? `${r}` : `${r},${g},${b}`;
+            // Always display raw pixel values as R,G,B
+            const label = `${r},${g},${b}`;
 
             const text = document.createElementNS(SVG_NS, 'text');
             text.setAttribute('x', col + 0.5); // Center in pixel

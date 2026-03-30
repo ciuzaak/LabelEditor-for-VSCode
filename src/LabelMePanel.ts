@@ -629,6 +629,7 @@ export class LabelMePanel {
         await this._sendImageUpdate();
     }
 
+
     private async _sendImageUpdate() {
         if (path.basename(this._imageUri.fsPath) === '__no_image__') {
             this._panel.webview.postMessage({
@@ -651,6 +652,7 @@ export class LabelMePanel {
         let currentImageRelativePath = '';
         currentImageRelativePath = path.relative(this._rootPath, this._imageUri.fsPath);
 
+
         // Load existing annotation if exists
         let existingData = null;
         const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
@@ -671,6 +673,7 @@ export class LabelMePanel {
             imageName: path.basename(this._imageUri.fsPath),
             imagePath: this._imageUri.fsPath,
             currentImageRelativePath: currentImageRelativePath,
+
             existingData: existingData
         });
     }
@@ -700,9 +703,11 @@ export class LabelMePanel {
         const scriptPathOnDisk = vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js');
         const scriptUri = webview.asWebviewUri(scriptPathOnDisk);
 
-        // Local path to css styles
-        const stylePathOnDisk = vscode.Uri.joinPath(this._extensionUri, 'media', 'style.css');
-        const styleUri = webview.asWebviewUri(stylePathOnDisk);
+        // Read CSS file content and inline it to prevent race condition on Windows
+        // where JS executes before CSS finishes loading via external <link>, causing
+        // layout chaos (zero container dimensions, unstyled dropdowns visible, etc.)
+        const stylePath = path.join(this._extensionUri.fsPath, 'media', 'style.css');
+        const cssContent = await fs.readFile(stylePath, 'utf8');
 
         // Image URI — empty string if no image found yet (async scan will provide the first image)
         const isDummyImage = this._imageUri.fsPath.endsWith('__no_image__');
@@ -736,7 +741,7 @@ export class LabelMePanel {
             <head>
                 <meta charset="UTF-8">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                <link href="${styleUri}" rel="stylesheet">
+                <style>${cssContent}</style>
                 <title>LabelMe</title>
             </head>
             <body>
@@ -984,6 +989,7 @@ export class LabelMePanel {
                     const existingData = ${JSON.stringify(existingData)};
                     const workspaceImages = ${JSON.stringify(workspaceImages)};
                     const currentImageRelativePath = "${currentImageRelativePath.replace(/\\/g, '\\\\')}";
+
                     const initialGlobalSettings = {
                         customColors: ${JSON.stringify(this._globalState.get('customColors') || {})},
                         borderWidth: ${this._globalState.get('borderWidth') ?? 2},

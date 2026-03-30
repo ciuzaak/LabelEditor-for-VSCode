@@ -2,6 +2,14 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.13.1] - 2026-03-30
+
+### Fixed
+- **Windows Startup Race Condition**: Fixed UI rendering failure on Windows where JavaScript executed before CSS finished loading via external `<link>`, causing layout chaos. CSS is now inlined into the HTML template
+
+### Changed
+- **Pixel Value Display Simplified**: Pixel values are now always displayed as raw R,G,B from the canvas, removing header-based channel detection to avoid unnecessary file I/O overhead
+
 ## [0.13.0] - 2026-03-29
 
 ### Added
@@ -9,8 +17,7 @@ All notable changes to the "LabelEditor for VSCode" extension will be documented
   - Maximum zoom increased to 10,000% (100×)
   - **Pixelated Rendering**: Nearest-neighbor interpolation activates at ≥2,000% zoom, showing sharp pixel blocks
   - **Pixel Grid Overlay**: Dynamic grid lines appear at ≥2,000% zoom, precisely aligned with pixel boundaries
-  - **Pixel Value Display**: At maximum zoom (10,000%), each pixel shows its RGB or grayscale value
-    - Automatically uses grayscale (single value) when all visible pixels have R=G=B, otherwise shows R,G,B
+  - **Pixel Value Display**: At maximum zoom (10,000%), each pixel shows its R,G,B value
     - Text color adapts to pixel brightness for readability
     - Only renders values for pixels in the current viewport for performance
     - Updates on scroll and viewport resize
