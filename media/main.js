@@ -94,9 +94,24 @@ let samIsEncoding = false;        // 是否正在 encode
 let samIsDecoding = false;        // 是否正在 decode
 let samDecodeVersion = 0;         // 用于无效化过期的 decode 响应
 const SAM_DRAG_THRESHOLD = 5;     // 拖拽阈值（像素）
+let samBoxSecondClick = false;    // 框选模式等待第二次点击
+let samMouseDownTime = 0;         // mousedown 时间戳，用于长按检测
+const SAM_LONG_PRESS_MS = 300;    // SAM 长按阈值（ms）
 let samEncodeMode = 'full';       // 'full' | 'local' — encode entire image or visible viewport
 let samCachedCrop = null;         // { x, y, w, h } — crop region of the currently cached encoding (null = full image)
 let samIsFreshSequence = true;    // True if we are starting a new prompt sequence and can adopt a new crop
+
+// --- Eraser State ---
+let eraserActive = false;          // Whether currently in eraser drawing mode
+let eraserPoints = [];             // Points of the eraser shape being drawn
+let eraserMode = null;             // 'polygon' | 'rectangle' | null
+let eraserMouseDownTime = 0;       // Timestamp of mousedown for long-press detection
+let eraserMouseDownPos = null;     // {x, y} position of mousedown
+let eraserIsDragging = false;      // Whether mouse has moved enough to be a drag
+let eraserDragCurrent = null;      // {x, y} current drag position for rectangle preview during initial drag
+let eraserRectSecondClick = false; // Whether we're waiting for second click after long-press/drag to complete rectangle
+const ERASER_LONG_PRESS_MS = 300;  // Long-press threshold (ms)
+const ERASER_DRAG_THRESHOLD = 5;   // Drag threshold (px in image coords)
 
 // Zoom & Pan variables
 let zoomLevel = 1;
@@ -930,6 +945,15 @@ function handleImageUpdate(message) {
         currentPoints = [];
     }
 
+    // Cancel any active eraser
+    if (eraserActive || eraserMouseDownPos) {
+        cancelEraser();
+        eraserMouseDownPos = null;
+        eraserMouseDownTime = 0;
+        eraserIsDragging = false;
+        eraserDragCurrent = null;
+    }
+
     // Clear selection
     selectedShapeIndex = -1;
     editingShapeIndex = -1;
@@ -1221,6 +1245,16 @@ document.addEventListener('keydown', (e) => {
             return;
         }
 
+        // Cancel eraser operation
+        if (eraserActive || eraserMouseDownPos) {
+            cancelEraser();
+            eraserMouseDownPos = null;
+            eraserMouseDownTime = 0;
+            eraserIsDragging = false;
+            eraserDragCurrent = null;
+            return;
+        }
+
         // Second priority: exit edit mode
         if (isEditingShape) {
             exitShapeEditMode(false); // Cancel and restore original position
@@ -1236,7 +1270,7 @@ document.addEventListener('keydown', (e) => {
         }
 
         // Fourth priority: clear SAM prompts (ESC clears all points/box at once)
-        if (currentMode === 'sam' && (samPrompts.length > 0 || samMaskContour)) {
+        if (currentMode === 'sam' && (samPrompts.length > 0 || samMaskContour || samBoxSecondClick)) {
             samClearState();
         }
     }
@@ -1340,6 +1374,40 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         // Convert to image coordinates
         const x = mx / zoomLevel;
         const y = my / zoomLevel;
+
+        // --- Eraser Mode ---
+        // Once eraser is active, handle clicks without requiring Shift
+        if (eraserActive) {
+            if (eraserMode === 'polygon') {
+                const firstPoint = eraserPoints[0];
+                const dx = x - firstPoint[0];
+                const dy = y - firstPoint[1];
+                // Check close distance (scaled)
+                if (eraserPoints.length > 2 && (dx * dx + dy * dy) < (CLOSE_DISTANCE_THRESHOLD / (zoomLevel * zoomLevel))) {
+                    finishEraser();
+                } else {
+                    eraserPoints.push([x, y]);
+                    draw();
+                }
+                return;
+            }
+            if (eraserMode === 'rectangle' && eraserRectSecondClick) {
+                eraserPoints[1] = [x, y];
+                finishEraser();
+                return;
+            }
+            return;
+        }
+
+        // Shift+click to START eraser (only needed for the first click)
+        if (e.shiftKey && currentMode !== 'sam' && currentMode !== 'view' && !isDrawing) {
+            eraserMouseDownTime = Date.now();
+            eraserMouseDownPos = { x, y };
+            eraserIsDragging = false;
+            eraserDragCurrent = { x, y };
+            // Don't set eraserActive yet - wait for mouseup to determine polygon vs rectangle
+            return;
+        }
 
         if (!isDrawing) {
             const now = Date.now();
@@ -1448,10 +1516,39 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         draw();
     } else if (e.button === 2) { // Right click
         e.preventDefault(); // 阻止浏览器默认的上下文菜单
+
+        // Eraser right-click: undo last point or cancel
+        if (eraserActive) {
+            if (eraserMode === 'polygon') {
+                if (eraserPoints.length > 0) {
+                    eraserPoints.pop();
+                    if (eraserPoints.length === 0) {
+                        cancelEraser();
+                    } else {
+                        draw();
+                    }
+                }
+            } else {
+                // Cancel rectangle eraser
+                cancelEraser();
+            }
+            return;
+        }
+
         if (currentMode === 'sam') {
             // Hide context menu if visible, then fall through to check for new shape target
             if (shapeContextMenu && shapeContextMenu.style.display !== 'none') {
                 hideShapeContextMenu();
+            }
+            // Cancel box second-click mode
+            if (samBoxSecondClick) {
+                samBoxSecondClick = false;
+                samDragStart = null;
+                samDragCurrent = null;
+                samIsDragging = false;
+                samMouseDownTime = 0;
+                draw();
+                return;
             }
             // SAM mode right click: if not actively annotating, check for shape first
             if (samPrompts.length === 0 && !samMaskContour && !samPendingClick && !samClickTimer) {
@@ -1512,6 +1609,52 @@ canvasWrapper.addEventListener('mousedown', (e) => {
 });
 
 canvasWrapper.addEventListener('mousemove', (e) => {
+    // --- Eraser mousemove handling ---
+    // Phase 1: During initial mousedown-hold (before mouseup determines mode)
+    if (eraserMouseDownPos && !eraserActive) {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / zoomLevel;
+        const y = (e.clientY - rect.top) / zoomLevel;
+        const dx = x - eraserMouseDownPos.x;
+        const dy = y - eraserMouseDownPos.y;
+        if (Math.sqrt(dx * dx + dy * dy) > ERASER_DRAG_THRESHOLD) {
+            eraserIsDragging = true;
+        }
+        eraserDragCurrent = { x, y };
+        // Redraw to show rectangle preview during drag
+        if (eraserIsDragging && !animationFrameId) {
+            animationFrameId = requestAnimationFrame(() => {
+                draw(e);
+                animationFrameId = null;
+            });
+        }
+        return; // Don't process other events during eraser mousedown-hold
+    }
+    // Phase 2: Eraser rectangle waiting for second click - show preview
+    if (eraserActive && eraserMode === 'rectangle' && eraserRectSecondClick) {
+        if (!animationFrameId) {
+            animationFrameId = requestAnimationFrame(() => {
+                const rect = canvas.getBoundingClientRect();
+                const x = (e.clientX - rect.left) / zoomLevel;
+                const y = (e.clientY - rect.top) / zoomLevel;
+                eraserPoints[1] = [x, y];
+                draw(e);
+                animationFrameId = null;
+            });
+        }
+        return;
+    }
+    // Phase 3: Eraser polygon - redraw to show trailing line to mouse
+    if (eraserActive && eraserMode === 'polygon') {
+        if (!animationFrameId) {
+            animationFrameId = requestAnimationFrame(() => {
+                draw(e);
+                animationFrameId = null;
+            });
+        }
+        return;
+    }
+
     if (isDrawing) {
         if (!animationFrameId) {
             animationFrameId = requestAnimationFrame(() => {
@@ -1917,6 +2060,38 @@ document.addEventListener('mouseup', (e) => {
         markDirty();
         saveHistory();
     }
+
+    // --- Eraser: determine polygon vs rectangle on mouseup ---
+    if (eraserMouseDownPos && !eraserActive && e.button === 0) {
+        const elapsed = Date.now() - eraserMouseDownTime;
+        const isLongPress = elapsed >= ERASER_LONG_PRESS_MS;
+        const isDrag = eraserIsDragging;
+        const pos = eraserMouseDownPos;
+        const dragPos = eraserDragCurrent || pos;
+
+        if (isLongPress || isDrag) {
+            // Rectangle eraser mode
+            eraserActive = true;
+            eraserMode = 'rectangle';
+            eraserPoints = [[pos.x, pos.y], [dragPos.x, dragPos.y]]; // Start from drag position
+            eraserRectSecondClick = true;
+            eraserMouseDownPos = null;
+            eraserMouseDownTime = 0;
+            eraserIsDragging = false;
+            eraserDragCurrent = null;
+            draw();
+        } else {
+            // Polygon eraser mode - short click
+            eraserActive = true;
+            eraserMode = 'polygon';
+            eraserPoints = [[pos.x, pos.y]];
+            eraserMouseDownPos = null;
+            eraserMouseDownTime = 0;
+            eraserIsDragging = false;
+            eraserDragCurrent = null;
+            draw();
+        }
+    }
 });
 
 // --- Resizer Logic ---
@@ -2057,6 +2232,563 @@ function isPointNearLinestrip(point, vs, threshold) {
 function finishPolygon() {
     isDrawing = false;
     showLabelModal();
+}
+
+// --- Eraser Logic ---
+
+// Cancel any ongoing eraser operation
+function cancelEraser() {
+    eraserActive = false;
+    eraserPoints = [];
+    eraserMode = null;
+    eraserMouseDownTime = 0;
+    eraserMouseDownPos = null;
+    eraserIsDragging = false;
+    eraserDragCurrent = null;
+    eraserRectSecondClick = false;
+    draw();
+}
+
+// Finish eraser drawing and perform the erase operation
+function finishEraser() {
+    if (eraserPoints.length < 3 && eraserMode === 'polygon') {
+        cancelEraser();
+        return;
+    }
+    if (eraserMode === 'rectangle' && eraserPoints.length !== 2) {
+        cancelEraser();
+        return;
+    }
+
+    // Convert rectangle points to polygon (4 corners)
+    let eraserPolygon;
+    if (eraserMode === 'rectangle') {
+        eraserPolygon = getRectPoints(eraserPoints);
+    } else {
+        eraserPolygon = eraserPoints.slice();
+    }
+
+    performErase(eraserPolygon);
+    cancelEraser();
+}
+
+// Core erase operation: subtract the eraser polygon from all existing instances
+function performErase(eraserPolygon) {
+    if (eraserPolygon.length < 3) return;
+
+    // Convert eraser polygon to polygon-clipping format: [[[x,y], [x,y], ...]]
+    // polygon-clipping expects rings as arrays of [x,y] with first ring = outer boundary
+    const clipRing = eraserPolygon.map(p => [p[0], p[1]]);
+    // Close the ring (polygon-clipping requires it)
+    if (clipRing[0][0] !== clipRing[clipRing.length - 1][0] ||
+        clipRing[0][1] !== clipRing[clipRing.length - 1][1]) {
+        clipRing.push([clipRing[0][0], clipRing[0][1]]);
+    }
+    const clipGeom = [clipRing];
+
+    let modified = false;
+    const shapesToRemove = [];
+
+    for (let i = 0; i < shapes.length; i++) {
+        const shape = shapes[i];
+
+        if (shape.shape_type === 'point') {
+            // Point: delete if inside eraser polygon
+            if (shape.points.length > 0 && isPointInPolygon(shape.points[0], eraserPolygon)) {
+                shapesToRemove.push(i);
+                modified = true;
+            }
+        } else if (shape.shape_type === 'linestrip') {
+            // Linestrip: truncate segments that fall inside the eraser polygon
+            const newSegments = truncateLinestrip(shape.points, eraserPolygon);
+            if (newSegments.length === 0) {
+                // Entire linestrip was erased
+                shapesToRemove.push(i);
+                modified = true;
+            } else if (newSegments.length === 1 && pointsArrayEqual(newSegments[0], shape.points)) {
+                // Unchanged
+            } else {
+                // Replace with first segment, add additional segments as new shapes
+                shape.points = newSegments[0];
+                let inserted = 0;
+                for (let j = 1; j < newSegments.length; j++) {
+                    if (newSegments[j].length >= 2) {
+                        shapes.splice(i + j, 0, {
+                            label: shape.label,
+                            points: newSegments[j],
+                            group_id: shape.group_id,
+                            shape_type: 'linestrip',
+                            flags: { ...shape.flags },
+                            visible: shape.visible,
+                            description: shape.description
+                        });
+                        inserted++;
+                    }
+                }
+                if (inserted > 0 && selectedShapeIndex > i) {
+                    selectedShapeIndex += inserted;
+                }
+                i += inserted; // Skip past inserted shapes
+                modified = true;
+            }
+        } else if (shape.shape_type === 'rectangle') {
+            // Rectangle: convert to polygon, compute difference
+            const rectPoly = getRectPoints(shape.points);
+            const originalArea = Math.abs(polygonArea(rectPoly));
+            const result = computePolygonDifference(rectPoly, clipGeom);
+            if (result.length === 0) {
+                shapesToRemove.push(i);
+                modified = true;
+            } else {
+                // Decompose each result polygon (including holes) into hole-free pieces
+                const flatPolys = result.flatMap(poly => {
+                    const rings = poly.map(ring => removeClosingPoint(ring));
+                    return decomposePolygonWithHoles(rings);
+                }).filter(pts => pts.length >= 3);
+
+                if (flatPolys.length === 0) {
+                    shapesToRemove.push(i);
+                    modified = true;
+                } else {
+                    // Check if area changed (no-op detection)
+                    const resultArea = flatPolys.reduce((sum, pts) => sum + Math.abs(polygonArea(pts)), 0);
+                    if (Math.abs(resultArea - originalArea) < 1e-4) {
+                        // No actual change - eraser didn't overlap
+                    } else if (flatPolys.length === 1 && isAxisAlignedRect(flatPolys[0]) && flatPolys[0].length === 4) {
+                        // Still a simple rectangle - keep as rectangle type
+                        const bbox = getPolygonBBox(flatPolys[0]);
+                        shape.points = [[bbox.minX, bbox.minY], [bbox.maxX, bbox.maxY]];
+                        modified = true;
+                    } else {
+                        // Convert to polygon(s)
+                        shape.shape_type = 'polygon';
+                        shape.points = flatPolys[0];
+                        let inserted = 0;
+                        for (let j = 1; j < flatPolys.length; j++) {
+                            shapes.splice(i + 1 + inserted, 0, {
+                                label: shape.label,
+                                points: flatPolys[j],
+                                group_id: shape.group_id,
+                                shape_type: 'polygon',
+                                flags: { ...shape.flags },
+                                visible: shape.visible,
+                                description: shape.description
+                            });
+                            inserted++;
+                        }
+                        if (inserted > 0 && selectedShapeIndex > i) {
+                            selectedShapeIndex += inserted;
+                        }
+                        i += inserted;
+                        modified = true;
+                    }
+                }
+            }
+        } else {
+            // Polygon: compute difference directly
+            const originalArea = Math.abs(polygonArea(shape.points));
+            const result = computePolygonDifference(shape.points, clipGeom);
+            if (result.length === 0) {
+                shapesToRemove.push(i);
+                modified = true;
+            } else {
+                // Decompose each result polygon (including holes) into hole-free pieces
+                const flatPolys = result.flatMap(poly => {
+                    const rings = poly.map(ring => removeClosingPoint(ring));
+                    return decomposePolygonWithHoles(rings);
+                }).filter(pts => pts.length >= 3);
+
+                if (flatPolys.length === 0) {
+                    shapesToRemove.push(i);
+                    modified = true;
+                } else {
+                    // Check if area changed (no-op detection)
+                    const resultArea = flatPolys.reduce((sum, pts) => sum + Math.abs(polygonArea(pts)), 0);
+                    if (Math.abs(resultArea - originalArea) < 1e-4) {
+                        // No actual change - eraser didn't overlap this shape
+                    } else {
+                        shape.points = flatPolys[0];
+                        let inserted = 0;
+                        for (let j = 1; j < flatPolys.length; j++) {
+                            shapes.splice(i + 1 + inserted, 0, {
+                                label: shape.label,
+                                points: flatPolys[j],
+                                group_id: shape.group_id,
+                                shape_type: 'polygon',
+                                flags: { ...shape.flags },
+                                visible: shape.visible,
+                                description: shape.description
+                            });
+                            inserted++;
+                        }
+                        if (inserted > 0 && selectedShapeIndex > i) {
+                            selectedShapeIndex += inserted;
+                        }
+                        i += inserted;
+                        modified = true;
+                    }
+                }
+            }
+        }
+    }
+
+    // Remove shapes marked for deletion (iterate in reverse to keep indices valid)
+    for (let i = shapesToRemove.length - 1; i >= 0; i--) {
+        const idx = shapesToRemove[i];
+        shapes.splice(idx, 1);
+        if (selectedShapeIndex === idx) {
+            selectedShapeIndex = -1;
+        } else if (selectedShapeIndex > idx) {
+            selectedShapeIndex--;
+        }
+    }
+
+    if (modified) {
+        markDirty();
+        saveHistory();
+        renderShapeList();
+        renderLabelsList();
+        draw();
+    }
+}
+
+// Compute polygon difference using polygon-clipping library
+// subject: array of [x,y] points (the polygon to subtract from)
+// clipGeom: polygon-clipping format polygon [ring, ring, ...] (the area to subtract)
+// Returns: MultiPolygon in polygon-clipping format, or empty array
+function computePolygonDifference(subjectPoints, clipGeom) {
+    // Convert subject to polygon-clipping format
+    const subjectRing = subjectPoints.map(p => [p[0], p[1]]);
+    // Close the ring
+    if (subjectRing.length > 0 &&
+        (subjectRing[0][0] !== subjectRing[subjectRing.length - 1][0] ||
+            subjectRing[0][1] !== subjectRing[subjectRing.length - 1][1])) {
+        subjectRing.push([subjectRing[0][0], subjectRing[0][1]]);
+    }
+    const subjectGeom = [subjectRing];
+
+    try {
+        // polygonClipping is loaded from polygon-clipping.umd.min.js
+        const result = polygonClipping.difference(subjectGeom, clipGeom);
+        return result;
+    } catch (e) {
+        console.error('Polygon clipping error:', e);
+        return [subjectGeom]; // Return original on error
+    }
+}
+
+// Get bounding box of a set of points
+function getPolygonBBox(points) {
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of points) {
+        if (p[0] < minX) minX = p[0];
+        if (p[1] < minY) minY = p[1];
+        if (p[0] > maxX) maxX = p[0];
+        if (p[1] > maxY) maxY = p[1];
+    }
+    return { minX, minY, maxX, maxY };
+}
+
+// Remove closing point from a polygon ring if present (LabelMe format doesn't close).
+function removeClosingPoint(ring) {
+    const pts = ring.slice();
+    if (pts.length > 1 &&
+        pts[0][0] === pts[pts.length - 1][0] &&
+        pts[0][1] === pts[pts.length - 1][1]) {
+        pts.pop();
+    }
+    return pts;
+}
+
+// Check if 4 points form an axis-aligned rectangle.
+function isAxisAlignedRect(points) {
+    if (points.length !== 4) return false;
+    const xs = points.map(p => p[0]).sort((a, b) => a - b);
+    const ys = points.map(p => p[1]).sort((a, b) => a - b);
+    // Must have exactly 2 unique X values and 2 unique Y values
+    const ux = [xs[0], xs[1], xs[2], xs[3]];
+    const uy = [ys[0], ys[1], ys[2], ys[3]];
+    return Math.abs(ux[0] - ux[1]) < 1e-6 && Math.abs(ux[2] - ux[3]) < 1e-6 &&
+        Math.abs(uy[0] - uy[1]) < 1e-6 && Math.abs(uy[2] - uy[3]) < 1e-6;
+}
+
+// Compute signed area of a polygon (shoelace formula).
+// Positive = counter-clockwise, negative = clockwise.
+function polygonArea(pts) {
+    let area = 0;
+    for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+        area += (pts[j][0] + pts[i][0]) * (pts[j][1] - pts[i][1]);
+    }
+    return area / 2;
+}
+
+// Decompose a polygon-with-holes into multiple hole-free polygons.
+// Uses polygon-clipping to recursively slice through holes with alternating vertical/horizontal cuts.
+// polyRings: [outerRing, hole1, hole2, ...] where each ring is [[x,y], ...] (NOT closed)
+// Returns an array of flat polygon point arrays (each [[x,y], ...]).
+function decomposePolygonWithHoles(polyRings, depth) {
+    if (polyRings.length <= 1) return [polyRings[0]];
+    if (depth === undefined) depth = 0;
+
+    // Safety: stop recursion after 8 levels — use iterative single-hole subtraction as fallback
+    if (depth >= 8) {
+        const pc = window.polygonClipping || (typeof polygonClipping !== 'undefined' ? polygonClipping : null);
+        if (!pc) return [polyRings[0]];
+        const closeRing = (ring) => {
+            const r = ring.slice();
+            if (r.length >= 2 && (r[0][0] !== r[r.length - 1][0] || r[0][1] !== r[r.length - 1][1])) {
+                r.push(r[0].slice());
+            }
+            return r;
+        };
+        try {
+            // Start with just the outer ring, subtract each hole one at a time
+            let currentPieces = [[closeRing(polyRings[0])]]; // MultiPolygon with one polygon
+            for (let h = 1; h < polyRings.length; h++) {
+                const holeClosed = [closeRing(polyRings[h])];
+                const newPieces = pc.difference(currentPieces, [holeClosed]);
+                currentPieces = newPieces;
+            }
+            // Collect results — recursively decompose any pieces that still have holes
+            const results = [];
+            for (const poly of currentPieces) {
+                if (poly.length <= 1) {
+                    // No holes — safe to take the outer ring directly
+                    const pts = removeClosingPoint(poly[0]);
+                    if (pts.length >= 3) results.push(pts);
+                } else {
+                    // Still has holes — decompose recursively (reset depth since these are simpler pieces)
+                    const innerRings = poly.map(r => removeClosingPoint(r));
+                    const subResults = decomposePolygonWithHoles(innerRings, 0);
+                    for (const sr of subResults) {
+                        if (sr.length >= 3) results.push(sr);
+                    }
+                }
+            }
+            return results.length > 0 ? results : [polyRings[0]];
+        } catch (e) {
+            return [polyRings[0]];
+        }
+    }
+
+    // Close rings for polygon-clipping (it expects closed rings)
+    const closeRing = (ring) => {
+        if (ring.length < 2) return ring.slice();
+        const r = ring.slice();
+        if (r[0][0] !== r[r.length - 1][0] || r[0][1] !== r[r.length - 1][1]) {
+            r.push(r[0].slice());
+        }
+        return r;
+    };
+
+    const closedRings = polyRings.map(r => closeRing(r));
+
+    // Find the bounding box of the first hole to determine where to cut
+    const hole = polyRings[1];
+    let hMin0 = Infinity, hMax0 = -Infinity, hMin1 = Infinity, hMax1 = -Infinity;
+    for (const p of hole) {
+        if (p[0] < hMin0) hMin0 = p[0];
+        if (p[0] > hMax0) hMax0 = p[0];
+        if (p[1] < hMin1) hMin1 = p[1];
+        if (p[1] > hMax1) hMax1 = p[1];
+    }
+
+    // Get the overall bounding box of the outer ring
+    const outer = polyRings[0];
+    let oMinX = Infinity, oMaxX = -Infinity, oMinY = Infinity, oMaxY = -Infinity;
+    for (const p of outer) {
+        if (p[0] < oMinX) oMinX = p[0];
+        if (p[0] > oMaxX) oMaxX = p[0];
+        if (p[1] < oMinY) oMinY = p[1];
+        if (p[1] > oMaxY) oMaxY = p[1];
+    }
+
+    const margin = Math.max(oMaxY - oMinY, oMaxX - oMinX) + 10;
+
+    // Alternate between vertical (even depth) and horizontal (odd depth) cuts
+    const useVertical = (depth % 2 === 0);
+    let cutVal;
+    let halfA, halfB;
+
+    if (useVertical) {
+        cutVal = (hMin0 + hMax0) / 2;
+        halfA = [[[oMinX - margin, oMinY - margin], [cutVal, oMinY - margin],
+        [cutVal, oMaxY + margin], [oMinX - margin, oMaxY + margin],
+        [oMinX - margin, oMinY - margin]]];
+        halfB = [[[cutVal, oMinY - margin], [oMaxX + margin, oMinY - margin],
+        [oMaxX + margin, oMaxY + margin], [cutVal, oMaxY + margin],
+        [cutVal, oMinY - margin]]];
+    } else {
+        cutVal = (hMin1 + hMax1) / 2;
+        halfA = [[[oMinX - margin, oMinY - margin], [oMaxX + margin, oMinY - margin],
+        [oMaxX + margin, cutVal], [oMinX - margin, cutVal],
+        [oMinX - margin, oMinY - margin]]];
+        halfB = [[[oMinX - margin, cutVal], [oMaxX + margin, cutVal],
+        [oMaxX + margin, oMaxY + margin], [oMinX - margin, oMaxY + margin],
+        [oMinX - margin, cutVal]]];
+    }
+
+    const results = [];
+    const pc = window.polygonClipping || (typeof polygonClipping !== 'undefined' ? polygonClipping : null);
+    if (!pc) return [polyRings[0]];
+
+    try {
+        const piecesA = pc.intersection([closedRings], [halfA]);
+        const piecesB = pc.intersection([closedRings], [halfB]);
+
+        const processPieces = (pieces) => {
+            for (const poly of pieces) {
+                if (poly.length <= 1) {
+                    // No holes - just add outer ring
+                    const pts = removeClosingPoint(poly[0]);
+                    if (pts.length >= 3) results.push(pts);
+                } else {
+                    // Still has holes - recurse with next cut direction
+                    const innerRings = poly.map(r => removeClosingPoint(r));
+                    const subResults = decomposePolygonWithHoles(innerRings, depth + 1);
+                    for (const sr of subResults) {
+                        if (sr.length >= 3) results.push(sr);
+                    }
+                }
+            }
+        };
+
+        processPieces(piecesA);
+        processPieces(piecesB);
+    } catch (e) {
+        results.push(polyRings[0]);
+    }
+
+    return results.length > 0 ? results : [polyRings[0]];
+}
+
+
+// Truncate a linestrip by removing segments inside the eraser polygon.
+// Returns an array of linestrip segments (arrays of [x,y] points).
+// Each segment represents a contiguous part of the original linestrip outside the eraser.
+function truncateLinestrip(points, eraserPolygon) {
+    if (points.length < 2) {
+        // Single point - check if inside
+        if (points.length === 1 && isPointInPolygon(points[0], eraserPolygon)) {
+            return [];
+        }
+        return [points.slice()];
+    }
+
+    // For each segment of the linestrip:
+    // 1. Find all intersection points with the eraser polygon boundary
+    // 2. Split the segment at those intersection points
+    // 3. Test each sub-segment's midpoint to determine if it's inside or outside
+    // 4. Keep only outside sub-segments
+    // This approach is robust against floating-point edge cases.
+
+    const allSubSegments = []; // { start: [x,y], end: [x,y], inside: bool }
+
+    for (let i = 0; i < points.length - 1; i++) {
+        const p1 = points[i];
+        const p2 = points[i + 1];
+
+        // Find all intersections with eraser polygon edges
+        const rawIntersections = linePolygonIntersections(p1, p2, eraserPolygon);
+
+        // De-duplicate intersections (a line through a polygon vertex hits two edges)
+        const intersections = [];
+        for (const ip of rawIntersections) {
+            let isDup = false;
+            for (const fp of intersections) {
+                if (Math.abs(ip[0] - fp[0]) < 1e-6 && Math.abs(ip[1] - fp[1]) < 1e-6) {
+                    isDup = true;
+                    break;
+                }
+            }
+            if (!isDup) intersections.push(ip);
+        }
+
+        // Build ordered split points: [p1, ...intersections, p2]
+        const splitPts = [p1, ...intersections, p2];
+
+        // For each sub-segment, test midpoint to classify as inside/outside
+        for (let j = 0; j < splitPts.length - 1; j++) {
+            const a = splitPts[j];
+            const b = splitPts[j + 1];
+            // Skip degenerate (zero-length) sub-segments
+            const dx = a[0] - b[0], dy = a[1] - b[1];
+            if (dx * dx + dy * dy < 1e-12) continue;
+            const mid = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+            const inside = isPointInPolygon(mid, eraserPolygon);
+            allSubSegments.push({ start: a, end: b, inside });
+        }
+    }
+
+    // Merge consecutive outside sub-segments into linestrips
+    const result = [];
+    let currentLinestrip = [];
+
+    for (const seg of allSubSegments) {
+        if (!seg.inside) {
+            if (currentLinestrip.length === 0) {
+                currentLinestrip.push(seg.start);
+            }
+            currentLinestrip.push(seg.end);
+        } else {
+            if (currentLinestrip.length >= 2) {
+                result.push(currentLinestrip);
+            }
+            currentLinestrip = [];
+        }
+    }
+
+    if (currentLinestrip.length >= 2) {
+        result.push(currentLinestrip);
+    }
+
+    return result;
+}
+
+// Find intersection points of a line segment with the edges of a polygon.
+// Returns array of [x,y] points sorted by distance from p1.
+function linePolygonIntersections(p1, p2, polygon) {
+    const intersections = [];
+    for (let i = 0; i < polygon.length; i++) {
+        const j = (i + 1) % polygon.length;
+        const ip = lineSegmentIntersection(p1, p2, polygon[i], polygon[j]);
+        if (ip) {
+            intersections.push(ip);
+        }
+    }
+    // Sort by distance from p1
+    intersections.sort((a, b) => {
+        const da = (a[0] - p1[0]) ** 2 + (a[1] - p1[1]) ** 2;
+        const db = (b[0] - p1[0]) ** 2 + (b[1] - p1[1]) ** 2;
+        return da - db;
+    });
+    return intersections;
+}
+
+// Compute intersection point of two line segments (p1-p2 and p3-p4).
+// Returns [x, y] or null if no intersection.
+function lineSegmentIntersection(p1, p2, p3, p4) {
+    const d1x = p2[0] - p1[0], d1y = p2[1] - p1[1];
+    const d2x = p4[0] - p3[0], d2y = p4[1] - p3[1];
+    const cross = d1x * d2y - d1y * d2x;
+    if (Math.abs(cross) < 1e-10) return null; // Parallel
+
+    const t = ((p3[0] - p1[0]) * d2y - (p3[1] - p1[1]) * d2x) / cross;
+    const u = ((p3[0] - p1[0]) * d1y - (p3[1] - p1[1]) * d1x) / cross;
+
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+        return [p1[0] + t * d1x, p1[1] + t * d1y];
+    }
+    return null;
+}
+
+// Compare two points arrays for equality
+function pointsArrayEqual(a, b) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i][0] !== b[i][0] || a[i][1] !== b[i][1]) return false;
+    }
+    return true;
 }
 
 // --- Modal Logic ---
@@ -2814,6 +3546,15 @@ function setMode(mode) {
         draw();
     }
 
+    // Cancel any active eraser
+    if (eraserActive || eraserMouseDownPos) {
+        cancelEraser();
+        eraserMouseDownPos = null;
+        eraserMouseDownTime = 0;
+        eraserIsDragging = false;
+        eraserDragCurrent = null;
+    }
+
     // 如果在编辑模式，退出并保存更改
     if (isEditingShape) {
         exitShapeEditMode(true);
@@ -2938,6 +3679,115 @@ function drawSVGAnnotations(mouseEvent) {
             line.style.pointerEvents = 'none';
             svgOverlay.appendChild(line);
         }
+    }
+
+    // --- Draw Eraser preview ---
+    if (eraserActive && eraserPoints.length > 0) {
+        const sw = borderWidth / zoomLevel;
+
+        if (eraserMode === 'polygon') {
+            // Draw eraser polygon preview
+            if (eraserPoints.length >= 2) {
+                const polyline = document.createElementNS(SVG_NS, 'polyline');
+                const pointsStr = eraserPoints.map(p => `${p[0]},${p[1]}`).join(' ');
+                polyline.setAttribute('points', pointsStr);
+                polyline.setAttribute('fill', 'rgba(255, 60, 60, 0.15)');
+                polyline.setAttribute('stroke', 'rgba(255, 60, 60, 0.9)');
+                polyline.setAttribute('stroke-width', sw * 1.5);
+                polyline.setAttribute('stroke-dasharray', `${6 / zoomLevel} ${3 / zoomLevel}`);
+                polyline.style.pointerEvents = 'none';
+                svgOverlay.appendChild(polyline);
+            }
+
+            // Draw vertices
+            eraserPoints.forEach(p => {
+                const circle = document.createElementNS(SVG_NS, 'circle');
+                circle.setAttribute('cx', p[0]);
+                circle.setAttribute('cy', p[1]);
+                circle.setAttribute('r', 4 / zoomLevel);
+                circle.setAttribute('fill', 'rgba(255, 60, 60, 0.8)');
+                circle.setAttribute('stroke', 'white');
+                circle.setAttribute('stroke-width', sw * 0.5);
+                circle.style.pointerEvents = 'none';
+                svgOverlay.appendChild(circle);
+            });
+
+            // Draw trailing line to mouse
+            if (mouseEvent && eraserPoints.length > 0) {
+                const rect = canvas.getBoundingClientRect();
+                const mx = (mouseEvent.clientX - rect.left) / zoomLevel;
+                const my = (mouseEvent.clientY - rect.top) / zoomLevel;
+                const lastPoint = eraserPoints[eraserPoints.length - 1];
+
+                const line = document.createElementNS(SVG_NS, 'line');
+                line.setAttribute('x1', lastPoint[0]);
+                line.setAttribute('y1', lastPoint[1]);
+                line.setAttribute('x2', mx);
+                line.setAttribute('y2', my);
+                line.setAttribute('stroke', 'rgba(255, 60, 60, 0.8)');
+                line.setAttribute('stroke-width', sw);
+                line.setAttribute('stroke-dasharray', `${4 / zoomLevel} ${2 / zoomLevel}`);
+                line.style.pointerEvents = 'none';
+                svgOverlay.appendChild(line);
+
+                // Also draw closing line (from mouse back to first point) if enough points
+                if (eraserPoints.length > 1) {
+                    const firstPoint = eraserPoints[0];
+                    const closeLine = document.createElementNS(SVG_NS, 'line');
+                    closeLine.setAttribute('x1', mx);
+                    closeLine.setAttribute('y1', my);
+                    closeLine.setAttribute('x2', firstPoint[0]);
+                    closeLine.setAttribute('y2', firstPoint[1]);
+                    closeLine.setAttribute('stroke', 'rgba(255, 60, 60, 0.4)');
+                    closeLine.setAttribute('stroke-width', sw * 0.5);
+                    closeLine.setAttribute('stroke-dasharray', `${4 / zoomLevel} ${2 / zoomLevel}`);
+                    closeLine.style.pointerEvents = 'none';
+                    svgOverlay.appendChild(closeLine);
+                }
+            }
+        } else if (eraserMode === 'rectangle' && eraserPoints.length === 2) {
+            // Draw eraser rectangle preview
+            const [p1, p2] = eraserPoints;
+            const x1 = Math.min(p1[0], p2[0]);
+            const y1 = Math.min(p1[1], p2[1]);
+            const w = Math.abs(p2[0] - p1[0]);
+            const h = Math.abs(p2[1] - p1[1]);
+
+            const rect = document.createElementNS(SVG_NS, 'rect');
+            rect.setAttribute('x', x1);
+            rect.setAttribute('y', y1);
+            rect.setAttribute('width', w);
+            rect.setAttribute('height', h);
+            rect.setAttribute('fill', 'rgba(255, 60, 60, 0.15)');
+            rect.setAttribute('stroke', 'rgba(255, 60, 60, 0.9)');
+            rect.setAttribute('stroke-width', sw * 1.5);
+            rect.setAttribute('stroke-dasharray', `${6 / zoomLevel} ${3 / zoomLevel}`);
+            rect.style.pointerEvents = 'none';
+            svgOverlay.appendChild(rect);
+        }
+    }
+
+    // --- Draw Eraser rectangle preview during initial drag (before mouseup) ---
+    if (!eraserActive && eraserMouseDownPos && eraserIsDragging && eraserDragCurrent) {
+        const sw = borderWidth / zoomLevel;
+        const p1 = eraserMouseDownPos;
+        const p2 = eraserDragCurrent;
+        const x1 = Math.min(p1.x, p2.x);
+        const y1 = Math.min(p1.y, p2.y);
+        const w = Math.abs(p2.x - p1.x);
+        const h = Math.abs(p2.y - p1.y);
+
+        const rect = document.createElementNS(SVG_NS, 'rect');
+        rect.setAttribute('x', x1);
+        rect.setAttribute('y', y1);
+        rect.setAttribute('width', w);
+        rect.setAttribute('height', h);
+        rect.setAttribute('fill', 'rgba(255, 60, 60, 0.15)');
+        rect.setAttribute('stroke', 'rgba(255, 60, 60, 0.9)');
+        rect.setAttribute('stroke-width', sw * 1.5);
+        rect.setAttribute('stroke-dasharray', `${6 / zoomLevel} ${3 / zoomLevel}`);
+        rect.style.pointerEvents = 'none';
+        svgOverlay.appendChild(rect);
     }
 
     // Draw pixel RGB values when at maximum zoom (4000%)
@@ -4445,6 +5295,8 @@ function samClearState() {
     samIsDragging = false;
     samDragStart = null;
     samDragCurrent = null;
+    samBoxSecondClick = false;
+    samMouseDownTime = 0;
     samCachedCrop = null;
     samCurrentImagePath = null;
     samIsFreshSequence = true;
@@ -4566,6 +5418,32 @@ canvasWrapper.addEventListener('mousedown', (e) => {
     const x = (e.clientX - rect.left) / zoomLevel;
     const y = (e.clientY - rect.top) / zoomLevel;
 
+    // If waiting for second click to complete box, finalize the box
+    if (samBoxSecondClick) {
+        if (!samDragStart) {
+            // Guard: samDragStart was cleared (e.g. by image navigation)
+            samBoxSecondClick = false;
+            samIsDragging = false;
+            return;
+        }
+        const x1 = Math.min(samDragStart.x, x);
+        const y1 = Math.min(samDragStart.y, y);
+        const x2 = Math.max(samDragStart.x, x);
+        const y2 = Math.max(samDragStart.y, y);
+
+        samPrompts = [{ type: 'rectangle', data: [x1, y1, x2, y2] }];
+        samPromptType = 'box';
+        samBoxSecondClick = false;
+        samDragStart = null;
+        samDragCurrent = null;
+        samIsDragging = false;
+        draw();
+        samDecode();
+        e.stopPropagation();
+        e.preventDefault();
+        return;
+    }
+
     // If SAM is idle (no prompts, no mask, no pending click), check if clicking
     // on an existing shape. If so, let the main mousedown handler select it.
     if (samPrompts.length === 0 && !samMaskContour && !samPendingClick && !samClickTimer) {
@@ -4582,10 +5460,11 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         draw();
     }
 
-    // Record drag start
+    // Record drag start and time for long-press detection
     samIsDragging = false;
     samDragStart = { x, y };
     samDragCurrent = { x, y };
+    samMouseDownTime = Date.now();
 
     e.stopPropagation();
     e.preventDefault();
@@ -4598,6 +5477,14 @@ canvasWrapper.addEventListener('mousemove', (e) => {
     const x = (e.clientX - rect.left) / zoomLevel;
     const y = (e.clientY - rect.top) / zoomLevel;
 
+    // Box mode waiting for second click: update preview
+    if (samBoxSecondClick) {
+        samDragCurrent = { x, y };
+        draw();
+        return;
+    }
+
+    // Initial drag detection
     const dx = x - samDragStart.x;
     const dy = y - samDragStart.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -4617,20 +5504,15 @@ canvasWrapper.addEventListener('mouseup', (e) => {
     const x = (e.clientX - rect.left) / zoomLevel;
     const y = (e.clientY - rect.top) / zoomLevel;
 
-    if (samIsDragging) {
-        // Box prompt: clear all previous prompts (box and points don't coexist)
-        const x1 = Math.min(samDragStart.x, x);
-        const y1 = Math.min(samDragStart.y, y);
-        const x2 = Math.max(samDragStart.x, x);
-        const y2 = Math.max(samDragStart.y, y);
+    const elapsed = Date.now() - samMouseDownTime;
+    const isLongPress = elapsed >= SAM_LONG_PRESS_MS;
 
-        samPrompts = [{ type: 'rectangle', data: [x1, y1, x2, y2] }];
-        samPromptType = 'box';
-        samDragStart = null;
-        samDragCurrent = null;
-        samIsDragging = false;
+    if (samIsDragging || isLongPress) {
+        // Long press or drag: enter box mode, wait for second click
+        samBoxSecondClick = true;
+        samDragCurrent = { x, y };
+        samIsDragging = true; // Ensure drag preview shows
         draw();
-        samDecode();
     } else {
         // Click (not drag): defer to distinguish from double-click
         const shiftKey = e.shiftKey;
@@ -4700,6 +5582,8 @@ window._samOnImageUpdate = function () {
         samIsDragging = false;
         samDragStart = null;
         samDragCurrent = null;
+        samBoxSecondClick = false;
+        samMouseDownTime = 0;
         samCachedCrop = null;
         // Clear samCurrentImagePath so lazy encode triggers on next interaction
         samCurrentImagePath = null;

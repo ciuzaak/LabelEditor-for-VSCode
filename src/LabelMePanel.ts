@@ -703,6 +703,10 @@ export class LabelMePanel {
         const scriptPathOnDisk = vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js');
         const scriptUri = webview.asWebviewUri(scriptPathOnDisk);
 
+        // Polygon-clipping library for eraser feature
+        const polyClipPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'polygon-clipping.umd.min.js');
+        const polyClipUri = webview.asWebviewUri(polyClipPath);
+
         // Read CSS file content and inline it to prevent race condition on Windows
         // where JS executes before CSS finishes loading via external <link>, causing
         // layout chaos (zero container dimensions, unstyled dropdowns visible, etc.)
@@ -1013,6 +1017,7 @@ export class LabelMePanel {
                         onnxGpuIndex: ${this._globalState.get('onnxGpuIndex') ?? -1}
                     };
                 </script>
+                <script src="${polyClipUri}"></script>
                 <script src="${scriptUri}"></script>
             </body>
             </html>`;

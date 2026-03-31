@@ -2,6 +2,32 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.13.2] - 2026-03-31
+
+### Added
+- **Eraser Tool**: Erase portions of existing annotations across all editing modes (except SAM and View)
+  - **Shift+Click**: Start erasing with a polygon shape
+  - **Shift+Long-press+Drag**: Start erasing with a rectangle shape; second click to confirm
+  - Erased area is subtracted from all overlapping annotations using boolean difference
+  - Fully erased instances are automatically deleted
+  - Supports polygon, rectangle, linestrip, and point annotations
+  - Rectangle annotations convert to polygon when the remainder is non-rectangular
+  - Interior punch-outs (holes) are decomposed into multiple hole-free polygons via recursive vertical/horizontal slicing, since LabelMe format does not support holes
+  - Right-click or ESC to cancel an in-progress erase
+  - Shift key only needed for the initial click; subsequent clicks don't require Shift
+
+### Changed
+- **SAM Box Annotation**: Adjusted interaction to "Click-Drag-Click" pattern
+  - Long-press (≥300ms) or drag to set the first corner
+  - Second click to confirm the box and trigger SAM decoding
+  - Right-click to cancel the pending box
+  - ESC now also cancels a pending box second-click
+
+### Fixed
+- **Eraser State Reset**: Eraser state (points, mode, drag) is now properly cleared when switching images or modes
+- **No-Op Erase Detection**: Erasing in empty space no longer creates spurious undo history entries; uses polygon area comparison instead of exact point matching
+- **Selection Index Stability**: Inserting new shape fragments during erase no longer silently shifts `selectedShapeIndex` to a different shape
+
 ## [0.13.1] - 2026-03-30
 
 ### Fixed

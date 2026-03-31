@@ -111,6 +111,15 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 4. If the SAM service is not running, a configuration modal will appear — select the model folder and Python interpreter, then click OK to start the service
 5. The service runs in a terminal tab and persists until you manually close it
 
+### Eraser Tool (New in v0.13.2)
+- **Erase Portions of Annotations**: Remove parts of existing annotations using polygon or rectangle erasers
+  - **Shift+Click**: Start a polygon eraser (click to add points, close to apply)
+  - **Shift+Long-press+Drag**: Start a rectangle eraser (second click to confirm)
+  - Works in all editing modes (Polygon, Rectangle, Line, Point)
+  - Boolean subtraction removes the erased area from all overlapping annotations
+  - Interior punch-outs are decomposed into hole-free polygons (LabelMe compatible)
+  - Right-click or ESC to cancel
+
 ## 📦 Installation
 
 ### From OpenVSX
@@ -160,7 +169,9 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 - **I**: Switch to SAM AI Mode
 - **Ctrl+Z** (`Cmd+Z` on Mac): Undo last action
 - **Ctrl+Shift+Z** or **Ctrl+Y**: Redo action
-- **ESC**: Cancel current drawing
+- **Shift+Click**: Start polygon eraser
+- **Shift+Long-press+Drag**: Start rectangle eraser
+- **ESC**: Cancel current drawing / Cancel eraser
 - **A**: Previous image
 - **D**: Next image
 - **Ctrl+S** (`Cmd+S` on Mac): Save annotations
