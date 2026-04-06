@@ -71,6 +71,12 @@ let shapes = [];
 let currentPoints = [];
 let isDrawing = false;
 let selectedShapeIndex = -1;
+let selectedShapeIndices = new Set(); // Multi-selection set
+let isBatchRenaming = false; // Whether label modal is renaming multiple shapes
+// Box selection state (view mode drag-to-select)
+let isBoxSelecting = false;
+let boxSelectStart = null;   // {x, y} in image coords
+let boxSelectCurrent = null; // {x, y} in image coords
 let editingShapeIndex = -1;
 let recentLabels = initialGlobalSettings.recentLabels || [];
 
@@ -685,13 +691,16 @@ function saveHistory() {
 
 function undo() {
     if (historyIndex > 0) {
+        // Exit edit mode before swapping snapshot — stale shapeBeingEdited would crash
+        if (isEditingShape) exitShapeEditMode(false);
+
         historyIndex--;
         shapes = structuredClone(history[historyIndex]);
 
         // Reapply label-level visibility overrides (not recorded in history)
         applyLabelVisibilityState();
 
-        selectedShapeIndex = -1;
+        clearSelection();
         // 检查是否恢复到保存时的状态
         if (historyIndex === savedHistoryIndex) {
             markClean();
@@ -706,13 +715,16 @@ function undo() {
 
 function redo() {
     if (historyIndex < history.length - 1) {
+        // Exit edit mode before swapping snapshot — stale shapeBeingEdited would crash
+        if (isEditingShape) exitShapeEditMode(false);
+
         historyIndex++;
         shapes = structuredClone(history[historyIndex]);
 
         // Reapply label-level visibility overrides (not recorded in history)
         applyLabelVisibilityState();
 
-        selectedShapeIndex = -1;
+        clearSelection();
         // 检查是否恢复到保存时的状态
         if (historyIndex === savedHistoryIndex) {
             markClean();
@@ -954,9 +966,14 @@ function handleImageUpdate(message) {
         eraserDragCurrent = null;
     }
 
-    // Clear selection
-    selectedShapeIndex = -1;
+    // Clear selection and box selection
+    clearSelection();
+    isBoxSelecting = false;
+    boxSelectStart = null;
+    boxSelectCurrent = null;
     editingShapeIndex = -1;
+    isBatchRenaming = false;
+    hideLabelModal();
 
     // Increment load ID to invalidate any pending callbacks from previous loads
     currentImageLoadId++;
@@ -1015,7 +1032,7 @@ function handleImageUpdate(message) {
         shapes = [];
         currentPoints = [];
         isDrawing = false;
-        selectedShapeIndex = -1;
+        clearSelection();
         editingShapeIndex = -1;
         statusSpan.textContent = "No images found";
         statusSpan.style.color = "orange";
@@ -1158,6 +1175,15 @@ document.addEventListener('keydown', (e) => {
     if (colorPickerModal && colorPickerModal.style.display === 'flex') return;
     if (samConfigModal && samConfigModal.style.display === 'flex') return;
 
+    // Skip most shortcuts when an input/textarea/select is focused,
+    // allowing text editing keys to work normally. Only Ctrl-prefixed
+    // shortcuts (Ctrl+S, Ctrl+Z, Ctrl+A, Ctrl+F) are still processed.
+    const focusedTag = document.activeElement?.tagName;
+    if ((focusedTag === 'INPUT' || focusedTag === 'TEXTAREA' || focusedTag === 'SELECT')
+        && !(e.ctrlKey || e.metaKey)) {
+        return;
+    }
+
     // Ctrl+F: Search
     if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
         e.preventDefault();
@@ -1215,8 +1241,17 @@ document.addEventListener('keydown', (e) => {
         redo();
     }
 
-    // A: Prev Image
-    if (e.key === 'a' || e.key === 'A') {
+    // Ctrl+A: Select all instances
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        selectAllShapes();
+        renderShapeList();
+        draw();
+        return;
+    }
+
+    // A: Prev Image (only without Ctrl)
+    if ((e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.metaKey) {
         vscode.postMessage({ command: 'prev' });
     }
 
@@ -1225,9 +1260,13 @@ document.addEventListener('keydown', (e) => {
         vscode.postMessage({ command: 'next' });
     }
 
-    // Delete/Backspace: Delete selected shape
-    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeIndex !== -1) {
-        deleteShape(selectedShapeIndex);
+    // Delete/Backspace: Delete selected shape(s)
+    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeIndices.size > 0) {
+        if (selectedShapeIndices.size > 1) {
+            deleteSelectedShapes();
+        } else {
+            deleteShape(selectedShapeIndex);
+        }
     }
 
     // ESC: Cancel drawing or exit drag/edit mode
@@ -1242,6 +1281,15 @@ document.addEventListener('keydown', (e) => {
         // First priority: hide context menu if visible
         if (shapeContextMenu && shapeContextMenu.style.display !== 'none') {
             hideShapeContextMenu();
+            return;
+        }
+
+        // Cancel box selection
+        if (isBoxSelecting) {
+            isBoxSelecting = false;
+            boxSelectStart = null;
+            boxSelectCurrent = null;
+            draw();
             return;
         }
 
@@ -1272,6 +1320,15 @@ document.addEventListener('keydown', (e) => {
         // Fourth priority: clear SAM prompts (ESC clears all points/box at once)
         if (currentMode === 'sam' && (samPrompts.length > 0 || samMaskContour || samBoxSecondClick)) {
             samClearState();
+            return;
+        }
+
+        // Fifth priority: clear multi-selection
+        if (selectedShapeIndices.size > 0) {
+            clearSelection();
+            renderShapeList();
+            draw();
+            return;
         }
     }
 
@@ -1350,6 +1407,152 @@ function invalidateColorCache() {
     colorCache.clear();
 }
 
+// --- Multi-Selection Helpers ---
+function clearSelection() {
+    selectedShapeIndex = -1;
+    selectedShapeIndices.clear();
+    hideShapeContextMenu();
+}
+
+function selectShape(index) {
+    // Exit edit mode if selecting a different shape
+    if (isEditingShape && shapeBeingEdited !== index) {
+        exitShapeEditMode(true);
+    }
+    selectedShapeIndices.clear();
+    selectedShapeIndex = index;
+    if (index !== -1) {
+        selectedShapeIndices.add(index);
+    }
+}
+
+function toggleShapeSelection(index) {
+    // Exit edit mode — multi-selection is incompatible with vertex editing
+    if (isEditingShape) exitShapeEditMode(true);
+
+    if (selectedShapeIndices.has(index)) {
+        selectedShapeIndices.delete(index);
+        if (selectedShapeIndex === index) {
+            selectedShapeIndex = selectedShapeIndices.size > 0 ? [...selectedShapeIndices][selectedShapeIndices.size - 1] : -1;
+        }
+    } else {
+        selectedShapeIndices.add(index);
+        selectedShapeIndex = index;
+    }
+}
+
+function selectShapeRange(fromIndex, toIndex) {
+    // Exit edit mode — multi-selection is incompatible with vertex editing
+    if (isEditingShape) exitShapeEditMode(true);
+
+    // Replace selection with the contiguous range
+    selectedShapeIndices.clear();
+    const start = Math.min(fromIndex, toIndex);
+    const end = Math.max(fromIndex, toIndex);
+    for (let i = start; i <= end; i++) {
+        selectedShapeIndices.add(i);
+    }
+    selectedShapeIndex = toIndex;
+}
+
+function selectAllShapes() {
+    // Exit edit mode — multi-selection is incompatible with vertex editing
+    if (isEditingShape) exitShapeEditMode(true);
+    selectedShapeIndices.clear();
+    for (let i = 0; i < shapes.length; i++) {
+        selectedShapeIndices.add(i);
+    }
+    selectedShapeIndex = shapes.length > 0 ? 0 : -1;
+}
+
+function isShapeSelected(index) {
+    return selectedShapeIndices.has(index);
+}
+
+// Adjust selection indices when shapes are inserted after a given index
+function adjustSelectionAfterInsert(afterIndex, count) {
+    const newSet = new Set();
+    for (const idx of selectedShapeIndices) {
+        newSet.add(idx > afterIndex ? idx + count : idx);
+    }
+    selectedShapeIndices = newSet;
+    if (selectedShapeIndex > afterIndex) {
+        selectedShapeIndex += count;
+    }
+}
+
+// Adjust selection indices when a shape is deleted
+function adjustSelectionAfterDelete(deletedIndex) {
+    selectedShapeIndices.delete(deletedIndex);
+    const newSet = new Set();
+    for (const idx of selectedShapeIndices) {
+        newSet.add(idx > deletedIndex ? idx - 1 : idx);
+    }
+    selectedShapeIndices = newSet;
+    if (selectedShapeIndex === deletedIndex) {
+        selectedShapeIndex = selectedShapeIndices.size > 0 ? [...selectedShapeIndices][0] : -1;
+    } else if (selectedShapeIndex > deletedIndex) {
+        selectedShapeIndex--;
+    }
+}
+
+// Delete all currently selected shapes (batch delete)
+function deleteSelectedShapes() {
+    if (selectedShapeIndices.size === 0) return;
+    // Sort indices descending to splice from end first
+    const indices = [...selectedShapeIndices].sort((a, b) => b - a);
+
+    // Always exit edit mode before batch delete — the edited shape may be
+    // deleted directly, or its index may shift when earlier shapes are removed.
+    if (isEditingShape) {
+        exitShapeEditMode(false);
+    }
+
+    for (const idx of indices) {
+        shapes.splice(idx, 1);
+    }
+    clearSelection();
+    markDirty();
+    saveHistory();
+    renderShapeList();
+    renderLabelsList();
+    draw();
+}
+
+// Get bounding box of a shape
+function getShapeBoundingBox(shape) {
+    let points = shape.points;
+    if (shape.shape_type === 'rectangle') {
+        points = getRectPoints(points);
+    }
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    for (const p of points) {
+        if (p[0] < minX) minX = p[0];
+        if (p[1] < minY) minY = p[1];
+        if (p[0] > maxX) maxX = p[0];
+        if (p[1] > maxY) maxY = p[1];
+    }
+    return { minX, minY, maxX, maxY };
+}
+
+// Find all shapes whose bounding box intersects with given rectangle
+function findShapesInRect(rx1, ry1, rx2, ry2) {
+    const selMinX = Math.min(rx1, rx2);
+    const selMinY = Math.min(ry1, ry2);
+    const selMaxX = Math.max(rx1, rx2);
+    const selMaxY = Math.max(ry1, ry2);
+    const result = [];
+    for (let i = 0; i < shapes.length; i++) {
+        if (shapes[i].visible === false) continue;
+        const bb = getShapeBoundingBox(shapes[i]);
+        // Check if bounding boxes intersect
+        if (bb.maxX >= selMinX && bb.minX <= selMaxX && bb.maxY >= selMinY && bb.minY <= selMaxY) {
+            result.push(i);
+        }
+    }
+    return result;
+}
+
 // --- Canvas Interaction ---
 
 // 使用canvasWrapper来监听鼠标事件，因为SVG覆盖在canvas上
@@ -1423,19 +1626,23 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             const overlappingShapes = findAllShapesAt(x, y);
 
             if (overlappingShapes.length > 0) {
-                if (isSameLocation && overlappingShapes.length > 1) {
+                let targetShape;
+                if (e.ctrlKey || e.metaKey) {
+                    // Ctrl+click: always target topmost shape (no cycling)
+                    targetShape = overlappingShapes[0];
+                    toggleShapeSelection(targetShape);
+                } else if (isSameLocation && overlappingShapes.length > 1) {
                     // 如果在同一位置连续点击，且有多个重叠实例，则循环选择下一个
                     const currentIndex = overlappingShapes.indexOf(selectedShapeIndex);
                     if (currentIndex !== -1 && currentIndex < overlappingShapes.length - 1) {
-                        // 选择下一个重叠的实例
-                        selectedShapeIndex = overlappingShapes[currentIndex + 1];
+                        targetShape = overlappingShapes[currentIndex + 1];
                     } else {
-                        // 循环回到第一个
-                        selectedShapeIndex = overlappingShapes[0];
+                        targetShape = overlappingShapes[0];
                     }
+                    selectShape(targetShape);
                 } else {
-                    // 首次点击或不同位置，选择最上层的实例
-                    selectedShapeIndex = overlappingShapes[0];
+                    targetShape = overlappingShapes[0];
+                    selectShape(targetShape);
                 }
 
                 // 更新点击位置和时间
@@ -1447,11 +1654,23 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 draw();
                 return;
             } else {
-                selectedShapeIndex = -1;
+                // Click on empty area
+                if (e.ctrlKey || e.metaKey) {
+                    // Ctrl+click on empty: don't clear selection
+                } else {
+                    clearSelection();
+                }
                 renderShapeList();
 
                 // 重置点击追踪
                 lastClickTime = 0;
+            }
+
+            // View mode: start box selection on empty area (works with Ctrl for additive selection)
+            if (currentMode === 'view') {
+                isBoxSelecting = true;
+                boxSelectStart = { x, y };
+                boxSelectCurrent = { x, y };
             }
 
             // 只在polygon或rectangle或point或line模式下允许开始绘制
@@ -1560,7 +1779,9 @@ canvasWrapper.addEventListener('mousedown', (e) => {
 
                 const clickedShapeIndex = findShapeIndexAt(x, y);
                 if (clickedShapeIndex !== -1) {
-                    selectedShapeIndex = clickedShapeIndex;
+                    if (!isShapeSelected(clickedShapeIndex)) {
+                        selectShape(clickedShapeIndex);
+                    }
                     renderShapeList();
                     draw();
                     showShapeContextMenu(e.clientX, e.clientY, clickedShapeIndex);
@@ -1596,8 +1817,10 @@ canvasWrapper.addEventListener('mousedown', (e) => {
 
             const clickedShapeIndex = findShapeIndexAt(x, y);
             if (clickedShapeIndex !== -1) {
-                // Select the shape and show context menu
-                selectedShapeIndex = clickedShapeIndex;
+                // If right-clicked shape is not already selected, select it (preserving multi-select if applicable)
+                if (!isShapeSelected(clickedShapeIndex)) {
+                    selectShape(clickedShapeIndex);
+                }
                 renderShapeList();
                 draw();
                 showShapeContextMenu(e.clientX, e.clientY, clickedShapeIndex);
@@ -1655,6 +1878,21 @@ canvasWrapper.addEventListener('mousemove', (e) => {
         return;
     }
 
+    // Box selection drag (view mode)
+    if (isBoxSelecting) {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) / zoomLevel;
+        const y = (e.clientY - rect.top) / zoomLevel;
+        boxSelectCurrent = { x, y };
+        if (!animationFrameId) {
+            animationFrameId = requestAnimationFrame(() => {
+                draw(e);
+                animationFrameId = null;
+            });
+        }
+        return;
+    }
+
     if (isDrawing) {
         if (!animationFrameId) {
             animationFrameId = requestAnimationFrame(() => {
@@ -1689,6 +1927,41 @@ canvasWrapper.addEventListener('mousemove', (e) => {
             canvasWrapper.style.cursor = desiredCursor;
             currentCursor = desiredCursor;
         }
+    }
+});
+
+// Mouseup handler for box selection completion (document-level so it fires
+// even when the mouse is released outside the canvas wrapper)
+document.addEventListener('mouseup', (e) => {
+    if (isBoxSelecting) {
+        isBoxSelecting = false;
+        if (boxSelectStart && boxSelectCurrent) {
+            const dx = boxSelectCurrent.x - boxSelectStart.x;
+            const dy = boxSelectCurrent.y - boxSelectStart.y;
+            // Only select if dragged enough (not a simple click)
+            if (Math.sqrt(dx * dx + dy * dy) > CLICK_THRESHOLD_DISTANCE) {
+                const found = findShapesInRect(boxSelectStart.x, boxSelectStart.y, boxSelectCurrent.x, boxSelectCurrent.y);
+                if (e.ctrlKey || e.metaKey) {
+                    // Ctrl+drag: add to existing selection
+                    for (const idx of found) {
+                        selectedShapeIndices.add(idx);
+                    }
+                    if (found.length > 0) {
+                        selectedShapeIndex = found[0];
+                    }
+                } else {
+                    clearSelection();
+                    for (const idx of found) {
+                        selectedShapeIndices.add(idx);
+                    }
+                    selectedShapeIndex = found.length > 0 ? found[0] : -1;
+                }
+                renderShapeList();
+            }
+        }
+        boxSelectStart = null;
+        boxSelectCurrent = null;
+        draw();
     }
 });
 
@@ -1813,6 +2086,29 @@ document.addEventListener('contextmenu', (e) => {
 function showShapeContextMenu(clientX, clientY, shapeIndex) {
     if (!shapeContextMenu) return;
 
+    const multi = selectedShapeIndices.size > 1;
+
+    // Hide "Edit" for multi-selection (only works on single shape)
+    if (contextMenuEdit) {
+        contextMenuEdit.style.display = multi ? 'none' : '';
+    }
+    // Update labels for multi-selection
+    if (contextMenuRename) {
+        contextMenuRename.textContent = multi ? `Rename (${selectedShapeIndices.size})` : 'Rename';
+    }
+    if (contextMenuToggleVisible) {
+        if (multi) {
+            const anyVisible = [...selectedShapeIndices].some(idx => shapes[idx].visible !== false);
+            contextMenuToggleVisible.textContent = anyVisible ? `Hide (${selectedShapeIndices.size})` : `Show (${selectedShapeIndices.size})`;
+        } else {
+            const shape = shapes[selectedShapeIndex];
+            contextMenuToggleVisible.textContent = (shape && shape.visible === false) ? 'Show' : 'Hide';
+        }
+    }
+    if (contextMenuDelete) {
+        contextMenuDelete.textContent = multi ? `Delete (${selectedShapeIndices.size})` : 'Delete';
+    }
+
     // Position the menu at mouse location relative to canvasWrapper
     const wrapperRect = canvasWrapper.getBoundingClientRect();
     const menuX = clientX - wrapperRect.left;
@@ -1845,7 +2141,9 @@ if (contextMenuRename) {
     contextMenuRename.addEventListener('click', (e) => {
         e.stopPropagation();
         hideShapeContextMenu();
-        if (selectedShapeIndex !== -1) {
+        if (selectedShapeIndices.size > 1) {
+            showBatchRenameModal();
+        } else if (selectedShapeIndex !== -1) {
             showLabelModal(selectedShapeIndex);
         }
     });
@@ -1856,10 +2154,21 @@ if (contextMenuToggleVisible) {
     contextMenuToggleVisible.addEventListener('click', (e) => {
         e.stopPropagation();
         hideShapeContextMenu();
-        if (selectedShapeIndex !== -1) {
+        if (selectedShapeIndices.size > 1) {
+            // Deterministic: hide all if any visible, show all if all hidden
+            const anyVisible = [...selectedShapeIndices].some(idx => shapes[idx].visible !== false);
+            const newState = !anyVisible; // true = show, false = hide
+            for (const idx of selectedShapeIndices) {
+                shapes[idx].visible = newState;
+            }
+            renderShapeList();
+            renderLabelsList();
+            draw();
+        } else if (selectedShapeIndex !== -1) {
             const shape = shapes[selectedShapeIndex];
             shape.visible = shape.visible === undefined ? false : !shape.visible;
             renderShapeList();
+            renderLabelsList();
             draw();
         }
     });
@@ -1870,7 +2179,9 @@ if (contextMenuDelete) {
     contextMenuDelete.addEventListener('click', (e) => {
         e.stopPropagation();
         hideShapeContextMenu();
-        if (selectedShapeIndex !== -1) {
+        if (selectedShapeIndices.size > 1) {
+            deleteSelectedShapes();
+        } else if (selectedShapeIndex !== -1) {
             deleteShape(selectedShapeIndex);
         }
     });
@@ -1887,7 +2198,7 @@ document.addEventListener('click', (e) => {
 function enterShapeEditMode(shapeIndex) {
     isEditingShape = true;
     shapeBeingEdited = shapeIndex;
-    selectedShapeIndex = shapeIndex;
+    selectShape(shapeIndex);
     originalEditPoints = JSON.parse(JSON.stringify(shapes[shapeIndex].points));
     draw();
 }
@@ -2325,8 +2636,8 @@ function performErase(eraserPolygon) {
                         inserted++;
                     }
                 }
-                if (inserted > 0 && selectedShapeIndex > i) {
-                    selectedShapeIndex += inserted;
+                if (inserted > 0) {
+                    adjustSelectionAfterInsert(i, inserted);
                 }
                 i += inserted; // Skip past inserted shapes
                 modified = true;
@@ -2376,8 +2687,8 @@ function performErase(eraserPolygon) {
                             });
                             inserted++;
                         }
-                        if (inserted > 0 && selectedShapeIndex > i) {
-                            selectedShapeIndex += inserted;
+                        if (inserted > 0) {
+                            adjustSelectionAfterInsert(i, inserted);
                         }
                         i += inserted;
                         modified = true;
@@ -2421,8 +2732,8 @@ function performErase(eraserPolygon) {
                             });
                             inserted++;
                         }
-                        if (inserted > 0 && selectedShapeIndex > i) {
-                            selectedShapeIndex += inserted;
+                        if (inserted > 0) {
+                            adjustSelectionAfterInsert(i, inserted);
                         }
                         i += inserted;
                         modified = true;
@@ -2436,11 +2747,7 @@ function performErase(eraserPolygon) {
     for (let i = shapesToRemove.length - 1; i >= 0; i--) {
         const idx = shapesToRemove[i];
         shapes.splice(idx, 1);
-        if (selectedShapeIndex === idx) {
-            selectedShapeIndex = -1;
-        } else if (selectedShapeIndex > idx) {
-            selectedShapeIndex--;
-        }
+        adjustSelectionAfterDelete(idx);
     }
 
     if (modified) {
@@ -2793,6 +3100,19 @@ function pointsArrayEqual(a, b) {
 
 // --- Modal Logic ---
 
+function showBatchRenameModal() {
+    isBatchRenaming = true;
+    editingShapeIndex = -1;
+    labelModal.style.display = 'flex';
+    // Pre-fill with the label of the first selected shape
+    const firstIdx = [...selectedShapeIndices][0];
+    labelInput.value = firstIdx !== undefined ? shapes[firstIdx].label : '';
+    descriptionInput.value = '';
+    labelInput.focus();
+    labelInput.select();
+    renderRecentLabels();
+}
+
 function showLabelModal(editIndex = -1) {
     editingShapeIndex = editIndex;
     labelModal.style.display = 'flex';
@@ -2918,7 +3238,18 @@ function confirmLabel() {
 
     const description = descriptionInput.value.trim();
 
-    if (editingShapeIndex !== -1) {
+    if (isBatchRenaming) {
+        // Batch rename all selected shapes
+        for (const idx of selectedShapeIndices) {
+            shapes[idx].label = label;
+            if (description) {
+                shapes[idx].description = description;
+            } else {
+                delete shapes[idx].description;
+            }
+        }
+        isBatchRenaming = false;
+    } else if (editingShapeIndex !== -1) {
         // Editing existing shape
         shapes[editingShapeIndex].label = label;
         if (description) {
@@ -2970,6 +3301,13 @@ modalOkBtn.onclick = confirmLabel;
 // 取消标签输入的通用处理函数
 function cancelLabelInput() {
     hideLabelModal();
+
+    // If batch renaming, just cancel
+    if (isBatchRenaming) {
+        isBatchRenaming = false;
+        draw();
+        return;
+    }
 
     // 如果是编辑已有形状的标签，则只取消编辑
     if (editingShapeIndex !== -1) {
@@ -3084,6 +3422,7 @@ document.addEventListener('keydown', (e) => {
 function renderShapeList() {
     // 使用 DocumentFragment 批量添加 DOM，减少重排
     const fragment = document.createDocumentFragment();
+    const multiSelected = selectedShapeIndices.size > 1;
 
     shapes.forEach((shape, index) => {
         const li = document.createElement('li');
@@ -3106,12 +3445,20 @@ function renderShapeList() {
         const colors = getColorsForLabel(shape.label);
         li.style.borderLeftColor = colors.stroke;
 
-        if (index === selectedShapeIndex) {
+        if (isShapeSelected(index)) {
             li.classList.add('active');
         }
 
-        li.onclick = () => {
-            selectedShapeIndex = index;
+        li.onclick = (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                // Ctrl+click: toggle selection
+                toggleShapeSelection(index);
+            } else if (e.shiftKey && selectedShapeIndex !== -1) {
+                // Shift+click: range select
+                selectShapeRange(selectedShapeIndex, index);
+            } else {
+                selectShape(index);
+            }
             renderShapeList();
             draw();
         };
@@ -3125,9 +3472,19 @@ function renderShapeList() {
         }
         visibleBtn.onclick = (e) => {
             e.stopPropagation();
-            shape.visible = shape.visible === undefined ? false : !shape.visible;
-            // 可见性切换不记录到历史和dirty状态,只作用于当前显示
+            hideShapeContextMenu();
+            // If this shape is part of multi-selection, set all to same state
+            if (multiSelected && isShapeSelected(index)) {
+                const anyVisible = [...selectedShapeIndices].some(idx => shapes[idx].visible !== false);
+                const newState = !anyVisible;
+                for (const idx of selectedShapeIndices) {
+                    shapes[idx].visible = newState;
+                }
+            } else {
+                shape.visible = shape.visible === undefined ? false : !shape.visible;
+            }
             renderShapeList();
+            renderLabelsList();
             draw();
         };
 
@@ -3136,7 +3493,13 @@ function renderShapeList() {
         editBtn.innerHTML = '&#9998;'; // Pencil icon
         editBtn.onclick = (e) => {
             e.stopPropagation();
-            showLabelModal(index);
+            hideShapeContextMenu();
+            // If multi-selected, batch rename
+            if (multiSelected && isShapeSelected(index)) {
+                showBatchRenameModal();
+            } else {
+                showLabelModal(index);
+            }
         };
 
         const delBtn = document.createElement('span');
@@ -3144,7 +3507,13 @@ function renderShapeList() {
         delBtn.textContent = '×';
         delBtn.onclick = (e) => {
             e.stopPropagation();
-            deleteShape(index);
+            hideShapeContextMenu();
+            // If multi-selected, batch delete
+            if (multiSelected && isShapeSelected(index)) {
+                deleteSelectedShapes();
+            } else {
+                deleteShape(index);
+            }
         };
 
         li.appendChild(visibleBtn);
@@ -3160,7 +3529,8 @@ function renderShapeList() {
     // 更新 Instances 计数
     const instancesCountEl = document.getElementById('instancesCount');
     if (instancesCountEl) {
-        instancesCountEl.textContent = `(${shapes.length})`;
+        const selCount = selectedShapeIndices.size;
+        instancesCountEl.textContent = selCount > 1 ? `(${selCount}/${shapes.length})` : `(${shapes.length})`;
     }
 
     // 滚动选中项到可视区域
@@ -3188,11 +3558,7 @@ function deleteShape(index) {
     }
 
     shapes.splice(index, 1);
-    if (selectedShapeIndex === index) {
-        selectedShapeIndex = -1;
-    } else if (selectedShapeIndex > index) {
-        selectedShapeIndex--;
-    }
+    adjustSelectionAfterDelete(index);
     markDirty();
     saveHistory(); // 保存历史记录以支持撤销/恢复
     renderShapeList();
@@ -3546,6 +3912,13 @@ function setMode(mode) {
         draw();
     }
 
+    // Cancel box selection
+    if (isBoxSelecting) {
+        isBoxSelecting = false;
+        boxSelectStart = null;
+        boxSelectCurrent = null;
+    }
+
     // Cancel any active eraser
     if (eraserActive || eraserMouseDownPos) {
         cancelEraser();
@@ -3627,7 +4000,7 @@ function drawSVGAnnotations(mouseEvent) {
     shapes.forEach((shape, index) => {
         if (shape.visible === false) return; // Skip hidden shapes
 
-        const isSelected = index === selectedShapeIndex;
+        const isSelected = isShapeSelected(index);
         const colors = getColorsForLabel(shape.label);
 
         let strokeColor = colors.stroke;
@@ -3788,6 +4161,27 @@ function drawSVGAnnotations(mouseEvent) {
         rect.setAttribute('stroke-dasharray', `${6 / zoomLevel} ${3 / zoomLevel}`);
         rect.style.pointerEvents = 'none';
         svgOverlay.appendChild(rect);
+    }
+
+    // --- Draw box selection rectangle ---
+    if (isBoxSelecting && boxSelectStart && boxSelectCurrent) {
+        const sw = 1 / zoomLevel;
+        const bx1 = Math.min(boxSelectStart.x, boxSelectCurrent.x);
+        const by1 = Math.min(boxSelectStart.y, boxSelectCurrent.y);
+        const bw = Math.abs(boxSelectCurrent.x - boxSelectStart.x);
+        const bh = Math.abs(boxSelectCurrent.y - boxSelectStart.y);
+
+        const selRect = document.createElementNS(SVG_NS, 'rect');
+        selRect.setAttribute('x', bx1);
+        selRect.setAttribute('y', by1);
+        selRect.setAttribute('width', bw);
+        selRect.setAttribute('height', bh);
+        selRect.setAttribute('fill', 'rgba(0, 122, 204, 0.15)');
+        selRect.setAttribute('stroke', 'rgba(0, 122, 204, 0.8)');
+        selRect.setAttribute('stroke-width', sw);
+        selRect.setAttribute('stroke-dasharray', `${4 / zoomLevel} ${2 / zoomLevel}`);
+        selRect.style.pointerEvents = 'none';
+        svgOverlay.appendChild(selRect);
     }
 
     // Draw pixel RGB values when at maximum zoom (4000%)
@@ -3965,7 +4359,12 @@ svgOverlay.addEventListener('click', (e) => {
     const target = e.target;
     if (target.dataset && target.dataset.shapeIndex !== undefined) {
         e.stopPropagation();
-        selectedShapeIndex = parseInt(target.dataset.shapeIndex);
+        const idx = parseInt(target.dataset.shapeIndex);
+        if (e.ctrlKey || e.metaKey) {
+            toggleShapeSelection(idx);
+        } else {
+            selectShape(idx);
+        }
         renderShapeList();
         draw();
     }
@@ -5454,8 +5853,8 @@ canvasWrapper.addEventListener('mousedown', (e) => {
     }
 
     // Clear any existing shape selection since we're starting SAM interaction
-    if (selectedShapeIndex !== -1) {
-        selectedShapeIndex = -1;
+    if (selectedShapeIndices.size > 0) {
+        clearSelection();
         renderShapeList();
         draw();
     }

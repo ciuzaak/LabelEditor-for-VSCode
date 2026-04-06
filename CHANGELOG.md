@@ -2,6 +2,32 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.13.3] - 2026-04-06
+
+### Added
+- **Multi-Instance Selection**: Select and operate on multiple annotation instances at once
+  - **Ctrl+Click** (canvas or instance list): Toggle individual shapes in/out of selection
+  - **Shift+Click** (instance list): Range select from last-clicked to current item
+  - **Ctrl+A**: Select all instances (including hidden ones, so they can be batch-shown)
+  - **View Mode Box Select**: Drag to draw a selection rectangle; all shapes whose bounding box intersects are selected. Ctrl+Drag to add to existing selection
+  - **ESC**: Clear multi-selection (lowest priority, after canceling menus/drawing/edit mode)
+  - **Delete/Backspace**: Batch delete all selected shapes
+  - **Right-Click Context Menu**: Adapts for multi-selection
+    - Shows count in menu items (e.g. "Delete (5)")
+    - **Rename**: Batch rename all selected to the same label
+    - **Hide/Show**: Deterministic — hides all if any are visible, shows all if all are hidden
+    - **Delete**: Batch delete all selected
+    - **Edit** is hidden when multiple shapes are selected (vertex editing is single-shape only)
+  - **Instance List Buttons**: Eye/Pencil/Delete buttons apply to all selected when clicking on a multi-selected item
+  - **Instances Count**: Shows `(selected/total)` when multiple selected, e.g. `(3/10)`
+
+### Fixed
+- **Edit Mode Safety**: Changing selection (single-click, Ctrl+click, Shift+click, Ctrl+A, box select) now properly exits vertex edit mode to prevent stale edit handles
+- **Undo/Redo Edit Mode**: Undo and redo now exit edit mode before swapping history snapshots, preventing crashes from stale `shapeBeingEdited` indices
+- **Labels Panel Sync**: Per-instance visibility changes (single and batch) now refresh the Labels sidebar to keep `allHidden` state accurate
+- **Keyboard Shortcut Guard**: Non-Ctrl keyboard shortcuts (A/D navigation, V/P/R/L/O mode switches, Delete, ESC) no longer fire when an input/textarea/select element is focused (e.g. image search box)
+- **Context Menu Staleness**: Context menu is now hidden on programmatic selection changes (Ctrl+A, undo/redo, image switch) and when sidebar buttons are clicked
+
 ## [0.13.2] - 2026-03-31
 
 ### Added

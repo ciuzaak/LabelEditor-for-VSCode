@@ -61,6 +61,13 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 - **Unsaved Changes Protection**: Warning dialog when navigating with unsaved changes
 
 ### Instance Management
+- **Multi-Instance Selection** (New in v0.13.3): Select and operate on multiple instances at once
+  - **Ctrl+Click**: Toggle individual shapes in/out of selection (canvas or instance list)
+  - **Shift+Click**: Range select in instance list
+  - **Ctrl+A**: Select all instances
+  - **View Mode Box Select**: Drag to draw a selection rectangle; Ctrl+Drag to add to selection
+  - **Batch Operations**: Right-click context menu or sidebar buttons to batch Rename, Hide/Show, or Delete
+  - **ESC**: Clear multi-selection
 - **Visibility Toggle**: Show/hide individual shapes (👁️)
 - **Edit Labels**: In-place label editing (✎)
 - **Instance Description** (New in v0.11.1): Optional description text for each annotation
@@ -171,7 +178,8 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 - **Ctrl+Shift+Z** or **Ctrl+Y**: Redo action
 - **Shift+Click**: Start polygon eraser
 - **Shift+Long-press+Drag**: Start rectangle eraser
-- **ESC**: Cancel current drawing / Cancel eraser
+- **Ctrl+A** (`Cmd+A` on Mac): Select all instances
+- **ESC**: Cancel current drawing / Cancel eraser / Clear selection
 - **A**: Previous image
 - **D**: Next image
 - **Ctrl+S** (`Cmd+S` on Mac): Save annotations
