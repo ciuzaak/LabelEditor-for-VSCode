@@ -818,6 +818,20 @@ export class LabelMePanel {
                                             <button id="zoomLockBtn" class="zoom-lock-btn" title="Lock: Keep zoom and position when switching images">🔓</button>
                                         </div>
                                     </div>
+                                    <div class="zoom-control">
+                                        <div class="zoom-header">
+                                            <label>Brightness: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                            <button id="brightnessLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                        </div>
+                                        <input type="range" id="brightnessSlider" min="10" max="300" value="100" step="5">
+                                    </div>
+                                    <div class="zoom-control">
+                                        <div class="zoom-header">
+                                            <label>Contrast: <span id="contrastValue">100</span>% <span id="contrastResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                            <button id="contrastLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                        </div>
+                                        <input type="range" id="contrastSlider" min="10" max="300" value="100" step="5">
+                                    </div>
                                     <div class="slider-control">
                                         <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
                                         <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
@@ -1000,6 +1014,10 @@ export class LabelMePanel {
                         fillOpacity: ${this._globalState.get('fillOpacity') ?? 0.3},
                         recentLabels: ${JSON.stringify(this._globalState.get('recentLabels') || [])},
                         theme: "${this._globalState.get('theme') ?? 'auto'}",
+                        brightness: ${this._globalState.get('brightness') ?? 100},
+                        contrast: ${this._globalState.get('contrast') ?? 100},
+                        brightnessLocked: ${this._globalState.get('brightnessLocked') ?? false},
+                        contrastLocked: ${this._globalState.get('contrastLocked') ?? false},
                         lockViewEnabled: ${this._globalState.get('lockViewEnabled') ?? false},
                         vscodeThemeKind: ${vscode.window.activeColorTheme.kind},
                         onnxModelDir: ${JSON.stringify(this._globalState.get('onnxModelDir') || '')},

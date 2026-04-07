@@ -48,6 +48,14 @@ const borderWidthResetBtn = document.getElementById('borderWidthResetBtn');
 const fillOpacitySlider = document.getElementById('fillOpacitySlider');
 const fillOpacityValue = document.getElementById('fillOpacityValue');
 const fillOpacityResetBtn = document.getElementById('fillOpacityResetBtn');
+const brightnessSlider = document.getElementById('brightnessSlider');
+const brightnessValue = document.getElementById('brightnessValue');
+const brightnessResetBtn = document.getElementById('brightnessResetBtn');
+const brightnessLockBtn = document.getElementById('brightnessLockBtn');
+const contrastSlider = document.getElementById('contrastSlider');
+const contrastValue = document.getElementById('contrastValue');
+const contrastResetBtn = document.getElementById('contrastResetBtn');
+const contrastLockBtn = document.getElementById('contrastLockBtn');
 
 // Image Browser elements
 const imageBrowserToggleBtn = document.getElementById('imageBrowserToggleBtn');
@@ -196,6 +204,12 @@ let labelVisibilityState = new Map(); // 存储每个label的可见性状态 (tr
 let borderWidth = 2; // 边界粗细，默认2px
 let fillOpacity = 0.3; // 填充透明度，默认30%
 
+// Image adjust - brightness and contrast (display only, does not affect original image)
+let brightness = 100; // 亮度，默认100%
+let contrast = 100;   // 对比度，默认100%
+let brightnessLocked = false; // 锁定亮度：切换图片时保留
+let contrastLocked = false;   // 锁定对比度：切换图片时保留
+
 // Theme state
 let currentTheme = 'auto'; // 'light', 'dark', 'auto'
 let vscodeThemeKind = 2; // 1=Light, 2=Dark, 3=HighContrast, 4=HighContrastLight
@@ -220,6 +234,26 @@ if (typeof initialGlobalSettings !== 'undefined') {
         fillOpacity = vscodeState.fillOpacity;
     } else if (initialGlobalSettings.fillOpacity !== undefined) {
         fillOpacity = initialGlobalSettings.fillOpacity;
+    }
+    if (vscodeState.brightness !== undefined) {
+        brightness = vscodeState.brightness;
+    } else if (initialGlobalSettings.brightness !== undefined) {
+        brightness = initialGlobalSettings.brightness;
+    }
+    if (vscodeState.contrast !== undefined) {
+        contrast = vscodeState.contrast;
+    } else if (initialGlobalSettings.contrast !== undefined) {
+        contrast = initialGlobalSettings.contrast;
+    }
+    if (vscodeState.brightnessLocked !== undefined) {
+        brightnessLocked = vscodeState.brightnessLocked;
+    } else if (initialGlobalSettings.brightnessLocked !== undefined) {
+        brightnessLocked = initialGlobalSettings.brightnessLocked;
+    }
+    if (vscodeState.contrastLocked !== undefined) {
+        contrastLocked = vscodeState.contrastLocked;
+    } else if (initialGlobalSettings.contrastLocked !== undefined) {
+        contrastLocked = initialGlobalSettings.contrastLocked;
     }
     if (vscodeState.theme !== undefined) {
         currentTheme = vscodeState.theme;
@@ -277,6 +311,14 @@ if (borderWidthSlider && borderWidthValue) {
 if (fillOpacitySlider && fillOpacityValue) {
     fillOpacitySlider.value = fillOpacity * 100;
     fillOpacityValue.textContent = Math.round(fillOpacity * 100);
+}
+if (brightnessSlider && brightnessValue) {
+    brightnessSlider.value = brightness;
+    brightnessValue.textContent = brightness;
+}
+if (contrastSlider && contrastValue) {
+    contrastSlider.value = contrast;
+    contrastValue.textContent = contrast;
 }
 
 // 恢复设置下拉菜单的展开状态
@@ -974,6 +1016,23 @@ function handleImageUpdate(message) {
     editingShapeIndex = -1;
     isBatchRenaming = false;
     hideLabelModal();
+
+    // Reset brightness/contrast if not locked (independently)
+    if (!brightnessLocked) {
+        brightness = 100;
+        if (brightnessSlider) brightnessSlider.value = brightness;
+        if (brightnessValue) brightnessValue.textContent = brightness;
+        updateBrightnessResetBtn();
+        saveGlobalSettings('brightness', brightness);
+    }
+    if (!contrastLocked) {
+        contrast = 100;
+        if (contrastSlider) contrastSlider.value = contrast;
+        if (contrastValue) contrastValue.textContent = contrast;
+        updateContrastResetBtn();
+        saveGlobalSettings('contrast', contrast);
+    }
+    applyImageAdjust();
 
     // Increment load ID to invalidate any pending callbacks from previous loads
     currentImageLoadId++;
@@ -4228,9 +4287,9 @@ function drawPixelValues() {
             const g = data[i + 1];
             const b = data[i + 2];
 
-            // Determine text color based on pixel brightness for contrast
-            const brightness = (r * 299 + g * 587 + b * 114) / 1000;
-            const textColor = brightness > 128 ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)';
+            // Determine text color based on pixel luminance for contrast
+            const luminance = (r * 299 + g * 587 + b * 114) / 1000;
+            const textColor = luminance > 128 ? 'rgba(0,0,0,0.8)' : 'rgba(255,255,255,0.8)';
 
             // Always display raw pixel values as R,G,B
             const label = `${r},${g},${b}`;
@@ -4767,6 +4826,119 @@ function updateFillOpacityResetBtn() {
         }
     }
 }
+
+// --- Image Adjust (Brightness / Contrast) ---
+function applyImageAdjust() {
+    const filterValue = (brightness === 100 && contrast === 100)
+        ? ''
+        : `brightness(${brightness / 100}) contrast(${contrast / 100})`;
+    canvas.style.filter = filterValue;
+}
+
+function updateBrightnessResetBtn() {
+    if (brightnessResetBtn) {
+        brightnessResetBtn.classList.toggle('visible', brightness !== 100);
+    }
+}
+
+function updateContrastResetBtn() {
+    if (contrastResetBtn) {
+        contrastResetBtn.classList.toggle('visible', contrast !== 100);
+    }
+}
+
+function updateBrightnessLockUI() {
+    if (brightnessLockBtn) {
+        if (brightnessLocked) {
+            brightnessLockBtn.textContent = '🔒';
+            brightnessLockBtn.classList.add('locked');
+            brightnessLockBtn.title = 'Locked: Keeping brightness when switching images. Click to unlock.';
+        } else {
+            brightnessLockBtn.textContent = '🔓';
+            brightnessLockBtn.classList.remove('locked');
+            brightnessLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
+        }
+    }
+}
+
+function updateContrastLockUI() {
+    if (contrastLockBtn) {
+        if (contrastLocked) {
+            contrastLockBtn.textContent = '🔒';
+            contrastLockBtn.classList.add('locked');
+            contrastLockBtn.title = 'Locked: Keeping contrast when switching images. Click to unlock.';
+        } else {
+            contrastLockBtn.textContent = '🔓';
+            contrastLockBtn.classList.remove('locked');
+            contrastLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
+        }
+    }
+}
+
+if (brightnessSlider) {
+    brightnessSlider.oninput = (e) => {
+        brightness = parseInt(e.target.value);
+        brightnessValue.textContent = brightness;
+        updateBrightnessResetBtn();
+        applyImageAdjust();
+    };
+    brightnessSlider.onchange = () => saveGlobalSettings('brightness', brightness);
+}
+
+if (contrastSlider) {
+    contrastSlider.oninput = (e) => {
+        contrast = parseInt(e.target.value);
+        contrastValue.textContent = contrast;
+        updateContrastResetBtn();
+        applyImageAdjust();
+    };
+    contrastSlider.onchange = () => saveGlobalSettings('contrast', contrast);
+}
+
+if (brightnessResetBtn) {
+    brightnessResetBtn.onclick = () => {
+        brightness = 100;
+        if (brightnessSlider) brightnessSlider.value = brightness;
+        if (brightnessValue) brightnessValue.textContent = brightness;
+        updateBrightnessResetBtn();
+        applyImageAdjust();
+        saveGlobalSettings('brightness', brightness);
+    };
+}
+
+if (contrastResetBtn) {
+    contrastResetBtn.onclick = () => {
+        contrast = 100;
+        if (contrastSlider) contrastSlider.value = contrast;
+        if (contrastValue) contrastValue.textContent = contrast;
+        updateContrastResetBtn();
+        applyImageAdjust();
+        saveGlobalSettings('contrast', contrast);
+    };
+}
+
+if (brightnessLockBtn) {
+    brightnessLockBtn.addEventListener('click', () => {
+        brightnessLocked = !brightnessLocked;
+        updateBrightnessLockUI();
+        saveGlobalSettings('brightnessLocked', brightnessLocked);
+    });
+}
+
+if (contrastLockBtn) {
+    contrastLockBtn.addEventListener('click', () => {
+        contrastLocked = !contrastLocked;
+        updateContrastLockUI();
+        saveGlobalSettings('contrastLocked', contrastLocked);
+    });
+}
+
+// Initialize image adjust UI
+updateBrightnessLockUI();
+updateContrastLockUI();
+updateBrightnessResetBtn();
+updateContrastResetBtn();
+applyImageAdjust();
 
 // Initialize reset button visibility
 updateBorderWidthResetBtn();

@@ -46,6 +46,9 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
   - ☀️ Light mode for bright environments
   - 🌙 Dark mode matching VS Code dark themes
   - 🔄 Auto mode - follows VS Code's current theme
+- **Brightness & Contrast Control** (New in v0.13.4): Adjust image display without modifying original data
+  - Sliders with individual reset (↺) and lock (🔓/🔒) buttons
+  - Lock preserves value across images; unlock resets to 100% on each new image
 - **Border Width Control**: Adjust polygon outline thickness (1-5px)
 - **Fill Opacity Control**: Adjust polygon fill transparency (0-100%)
 - **Settings Persistence**: All preferences saved globally
@@ -161,6 +164,7 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 ### Advanced Options
 - Click the **⚙️ icon** to open advanced settings
 - Choose **theme**: Light (☀️), Dark (🌙), or Auto (🔄)
+- Adjust **brightness** and **contrast** with sliders (display only, lock to preserve across images)
 - Adjust **border width** and **fill opacity** with sliders
 - Click **↺** on any setting to reset to default
 
@@ -270,7 +274,7 @@ Planned features for future releases:
 - [x] ~~SAM AI Annotation~~ **Added in v0.12.0**
 - [ ] Circle shapes
 - [ ] Export to other formats (COCO, YOLO, etc.)
-- [ ] Image pre-processing (brightness, contrast)
+- [x] ~~Image display adjust (brightness, contrast)~~ **Added in v0.13.4**
 - [ ] Keyboard shortcuts customization
 - [ ] Multi-language support
 

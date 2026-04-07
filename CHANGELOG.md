@@ -2,6 +2,18 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.13.4] - 2026-04-07
+
+### Added
+- **Brightness & Contrast Controls**: Adjust image display brightness and contrast without modifying the original image
+  - Sliders in ⚙️ Settings panel, placed right after Zoom
+  - Range: 10%–300%, default 100%, step 5%
+  - Each slider has its own **reset** (↺) and **lock** (🔓/🔒) button
+  - **Lock**: Preserves the value when switching images; **Unlock** (default): resets to 100% on each new image
+  - Brightness and contrast lock independently
+  - Uses CSS filter — purely visual, does not affect original image data or pixel inspection values
+  - All settings persist across sessions
+
 ## [0.13.3] - 2026-04-06
 
 ### Added
