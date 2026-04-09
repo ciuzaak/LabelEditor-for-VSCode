@@ -630,6 +630,132 @@ export class LabelMePanel {
     }
 
 
+    /** Read image file metadata: file size, bit depth, DPI */
+    private async _getImageMetadata(filePath: string): Promise<{ fileSize: number; bitDepth?: number; dpiX?: number; dpiY?: number }> {
+        let stat: Awaited<ReturnType<typeof fs.stat>>;
+        try {
+            stat = await fs.stat(filePath);
+        } catch {
+            return { fileSize: 0 };
+        }
+        const result: { fileSize: number; bitDepth?: number; dpiX?: number; dpiY?: number } = { fileSize: stat.size };
+
+        try {
+            const ext = path.extname(filePath).toLowerCase();
+            const fd = await fs.open(filePath, 'r');
+            try {
+                if (ext === '.png') {
+                    // PNG: read IHDR for bit depth, walk chunks for pHYs (DPI)
+                    const header = Buffer.alloc(33); // 8 (sig) + 4 (len) + 4 (type) + 13 (IHDR data) + 4 (crc)
+                    const { bytesRead: headerRead } = await fd.read(header, 0, 33, 0);
+                    // Validate: full header read, IHDR length=13, correct chunk type
+                    if (headerRead === 33
+                        && header.readUInt32BE(8) === 13
+                        && header.toString('ascii', 12, 16) === 'IHDR') {
+                        // IHDR data starts at offset 16: width(4) height(4) bitDepth(1) colorType(1)
+                        result.bitDepth = header[24];
+                        const colorType = header[25];
+                        // Total bits per pixel = bitDepth * channels
+                        if (colorType === 2) { result.bitDepth = header[24] * 3; }
+                        else if (colorType === 4) { result.bitDepth = header[24] * 2; }
+                        else if (colorType === 6) { result.bitDepth = header[24] * 4; }
+                    }
+
+                    // Walk PNG chunks properly to find pHYs (must precede IDAT)
+                    const fileSize = stat.size;
+                    let offset = 33; // Start after IHDR (8 sig + 25 IHDR chunk)
+                    const chunkHeader = Buffer.alloc(8); // 4 (length) + 4 (type)
+                    while (offset < 65536 && offset + 12 <= fileSize) { // Limit scan + EOF guard
+                        const { bytesRead: chRead } = await fd.read(chunkHeader, 0, 8, offset);
+                        if (chRead < 8) { break; }
+                        const chunkLen = chunkHeader.readUInt32BE(0);
+                        if (chunkLen > 0x7FFFFFFF || offset + 12 + chunkLen > fileSize) { break; } // Sanity check
+                        const chunkType = chunkHeader.toString('ascii', 4, 8);
+                        if (chunkType === 'IDAT' || chunkType === 'IEND') { break; } // pHYs must be before IDAT
+                        if (chunkType === 'pHYs' && chunkLen === 9) {
+                            const phys = Buffer.alloc(9);
+                            const { bytesRead: phRead } = await fd.read(phys, 0, 9, offset + 8);
+                            if (phRead === 9) {
+                                const ppmX = phys.readUInt32BE(0);
+                                const ppmY = phys.readUInt32BE(4);
+                                const unit = phys[8];
+                                if (unit === 1) { // meters
+                                    result.dpiX = Math.round(ppmX / 39.3701);
+                                    result.dpiY = Math.round(ppmY / 39.3701);
+                                }
+                            }
+                            break;
+                        }
+                        offset += 12 + chunkLen; // 4 (length) + 4 (type) + data + 4 (CRC)
+                    }
+                } else if (ext === '.jpg' || ext === '.jpeg') {
+                    // JPEG: scan for SOF (bit depth), JFIF APP0 for DPI
+                    const buf = Buffer.alloc(65536);
+                    const { bytesRead } = await fd.read(buf, 0, 65536, 0);
+
+                    let i = 2;
+                    while (i < bytesRead - 1) {
+                        if (buf[i] !== 0xFF) { i++; continue; }
+                        // Skip 0xFF fill bytes
+                        while (i + 1 < bytesRead && buf[i + 1] === 0xFF) { i++; }
+                        if (i + 1 >= bytesRead) { break; }
+                        const marker = buf[i + 1];
+
+                        // JFIF APP0 — DPI info
+                        if (marker === 0xE0 && i + 16 < bytesRead) {
+                            const unit = buf[i + 11];
+                            const xDen = buf.readUInt16BE(i + 12);
+                            const yDen = buf.readUInt16BE(i + 14);
+                            if (unit === 1) { result.dpiX = xDen; result.dpiY = yDen; }
+                            else if (unit === 2) { result.dpiX = Math.round(xDen * 2.54); result.dpiY = Math.round(yDen * 2.54); }
+                        }
+
+                        // SOF markers (0xC0-0xC3, 0xC5-0xC7, 0xC9-0xCB, 0xCD-0xCF) — bit depth
+                        if ((marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC)
+                            && i + 9 < bytesRead) {
+                            const precision = buf[i + 4];
+                            const numComponents = buf[i + 9];
+                            result.bitDepth = precision * numComponents;
+                            break; // Got what we need
+                        }
+
+                        // Skip to next marker
+                        if (marker === 0xD9 || marker === 0xDA) { break; } // EOI or SOS
+                        if (i + 3 < bytesRead) {
+                            const segLen = buf.readUInt16BE(i + 2);
+                            if (segLen < 2 || i + 2 + segLen > bytesRead) { break; } // Bounds check
+                            i += 2 + segLen;
+                        } else { break; }
+                    }
+
+                    if (!result.bitDepth) { result.bitDepth = 24; } // JPEG default
+                } else if (ext === '.bmp') {
+                    // Read full BITMAPFILEHEADER (14) + BITMAPINFOHEADER (40) = 54 bytes
+                    const bmpHeader = Buffer.alloc(54);
+                    const { bytesRead: bmpRead } = await fd.read(bmpHeader, 0, 54, 0);
+                    // Check DIB header size at offset 14 — only parse BITMAPINFOHEADER (40+ bytes)
+                    const dibSize = bmpRead >= 18 ? bmpHeader.readUInt32LE(14) : 0;
+                    if (dibSize >= 40 && bmpRead >= 30) {
+                        result.bitDepth = bmpHeader.readUInt16LE(28); // biBitCount at file offset 28
+                    }
+                    if (dibSize >= 40 && bmpRead >= 46) {
+                        // biXPelsPerMeter at offset 38, biYPelsPerMeter at offset 42
+                        const bmpPpmX = bmpHeader.readInt32LE(38);
+                        const bmpPpmY = bmpHeader.readInt32LE(42);
+                        if (bmpPpmX > 0) { result.dpiX = Math.round(bmpPpmX / 39.3701); }
+                        if (bmpPpmY > 0) { result.dpiY = Math.round(bmpPpmY / 39.3701); }
+                    }
+                }
+            } finally {
+                await fd.close();
+            }
+        } catch {
+            // Metadata extraction is best-effort
+        }
+
+        return result;
+    }
+
     private async _sendImageUpdate() {
         if (path.basename(this._imageUri.fsPath) === '__no_image__') {
             this._panel.webview.postMessage({
@@ -652,6 +778,8 @@ export class LabelMePanel {
         let currentImageRelativePath = '';
         currentImageRelativePath = path.relative(this._rootPath, this._imageUri.fsPath);
 
+        // Get image file metadata (size, bit depth, DPI)
+        const imageMetadata = await this._getImageMetadata(this._imageUri.fsPath);
 
         // Load existing annotation if exists
         let existingData = null;
@@ -673,7 +801,7 @@ export class LabelMePanel {
             imageName: path.basename(this._imageUri.fsPath),
             imagePath: this._imageUri.fsPath,
             currentImageRelativePath: currentImageRelativePath,
-
+            imageMetadata: imageMetadata,
             existingData: existingData
         });
     }
@@ -725,6 +853,9 @@ export class LabelMePanel {
         // Calculate current image relative path
         let currentImageRelativePath = isDummyImage ? '' : path.relative(this._rootPath, this._imageUri.fsPath);
 
+        // Get image file metadata for info popup
+        const imageMetadata = isDummyImage ? null : await this._getImageMetadata(this._imageUri.fsPath);
+
         // Skip loading annotation for dummy image
         let existingData = null;
         if (!isDummyImage) {
@@ -771,6 +902,8 @@ export class LabelMePanel {
                             <button id="nextImageBtn" class="nav-btn" title="Next Image (D)">▶</button>
                             <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" title="Left click: copy absolute path | Right click: copy filename">${isDummyImage ? '' : (currentImageRelativePath || path.basename(this._imageUri.fsPath))}</span>
                             <span id="status"></span>
+                            <span id="imageInfoBtn" class="image-info-btn" title="Image Info">ℹ</span>
+                            <div id="imageInfoPopup" class="image-info-popup hidden"></div>
                         </div>
                         <div class="canvas-container">
                             <div id="canvasWrapper" class="canvas-wrapper">
@@ -1007,6 +1140,7 @@ export class LabelMePanel {
                     const existingData = ${JSON.stringify(existingData)};
                     const workspaceImages = ${JSON.stringify(workspaceImages)};
                     const currentImageRelativePath = "${currentImageRelativePath.replace(/\\/g, '\\\\')}";
+                    const initialImageMetadata = ${JSON.stringify(imageMetadata)};
 
                     const initialGlobalSettings = {
                         customColors: ${JSON.stringify(this._globalState.get('customColors') || {})},

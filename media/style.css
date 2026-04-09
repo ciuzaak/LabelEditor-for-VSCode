@@ -317,6 +317,7 @@ body {
     padding: 0 10px;
     border-bottom: 1px solid var(--color-border);
     flex-shrink: 0;
+    position: relative;
 }
 
 button {
@@ -873,6 +874,57 @@ canvas {
 
 .nav-btn:hover {
     background-color: var(--color-bg-hover-input);
+}
+
+/* Image Info Button & Popup */
+.image-info-btn {
+    cursor: pointer;
+    font-size: 14px;
+    padding: 2px 6px;
+    margin-left: 6px;
+    opacity: 0.6;
+    transition: opacity 0.2s;
+    user-select: none;
+    position: relative;
+}
+
+.image-info-btn:hover {
+    opacity: 1;
+}
+
+.image-info-popup {
+    position: absolute;
+    top: 40px;
+    right: 10px;
+    background-color: var(--color-bg-secondary);
+    border: 1px solid var(--color-border);
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 12px;
+    line-height: 1.6;
+    white-space: nowrap;
+    z-index: 1000;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+    color: var(--color-text-primary);
+}
+
+.image-info-popup.hidden {
+    display: none;
+}
+
+.image-info-popup .info-row {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.image-info-popup .info-label {
+    opacity: 0.6;
+}
+
+.image-info-popup .info-value {
+    font-weight: bold;
+    text-align: right;
 }
 
 /* Mode Toggle Buttons */

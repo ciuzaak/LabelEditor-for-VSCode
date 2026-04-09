@@ -156,6 +156,9 @@ const colorCache = new Map(); // 颜色计算缓存
 // Image load request ID to prevent stale callbacks
 let currentImageLoadId = 0;
 
+// Image metadata for info popup (initialImageMetadata is injected via HTML script tag)
+let currentImageMetadata = (typeof initialImageMetadata !== 'undefined') ? initialImageMetadata : null;
+
 // 点击位置追踪 - 用于支持点击叠加实例时的循环选择
 let lastClickTime = 0;
 let lastClickX = 0;
@@ -1046,7 +1049,8 @@ function handleImageUpdate(message) {
     const newImagePath = message.imagePath;
     const newCurrentImageRelativePath = message.currentImageRelativePath;
 
-
+    // Store image metadata for info popup
+    currentImageMetadata = message.imageMetadata || null;
 
     // Update filename display
     const fileNameSpan = document.getElementById('fileName');
@@ -1121,6 +1125,7 @@ function handleImageUpdate(message) {
         renderShapeList();
         renderLabelsList();
         updateZoomUI(); // Update zoom percentage display
+        updateImageInfoPopup(); // Refresh info popup with actual dimensions
     };
     img.onerror = function () {
         // Check if this callback is for the current load request
@@ -1159,14 +1164,7 @@ function handleUpdateImageList(message) {
     }
 
     // Update image count display
-    const imageCountEl = document.getElementById('imageCount');
-    if (imageCountEl) {
-        if (searchQuery) {
-            imageCountEl.textContent = `(${filteredImages.length}/${workspaceImages.length})`;
-        } else {
-            imageCountEl.textContent = `(${workspaceImages.length})`;
-        }
-    }
+    updateImageCount();
 
     // Clear saved scroll state to prevent stale scroll position restoration after folder switch
     const state = vscode.getState() || {};
@@ -1217,6 +1215,9 @@ function updateImageBrowserHighlight(newRelativePath) {
             // If item is already visible, don't scroll at all
         }
     }
+
+    // Update image count to reflect new current position
+    updateImageCount();
 
     // Force re-render to update highlighting
     virtualScrollState.startIndex = -1; // Reset to force update
@@ -5000,6 +5001,91 @@ if (fileNameSpan) {
     });
 }
 
+// --- Image Info Popup ---
+
+function formatFileSize(bytes) {
+    if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+    if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return bytes + ' B';
+}
+
+function updateImageInfoPopup() {
+    const popup = document.getElementById('imageInfoPopup');
+    if (!popup || popup.classList.contains('hidden')) return;
+    renderImageInfoContent(popup);
+}
+
+function renderImageInfoContent(popup) {
+    const rows = [];
+    // Dimensions from loaded image
+    if (img && img.width > 0 && img.height > 0) {
+        rows.push({ label: 'Dimensions', value: `${img.width} \u00d7 ${img.height}` });
+    }
+    // File size from extension metadata
+    if (currentImageMetadata) {
+        if (currentImageMetadata.fileSize) {
+            rows.push({ label: 'File Size', value: formatFileSize(currentImageMetadata.fileSize) });
+        }
+        if (currentImageMetadata.dpiX) {
+            const dpi = currentImageMetadata.dpiX === currentImageMetadata.dpiY
+                ? `${currentImageMetadata.dpiX}`
+                : `${currentImageMetadata.dpiX} \u00d7 ${currentImageMetadata.dpiY}`;
+            rows.push({ label: 'DPI', value: dpi });
+        }
+        if (currentImageMetadata.bitDepth) {
+            rows.push({ label: 'Bit Depth', value: `${currentImageMetadata.bitDepth}` });
+        }
+    }
+
+    popup.textContent = '';
+    if (rows.length === 0) {
+        const span = document.createElement('span');
+        span.style.opacity = '0.5';
+        span.textContent = 'No info available';
+        popup.appendChild(span);
+        return;
+    }
+
+    rows.forEach(r => {
+        const row = document.createElement('div');
+        row.className = 'info-row';
+        const label = document.createElement('span');
+        label.className = 'info-label';
+        label.textContent = r.label;
+        const value = document.createElement('span');
+        value.className = 'info-value';
+        value.textContent = r.value;
+        row.appendChild(label);
+        row.appendChild(value);
+        popup.appendChild(row);
+    });
+}
+
+const imageInfoBtn = document.getElementById('imageInfoBtn');
+const imageInfoPopup = document.getElementById('imageInfoPopup');
+
+if (imageInfoBtn && imageInfoPopup) {
+    imageInfoBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const isHidden = imageInfoPopup.classList.contains('hidden');
+        if (isHidden) {
+            renderImageInfoContent(imageInfoPopup);
+            imageInfoPopup.classList.remove('hidden');
+        } else {
+            imageInfoPopup.classList.add('hidden');
+        }
+    });
+
+    // Close popup when clicking elsewhere
+    document.addEventListener('click', (e) => {
+        if (!imageInfoPopup.classList.contains('hidden') &&
+            !imageInfoPopup.contains(e.target) &&
+            e.target !== imageInfoBtn) {
+            imageInfoPopup.classList.add('hidden');
+        }
+    });
+}
+
 // --- Mode Toggle Event Listeners ---
 
 // View Mode button
@@ -5141,6 +5227,28 @@ function getEffectiveImageList() {
     return typeof workspaceImages !== 'undefined' ? workspaceImages : [];
 }
 
+// Update image count display with current position: (current/total) or (current/filtered/total)
+function updateImageCount() {
+    const imageCountEl = document.getElementById('imageCount');
+    if (!imageCountEl) return;
+
+    const effectiveImages = getEffectiveImageList();
+    const total = typeof workspaceImages !== 'undefined' ? workspaceImages.length : 0;
+    const currentIndex = effectiveImages.indexOf(currentImageRelativePathMutable);
+
+    if (currentIndex === -1) {
+        // Position unknown — show count only
+        imageCountEl.textContent = searchQuery
+            ? `(${effectiveImages.length}/${total})`
+            : `(${total})`;
+    } else {
+        const currentPos = currentIndex + 1;
+        imageCountEl.textContent = searchQuery
+            ? `(${currentPos}/${effectiveImages.length}/${total})`
+            : `(${currentPos}/${total})`;
+    }
+}
+
 // Filter images based on search query
 function filterImages(query) {
     searchQuery = query.toLowerCase().trim();
@@ -5158,15 +5266,7 @@ function filterImages(query) {
     vscode.setState(state);
 
     // Update image count display
-    const imageCountEl = document.getElementById('imageCount');
-    if (imageCountEl) {
-        const effectiveImages = getEffectiveImageList();
-        if (searchQuery) {
-            imageCountEl.textContent = `(${effectiveImages.length}/${workspaceImages.length})`;
-        } else {
-            imageCountEl.textContent = `(${workspaceImages.length})`;
-        }
-    }
+    updateImageCount();
     // Reset virtual scroll state and re-render
     virtualScrollState = {
         startIndex: -1,
@@ -5189,11 +5289,7 @@ if (vscodeState && vscodeState.searchQuery) {
         );
 
         // Update count immediately
-        const imageCountEl = document.getElementById('imageCount');
-        if (imageCountEl) {
-            const effectiveImages = getEffectiveImageList();
-            imageCountEl.textContent = `(${effectiveImages.length}/${workspaceImages.length})`;
-        }
+        updateImageCount();
     }
 } else {
     // If no search query, ensure UI is reset (though it should be hidden by default in HTML)

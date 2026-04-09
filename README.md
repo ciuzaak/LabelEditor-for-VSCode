@@ -46,6 +46,7 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
   - ☀️ Light mode for bright environments
   - 🌙 Dark mode matching VS Code dark themes
   - 🔄 Auto mode - follows VS Code's current theme
+- **Image Info Popup** (New in v0.13.5): Click ℹ in the toolbar to view image metadata (dimensions, file size, DPI, bit depth)
 - **Brightness & Contrast Control** (New in v0.13.4): Adjust image display without modifying original data
   - Sliders with individual reset (↺) and lock (🔓/🔒) buttons
   - Lock preserves value across images; unlock resets to 100% on each new image

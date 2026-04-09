@@ -2,6 +2,15 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.13.5] - 2026-04-09
+
+### Added
+- **Image Info Popup**: Click ℹ button in the toolbar to view image metadata
+  - Dimensions (width × height), file size, DPI, and bit depth
+  - Supports PNG, JPEG, and BMP formats with proper binary header parsing
+  - Click outside or click ℹ again to dismiss
+- **Image Position Counter**: Image count now shows current position (e.g., `(3/10)` or `(2/5/10)` when filtering)
+
 ## [0.13.4] - 2026-04-07
 
 ### Added
