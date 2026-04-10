@@ -2,6 +2,14 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.13.6] - 2026-04-10
+
+### Improved
+- **Image Info Popup**: Detect image format by magic bytes instead of file extension for more reliable metadata extraction
+  - PNG: full 8-byte signature check
+  - Guards against truncated files with bytesRead validation
+  - Default 96 DPI only applied to recognized image formats
+
 ## [0.13.5] - 2026-04-09
 
 ### Added

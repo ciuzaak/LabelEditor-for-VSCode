@@ -641,10 +641,18 @@ export class LabelMePanel {
         const result: { fileSize: number; bitDepth?: number; dpiX?: number; dpiY?: number } = { fileSize: stat.size };
 
         try {
-            const ext = path.extname(filePath).toLowerCase();
             const fd = await fs.open(filePath, 'r');
             try {
-                if (ext === '.png') {
+                // Detect actual format by magic bytes instead of file extension
+                const magic = Buffer.alloc(8);
+                const { bytesRead: magicRead } = await fd.read(magic, 0, 8, 0);
+                const isPng = magicRead >= 8
+                    && magic[0] === 0x89 && magic[1] === 0x50 && magic[2] === 0x4E && magic[3] === 0x47
+                    && magic[4] === 0x0D && magic[5] === 0x0A && magic[6] === 0x1A && magic[7] === 0x0A;
+                const isJpeg = magicRead >= 3 && magic[0] === 0xFF && magic[1] === 0xD8 && magic[2] === 0xFF;
+                const isBmp = magicRead >= 2 && magic[0] === 0x42 && magic[1] === 0x4D;
+
+                if (isPng) {
                     // PNG: read IHDR for bit depth, walk chunks for pHYs (DPI)
                     const header = Buffer.alloc(33); // 8 (sig) + 4 (len) + 4 (type) + 13 (IHDR data) + 4 (crc)
                     const { bytesRead: headerRead } = await fd.read(header, 0, 33, 0);
@@ -688,7 +696,7 @@ export class LabelMePanel {
                         }
                         offset += 12 + chunkLen; // 4 (length) + 4 (type) + data + 4 (CRC)
                     }
-                } else if (ext === '.jpg' || ext === '.jpeg') {
+                } else if (isJpeg) {
                     // JPEG: scan for SOF (bit depth), JFIF APP0 for DPI
                     const buf = Buffer.alloc(65536);
                     const { bytesRead } = await fd.read(buf, 0, 65536, 0);
@@ -729,7 +737,7 @@ export class LabelMePanel {
                     }
 
                     if (!result.bitDepth) { result.bitDepth = 24; } // JPEG default
-                } else if (ext === '.bmp') {
+                } else if (isBmp) {
                     // Read full BITMAPFILEHEADER (14) + BITMAPINFOHEADER (40) = 54 bytes
                     const bmpHeader = Buffer.alloc(54);
                     const { bytesRead: bmpRead } = await fd.read(bmpHeader, 0, 54, 0);
@@ -745,6 +753,12 @@ export class LabelMePanel {
                         if (bmpPpmX > 0) { result.dpiX = Math.round(bmpPpmX / 39.3701); }
                         if (bmpPpmY > 0) { result.dpiY = Math.round(bmpPpmY / 39.3701); }
                     }
+                }
+
+                // Default to 96 DPI for recognized formats when not embedded in file
+                if (isPng || isJpeg || isBmp) {
+                    if (result.dpiX === undefined) { result.dpiX = 96; }
+                    if (result.dpiY === undefined) { result.dpiY = 96; }
                 }
             } finally {
                 await fd.close();
