@@ -28,6 +28,7 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
   - Resizable sidebar width
   - 🔄 **Refresh button** to rescan images (New in v0.9.0)
 - **Open Folder for Annotation** (New in v0.9.0): Right-click any folder to open only images within that folder
+- **Multi-Panel Support** (New in v0.14.0): Open multiple images or folders side-by-side in separate panels; re-opening the same image/folder reveals the existing panel to avoid conflicting edits
 - **Virtual Scrolling**: Handles 8000+ images without performance issues
   - Only renders visible items for smooth performance
   - No lag when resizing sidebar even with thousands of images

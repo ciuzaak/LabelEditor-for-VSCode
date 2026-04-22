@@ -5,7 +5,7 @@ import { existsSync } from 'fs';
 import * as os from 'os';
 
 export class LabelMePanel {
-    public static currentPanel: LabelMePanel | undefined;
+    public static readonly panels: Set<LabelMePanel> = new Set();
     public static readonly viewType = 'labelMe';
 
     private readonly _panel: vscode.WebviewPanel;
@@ -21,8 +21,26 @@ export class LabelMePanel {
     private _panelTitle: string; // Title set once at creation, never changed during navigation
     private _scanGeneration = 0; // Incremented on each scan start to detect stale results
     private _isScanFinished = false; // Tracks if the initial background scan has completed
+    private _disposed = false; // Guards async callbacks from posting to a disposed webview
+
+    // Tracks SAM-service ports already launched in this extension-host session,
+    // so a second panel doesn't try to start a conflicting server on the same port.
+    private static readonly _samServicePorts: Set<number> = new Set();
 
     private readonly _globalState: vscode.Memento;
+
+    // NOTE: Global settings (customColors, recentLabels, etc.) are snapshotted into
+    // each panel's webview at HTML creation. When multiple panels are open, a setting
+    // changed in one panel is NOT pushed to the others' live webview state — only
+    // persisted via _globalState.update. For object-shaped settings this can lose
+    // writes if both panels edit the same key. Proper fix requires broadcasting a
+    // `globalSettingChanged` message and handling it in the webview; deferred.
+    private _safePost(message: any): void {
+        if (this._disposed) return;
+        // Call the raw webview API directly — do NOT route through _safePost.
+        const webview = this._panel.webview;
+        webview.postMessage(message);
+    }
 
     /**
      * Open image annotator from a single image.
@@ -37,24 +55,13 @@ export class LabelMePanel {
         const rootPath = imageDir;
         const workspaceImages = [path.relative(rootPath, imageUri.fsPath)];
 
-        // Check if we have an existing panel
-        if (LabelMePanel.currentPanel) {
-            const panel = LabelMePanel.currentPanel;
-            panel._panel.reveal(column);
-
-            // Update to show only the single image
-            panel._rootPath = rootPath;
-            panel._imageUri = imageUri;
-            panel._workspaceImages = workspaceImages;
-            // Invalidate any in-flight folder scan so it won't overwrite our single-image list
-            panel._scanGeneration++;
-            panel._isScanFinished = true; // Mark as scan-complete for single-image mode
-            // Update title to image filename for single-image mode
-            panel._panelTitle = path.basename(imageUri.fsPath);
-            panel._panel.title = panel._panelTitle;
-            panel.updateWebviewOptions();
-            await panel._update();
-            return;
+        // If a panel is already showing this exact image, just reveal it
+        // instead of opening a duplicate.
+        for (const existing of LabelMePanel.panels) {
+            if (existing._imageUri.fsPath === imageUri.fsPath) {
+                existing._panel.reveal(column);
+                return;
+            }
         }
 
         // Collect resource roots
@@ -81,7 +88,7 @@ export class LabelMePanel {
             }
         );
 
-        LabelMePanel.currentPanel = new LabelMePanel(panel, context.extensionUri, imageUri, context.globalState, rootPath, workspaceImages, panelTitle);
+        LabelMePanel.panels.add(new LabelMePanel(panel, context.extensionUri, imageUri, context.globalState, rootPath, workspaceImages, panelTitle));
     }
 
     /**
@@ -144,37 +151,17 @@ export class LabelMePanel {
             }
         }
 
-        // Check if we have an existing panel
-        if (LabelMePanel.currentPanel) {
-            const panel = LabelMePanel.currentPanel;
-            panel._panel.reveal(column);
-
-            // Update root path and trigger async scan
-            const rootChanged = panel._rootPath !== rootPath;
-            panel._rootPath = rootPath;
-            // Apply initial image or dummy if no image found
-            panel._imageUri = initialImageUri || vscode.Uri.file(path.join(rootPath, '__no_image__'));
-            panel._workspaceImages = []; // Clear - will be populated by async scan
-            panel._isScanFinished = false; // Reset scan status for new root
-            // Update title to folder basename for folder mode
-            panel._panelTitle = path.basename(rootPath);
-            panel._panel.title = panel._panelTitle;
-            panel.updateWebviewOptions();
-            
-            // Clear sidebar immediately to avoid stale residue while scanning
-            panel._sendImageListUpdate();
-
-            if (rootChanged) {
-                // Force full HTML regeneration for new root
-                await panel._update();
-            } else {
-                // Send immediate image update
-                await panel._sendImageUpdate();
+        // If a panel is already open on this exact folder, reveal it
+        // (and navigate to the target image if one was supplied) instead
+        // of opening a duplicate.
+        for (const existing of LabelMePanel.panels) {
+            if (existing._rootPath === rootPath) {
+                existing._panel.reveal(column);
+                if (targetImageUri && existing._imageUri.fsPath !== targetImageUri.fsPath) {
+                    await existing.updateImage(targetImageUri);
+                }
+                return;
             }
-
-            // Scan in background and send file list
-            panel._scanAndSendImageList();
-            return;
         }
 
         // Collect all workspace folders for resource roots
@@ -205,7 +192,7 @@ export class LabelMePanel {
         // If no image found at all, use a dummy URI — _scanAndSendImageList will
         // navigate to the first real image once the full scan completes
         const imageToShow = initialImageUri || vscode.Uri.file(path.join(rootPath, '__no_image__'));
-        LabelMePanel.currentPanel = new LabelMePanel(panel, context.extensionUri, imageToShow, context.globalState, rootPath, [], panelTitle);
+        LabelMePanel.panels.add(new LabelMePanel(panel, context.extensionUri, imageToShow, context.globalState, rootPath, [], panelTitle));
     }
 
     private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, imageUri: vscode.Uri, globalState: vscode.Memento, rootPath: string, initialWorkspaceImages?: string[], panelTitle?: string) {
@@ -293,7 +280,7 @@ export class LabelMePanel {
                             defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
                         });
                         if (folderUris && folderUris.length > 0) {
-                            this._panel.webview.postMessage({
+                            this._safePost({
                                 command: 'onnxBrowseResult',
                                 field: 'modelDir',
                                 value: folderUris[0].fsPath
@@ -313,7 +300,7 @@ export class LabelMePanel {
                             defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
                         });
                         if (fileUris && fileUris.length > 0) {
-                            this._panel.webview.postMessage({
+                            this._safePost({
                                 command: 'onnxBrowseResult',
                                 field: 'pythonPath',
                                 value: fileUris[0].fsPath
@@ -342,7 +329,7 @@ export class LabelMePanel {
                             if (!err && stdout) {
                                 gpuList = stdout.trim().split('\n').filter((l: string) => l.startsWith('GPU '));
                             }
-                            this._panel.webview.postMessage({
+                            this._safePost({
                                 command: 'gpuDetectResult',
                                 gpus: gpuList
                             });
@@ -358,7 +345,7 @@ export class LabelMePanel {
                             defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
                         });
                         if (samFolderUris && samFolderUris.length > 0) {
-                            this._panel.webview.postMessage({
+                            this._safePost({
                                 command: 'samBrowseResult',
                                 field: 'modelDir',
                                 value: samFolderUris[0].fsPath
@@ -378,7 +365,7 @@ export class LabelMePanel {
                             defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
                         });
                         if (samFileUris && samFileUris.length > 0) {
-                            this._panel.webview.postMessage({
+                            this._safePost({
                                 command: 'samBrowseResult',
                                 field: 'pythonPath',
                                 value: samFileUris[0].fsPath
@@ -395,7 +382,7 @@ export class LabelMePanel {
         // Listen for VS Code theme changes and notify webview
         vscode.window.onDidChangeActiveColorTheme(
             theme => {
-                this._panel.webview.postMessage({
+                this._safePost({
                     command: 'vscodeThemeChanged',
                     themeKind: theme.kind
                 });
@@ -420,7 +407,7 @@ export class LabelMePanel {
 
             if (selection === 'Save') {
                 this._pendingNavigation = direction;
-                this._panel.webview.postMessage({ command: 'requestSave' });
+                this._safePost({ command: 'requestSave' });
                 return;
             }
 
@@ -474,7 +461,7 @@ export class LabelMePanel {
             if (selection === 'Save') {
                 // Store the target path and request save; navigation will happen after save completes
                 this._pendingNavigationPath = imagePath;
-                this._panel.webview.postMessage({ command: 'requestSave' });
+                this._safePost({ command: 'requestSave' });
                 return;
             }
 
@@ -540,7 +527,7 @@ export class LabelMePanel {
         currentImageRelativePath = path.relative(this._rootPath, this._imageUri.fsPath);
 
         // Send updated image list to webview
-        this._panel.webview.postMessage({
+        this._safePost({
             command: 'updateImageList',
             workspaceImages: this._workspaceImages,
             currentImageRelativePath: currentImageRelativePath,
@@ -588,9 +575,18 @@ export class LabelMePanel {
     }
 
     private async _refreshWorkspaceImages() {
+        // Invalidate any in-flight scan so its results don't overwrite ours.
+        const generation = ++this._scanGeneration;
+        const scanRoot = this._rootPath;
+
         // Force rescan by clearing cached images
         this._workspaceImages = [];
         await this._scanWorkspaceImages();
+
+        // Bail if a newer scan or a root change occurred during the await.
+        if (generation !== this._scanGeneration || this._rootPath !== scanRoot) {
+            return;
+        }
 
         this._sendImageListUpdate();
 
@@ -772,7 +768,7 @@ export class LabelMePanel {
 
     private async _sendImageUpdate() {
         if (path.basename(this._imageUri.fsPath) === '__no_image__') {
-            this._panel.webview.postMessage({
+            this._safePost({
                 command: 'updateImage',
                 imageUrl: '',
                 imageName: '',
@@ -809,7 +805,7 @@ export class LabelMePanel {
         }
 
         // Send update message to webview
-        this._panel.webview.postMessage({
+        this._safePost({
             command: 'updateImage',
             imageUrl: imageUri.toString(),
             imageName: path.basename(this._imageUri.fsPath),
@@ -821,7 +817,10 @@ export class LabelMePanel {
     }
 
     public dispose() {
-        LabelMePanel.currentPanel = undefined;
+        this._disposed = true;
+        LabelMePanel.panels.delete(this);
+        // Bump scan generation so any in-flight scan discards its results.
+        this._scanGeneration++;
 
         // Clean up our resources
         this._panel.dispose();
@@ -837,7 +836,9 @@ export class LabelMePanel {
     private async _update() {
         const webview = this._panel.webview;
         // Title is set once at creation, not updated on HTML regeneration
-        this._panel.webview.html = await this._getHtmlForWebview(webview);
+        const html = await this._getHtmlForWebview(webview);
+        if (this._disposed) return;
+        this._panel.webview.html = html;
     }
 
     private async _getHtmlForWebview(webview: vscode.Webview): Promise<string> {
@@ -1212,14 +1213,14 @@ export class LabelMePanel {
             // The webview will check if the confirmed save matches the current snapshot.
             // If clean, it posts 'navigateAfterSave' so we can safely navigate.
             // If dirty (user edited during save), it stays dirty and does NOT post navigate.
-            this._panel.webview.postMessage({ command: 'saveComplete' });
+            this._safePost({ command: 'saveComplete' });
         } catch (err) {
             vscode.window.showErrorMessage('Failed to save annotation: ' + (err as Error).message);
             // Clear pending navigation so a later unrelated save doesn't trigger it
             this._pendingNavigation = undefined;
             this._pendingNavigationPath = undefined;
             // Notify webview that save failed so dirty state is preserved
-            this._panel.webview.postMessage({ command: 'saveFailed' });
+            this._safePost({ command: 'saveFailed' });
         } finally {
             this._isSaving = false;
         }
@@ -1400,9 +1401,14 @@ ${pathElements.join('\n')}
             absoluteImagePaths = this._workspaceImages.map(rel => path.join(this._rootPath, rel));
         }
 
-        // Write image list to a temp JSON file
+        // Write image list to a temp JSON file.
+        // Include pid + random suffix so two panels starting inference
+        // simultaneously can't collide on the same filename.
         const tmpDir = os.tmpdir();
-        const tmpFile = path.join(tmpDir, `labeleditor_onnx_images_${Date.now()}.json`);
+        const tmpFile = path.join(
+            tmpDir,
+            `labeleditor_onnx_images_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.json`
+        );
         await fs.writeFile(tmpFile, JSON.stringify(absoluteImagePaths, null, 2), 'utf8');
 
         // Locate the bundled Python script
@@ -1475,6 +1481,15 @@ ${pathElements.join('\n')}
             return;
         }
 
+        // Avoid launching a second SAM service on a port we already started one on
+        // in this extension-host session (e.g. from another panel).
+        if (LabelMePanel._samServicePorts.has(config.port)) {
+            vscode.window.showWarningMessage(
+                `SAM Service already running on port ${config.port} from another panel. Reusing it; change the port in settings if you want a separate instance.`
+            );
+            return;
+        }
+
         // Locate the bundled Python script
         const scriptPath = path.join(this._extensionUri.fsPath, 'scripts', 'sam_service.py');
         if (!existsSync(scriptPath)) {
@@ -1510,6 +1525,17 @@ ${pathElements.join('\n')}
             hideFromUser: false,
             env: Object.keys(env).length > 0 ? env : undefined
         });
+
+        // Reserve the port and attach the close listener BEFORE launching so a
+        // terminal that exits immediately still releases its port.
+        LabelMePanel._samServicePorts.add(config.port);
+        const disposeListener = vscode.window.onDidCloseTerminal(closed => {
+            if (closed === terminal) {
+                LabelMePanel._samServicePorts.delete(config.port);
+                disposeListener.dispose();
+            }
+        });
+
         terminal.show();
         terminal.sendText(command);
 

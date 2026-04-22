@@ -2,6 +2,20 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.14.0] - 2026-04-22
+
+### Added
+- **Multi-Instance Support**: Open multiple LabelEditor panels side-by-side
+  - Right-click different images or folders to open each in its own panel
+  - Re-opening the same image or folder reveals the existing panel instead of duplicating it (avoids split-brain editing of the same annotation JSON)
+  - Each panel maintains its own image list, scan state, and unsaved-changes state
+
+### Fixed
+- **Disposal Safety**: Async operations (folder scans, GPU detection, file dialogs, save callbacks) can no longer post to a disposed webview
+- **Scan Races**: Manual refresh (🔄) now correctly invalidates any in-flight background scan instead of racing with it
+- **ONNX Batch Temp File Collision**: Temp image-list filename now includes process PID and a random suffix so two panels starting inference at the same time can't collide
+- **SAM Service Port Conflict**: A second panel attempting to launch the SAM service on a port already used in this session now surfaces a clear warning; the port is freed automatically when the SAM terminal is closed
+
 ## [0.13.6] - 2026-04-10
 
 ### Improved
