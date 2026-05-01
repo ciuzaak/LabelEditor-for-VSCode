@@ -3,6 +3,12 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { existsSync } from 'fs';
 import * as os from 'os';
+import {
+    buildLabelMeAnnotation,
+    buildSvg,
+    getImageMetadata,
+    scanWorkspaceImages
+} from './labelMeUtils';
 
 export class LabelMePanel {
     public static readonly panels: Set<LabelMePanel> = new Set();
@@ -473,50 +479,7 @@ export class LabelMePanel {
     }
 
     private async _scanWorkspaceImages(): Promise<string[]> {
-        const rootPath = this._rootPath;
-
-        const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp'];
-        const images: string[] = [];
-
-        const scanDirectory = async (dirPath: string): Promise<void> => {
-            try {
-                const entries = await fs.readdir(dirPath, { withFileTypes: true });
-                for (const entry of entries) {
-                    const fullPath = path.join(dirPath, entry.name);
-                    if (entry.isDirectory()) {
-                        // Skip hidden directories and common non-image directories
-                        if (!entry.name.startsWith('.') &&
-                            entry.name !== 'node_modules' &&
-                            entry.name !== 'out') {
-                            await scanDirectory(fullPath);
-                        }
-                    } else if (entry.isFile()) {
-                        const ext = path.extname(entry.name).toLowerCase();
-                        if (imageExtensions.includes(ext)) {
-                            // Store relative path
-                            const relativePath = path.relative(rootPath, fullPath);
-                            images.push(relativePath);
-                        }
-                    }
-                }
-            } catch (e) {
-                // Ignore directories we can't access
-            }
-        };
-
-        await scanDirectory(rootPath);
-        // Sort images (VS Code style: hierarchical natural sort)
-        // Compare path segments individually to ensure folders are also naturally sorted
-        images.sort((a, b) => {
-            const partsA = a.split(/[\\/]/);
-            const partsB = b.split(/[\\/]/);
-            const minLen = Math.min(partsA.length, partsB.length);
-            for (let i = 0; i < minLen; i++) {
-                const cmp = partsA[i].localeCompare(partsB[i], undefined, { numeric: true, sensitivity: 'base' });
-                if (cmp !== 0) return cmp;
-            }
-            return partsA.length - partsB.length;
-        });
+        const images = await scanWorkspaceImages(this._rootPath);
         this._workspaceImages = images;
         return images;
     }
@@ -628,142 +591,7 @@ export class LabelMePanel {
 
     /** Read image file metadata: file size, bit depth, DPI */
     private async _getImageMetadata(filePath: string): Promise<{ fileSize: number; bitDepth?: number; dpiX?: number; dpiY?: number }> {
-        let stat: Awaited<ReturnType<typeof fs.stat>>;
-        try {
-            stat = await fs.stat(filePath);
-        } catch {
-            return { fileSize: 0 };
-        }
-        const result: { fileSize: number; bitDepth?: number; dpiX?: number; dpiY?: number } = { fileSize: stat.size };
-
-        try {
-            const fd = await fs.open(filePath, 'r');
-            try {
-                // Detect actual format by magic bytes instead of file extension
-                const magic = Buffer.alloc(8);
-                const { bytesRead: magicRead } = await fd.read(magic, 0, 8, 0);
-                const isPng = magicRead >= 8
-                    && magic[0] === 0x89 && magic[1] === 0x50 && magic[2] === 0x4E && magic[3] === 0x47
-                    && magic[4] === 0x0D && magic[5] === 0x0A && magic[6] === 0x1A && magic[7] === 0x0A;
-                const isJpeg = magicRead >= 3 && magic[0] === 0xFF && magic[1] === 0xD8 && magic[2] === 0xFF;
-                const isBmp = magicRead >= 2 && magic[0] === 0x42 && magic[1] === 0x4D;
-
-                if (isPng) {
-                    // PNG: read IHDR for bit depth, walk chunks for pHYs (DPI)
-                    const header = Buffer.alloc(33); // 8 (sig) + 4 (len) + 4 (type) + 13 (IHDR data) + 4 (crc)
-                    const { bytesRead: headerRead } = await fd.read(header, 0, 33, 0);
-                    // Validate: full header read, IHDR length=13, correct chunk type
-                    if (headerRead === 33
-                        && header.readUInt32BE(8) === 13
-                        && header.toString('ascii', 12, 16) === 'IHDR') {
-                        // IHDR data starts at offset 16: width(4) height(4) bitDepth(1) colorType(1)
-                        result.bitDepth = header[24];
-                        const colorType = header[25];
-                        // Total bits per pixel = bitDepth * channels
-                        if (colorType === 2) { result.bitDepth = header[24] * 3; }
-                        else if (colorType === 4) { result.bitDepth = header[24] * 2; }
-                        else if (colorType === 6) { result.bitDepth = header[24] * 4; }
-                    }
-
-                    // Walk PNG chunks properly to find pHYs (must precede IDAT)
-                    const fileSize = stat.size;
-                    let offset = 33; // Start after IHDR (8 sig + 25 IHDR chunk)
-                    const chunkHeader = Buffer.alloc(8); // 4 (length) + 4 (type)
-                    while (offset < 65536 && offset + 12 <= fileSize) { // Limit scan + EOF guard
-                        const { bytesRead: chRead } = await fd.read(chunkHeader, 0, 8, offset);
-                        if (chRead < 8) { break; }
-                        const chunkLen = chunkHeader.readUInt32BE(0);
-                        if (chunkLen > 0x7FFFFFFF || offset + 12 + chunkLen > fileSize) { break; } // Sanity check
-                        const chunkType = chunkHeader.toString('ascii', 4, 8);
-                        if (chunkType === 'IDAT' || chunkType === 'IEND') { break; } // pHYs must be before IDAT
-                        if (chunkType === 'pHYs' && chunkLen === 9) {
-                            const phys = Buffer.alloc(9);
-                            const { bytesRead: phRead } = await fd.read(phys, 0, 9, offset + 8);
-                            if (phRead === 9) {
-                                const ppmX = phys.readUInt32BE(0);
-                                const ppmY = phys.readUInt32BE(4);
-                                const unit = phys[8];
-                                if (unit === 1) { // meters
-                                    result.dpiX = Math.round(ppmX / 39.3701);
-                                    result.dpiY = Math.round(ppmY / 39.3701);
-                                }
-                            }
-                            break;
-                        }
-                        offset += 12 + chunkLen; // 4 (length) + 4 (type) + data + 4 (CRC)
-                    }
-                } else if (isJpeg) {
-                    // JPEG: scan for SOF (bit depth), JFIF APP0 for DPI
-                    const buf = Buffer.alloc(65536);
-                    const { bytesRead } = await fd.read(buf, 0, 65536, 0);
-
-                    let i = 2;
-                    while (i < bytesRead - 1) {
-                        if (buf[i] !== 0xFF) { i++; continue; }
-                        // Skip 0xFF fill bytes
-                        while (i + 1 < bytesRead && buf[i + 1] === 0xFF) { i++; }
-                        if (i + 1 >= bytesRead) { break; }
-                        const marker = buf[i + 1];
-
-                        // JFIF APP0 — DPI info
-                        if (marker === 0xE0 && i + 16 < bytesRead) {
-                            const unit = buf[i + 11];
-                            const xDen = buf.readUInt16BE(i + 12);
-                            const yDen = buf.readUInt16BE(i + 14);
-                            if (unit === 1) { result.dpiX = xDen; result.dpiY = yDen; }
-                            else if (unit === 2) { result.dpiX = Math.round(xDen * 2.54); result.dpiY = Math.round(yDen * 2.54); }
-                        }
-
-                        // SOF markers (0xC0-0xC3, 0xC5-0xC7, 0xC9-0xCB, 0xCD-0xCF) — bit depth
-                        if ((marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC)
-                            && i + 9 < bytesRead) {
-                            const precision = buf[i + 4];
-                            const numComponents = buf[i + 9];
-                            result.bitDepth = precision * numComponents;
-                            break; // Got what we need
-                        }
-
-                        // Skip to next marker
-                        if (marker === 0xD9 || marker === 0xDA) { break; } // EOI or SOS
-                        if (i + 3 < bytesRead) {
-                            const segLen = buf.readUInt16BE(i + 2);
-                            if (segLen < 2 || i + 2 + segLen > bytesRead) { break; } // Bounds check
-                            i += 2 + segLen;
-                        } else { break; }
-                    }
-
-                    if (!result.bitDepth) { result.bitDepth = 24; } // JPEG default
-                } else if (isBmp) {
-                    // Read full BITMAPFILEHEADER (14) + BITMAPINFOHEADER (40) = 54 bytes
-                    const bmpHeader = Buffer.alloc(54);
-                    const { bytesRead: bmpRead } = await fd.read(bmpHeader, 0, 54, 0);
-                    // Check DIB header size at offset 14 — only parse BITMAPINFOHEADER (40+ bytes)
-                    const dibSize = bmpRead >= 18 ? bmpHeader.readUInt32LE(14) : 0;
-                    if (dibSize >= 40 && bmpRead >= 30) {
-                        result.bitDepth = bmpHeader.readUInt16LE(28); // biBitCount at file offset 28
-                    }
-                    if (dibSize >= 40 && bmpRead >= 46) {
-                        // biXPelsPerMeter at offset 38, biYPelsPerMeter at offset 42
-                        const bmpPpmX = bmpHeader.readInt32LE(38);
-                        const bmpPpmY = bmpHeader.readInt32LE(42);
-                        if (bmpPpmX > 0) { result.dpiX = Math.round(bmpPpmX / 39.3701); }
-                        if (bmpPpmY > 0) { result.dpiY = Math.round(bmpPpmY / 39.3701); }
-                    }
-                }
-
-                // Default to 96 DPI for recognized formats when not embedded in file
-                if (isPng || isJpeg || isBmp) {
-                    if (result.dpiX === undefined) { result.dpiX = 96; }
-                    if (result.dpiY === undefined) { result.dpiY = 96; }
-                }
-            } finally {
-                await fd.close();
-            }
-        } catch {
-            // Metadata extraction is best-effort
-        }
-
-        return result;
+        return getImageMetadata(filePath);
     }
 
     private async _sendImageUpdate() {
@@ -1193,16 +1021,7 @@ export class LabelMePanel {
     private async saveAnnotation(data: any) {
         const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
 
-        // Construct LabelMe JSON format
-        const labelMeData = {
-            version: "5.0.1",
-            flags: {},
-            shapes: data.shapes,
-            imagePath: path.basename(this._imageUri.fsPath),
-            imageData: null, // We don't save image data to keep file size small, LabelMe supports null
-            imageHeight: data.imageHeight,
-            imageWidth: data.imageWidth
-        };
+        const labelMeData = buildLabelMeAnnotation(this._imageUri.fsPath, data);
 
         this._isSaving = true;
         try {
@@ -1229,104 +1048,11 @@ export class LabelMePanel {
     private async exportSvg(data: any) {
         const svgPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, '') + '.svg';
 
-        const shapes: any[] = data.shapes || [];
-        const width = data.imageWidth;
-        const height = data.imageHeight;
-        const insertPoints = 3;
-
-        const pathElements: string[] = [];
-
-        for (let idx = 0; idx < shapes.length; idx++) {
-            let points: number[][] = shapes[idx].points;
-            const shapeType: string = shapes[idx].shape_type || 'polygon';
-            const isClosed = shapeType === 'polygon' || shapeType === 'rectangle';
-
-            // Rectangles are stored as 2 opposite corner points; expand to 4 corners
-            if (shapeType === 'rectangle' && points.length === 2) {
-                const [p1, p2] = points;
-                points = [p1, [p2[0], p1[1]], p2, [p1[0], p2[1]]];
-            }
-
-            // Handle point annotations as circles
-            if (shapeType === 'point' && points.length >= 1) {
-                const px = points[0][0].toFixed(2);
-                const py = points[0][1].toFixed(2);
-                const pointElement = `  <circle id="point${idx}"
-        cx="${px}" cy="${py}" r="5"
-        fill="none" stroke="black" stroke-width="1" />`;
-                pathElements.push(pointElement);
-                continue;
-            }
-
-            if (points.length < 2) continue;
-
-            // Insert interpolation points between consecutive vertices
-            if (insertPoints > 0) {
-                const n = points.length;
-                const numSegments = isClosed ? n : n - 1;
-                const expanded: number[][] = [];
-                for (let i = 0; i < numSegments; i++) {
-                    const p1 = points[i];
-                    const p2 = isClosed ? points[(i + 1) % n] : points[i + 1];
-                    expanded.push(p1);
-                    for (let j = 1; j <= insertPoints; j++) {
-                        const t = j / (insertPoints + 1);
-                        const x = p1[0] + t * (p2[0] - p1[0]);
-                        const y = p1[1] + t * (p2[1] - p1[1]);
-                        expanded.push([x, y]);
-                    }
-                }
-                if (!isClosed) {
-                    expanded.push(points[points.length - 1]);
-                }
-                points = expanded;
-            }
-
-            // Build path data
-            let pathData = `M ${points[0][0].toFixed(2)},${points[0][1].toFixed(2)}`;
-
-            let extendedPoints: number[][];
-            let numSegs: number;
-            if (isClosed) {
-                extendedPoints = [...points, points[0], points[1]];
-                numSegs = points.length;
-            } else {
-                extendedPoints = points;
-                numSegs = points.length - 1;
-            }
-
-            const lines: string[] = [];
-            for (let i = 0; i < numSegs; i++) {
-                const prevPt = extendedPoints[i];
-                const nextPt = extendedPoints[i + 1];
-                const coords = `${prevPt[0].toFixed(2)},${prevPt[1].toFixed(2)} ${nextPt[0].toFixed(2)},${nextPt[1].toFixed(2)} ${nextPt[0].toFixed(2)},${nextPt[1].toFixed(2)}`;
-                if (i === 0) {
-                    lines.push(`           C ${coords}`);
-                } else {
-                    lines.push(`             ${coords}`);
-                }
-            }
-
-            if (isClosed && lines.length > 0) {
-                lines[lines.length - 1] = lines[lines.length - 1] + ' Z';
-            }
-
-            pathData = pathData + '\n' + lines.join('\n');
-
-            const pathElement = `  <path id="path${idx}"
-        fill="none" stroke="black" stroke-width="1"
-        d="${pathData}" />`;
-            pathElements.push(pathElement);
-        }
-
-        const svg = `<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg xmlns="http://www.w3.org/2000/svg"
-     xmlns:svg="http://www.w3.org/2000/svg"
-     version="1.1"
-     width="${width}" height="${height}"
-     viewBox="0 0 ${width} ${height}">
-${pathElements.join('\n')}
-</svg>`;
+        const svg = buildSvg({
+            shapes: data.shapes || [],
+            imageWidth: data.imageWidth,
+            imageHeight: data.imageHeight
+        });
 
         try {
             await fs.writeFile(svgPath, svg, 'utf8');
