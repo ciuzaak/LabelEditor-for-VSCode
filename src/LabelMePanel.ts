@@ -215,8 +215,12 @@ export class LabelMePanel {
         // Set panel title once — it stays fixed during image navigation
         this._panel.title = this._panelTitle;
 
-        // Set panel icon
-        this._panel.iconPath = vscode.Uri.joinPath(extensionUri, 'icon.png');
+        // Set panel icon - use fallback if icon.png doesn't exist
+        try {
+            this._panel.iconPath = vscode.Uri.joinPath(extensionUri, 'icon.png');
+        } catch (e) {
+            console.warn('Icon file not found, using default', e);
+        }
 
         // Set the webview's initial html content (with empty image list for fast startup)
         this._update();
@@ -808,6 +812,23 @@ export class LabelMePanel {
                                         </div>
                                         <input type="range" id="contrastSlider" min="10" max="300" value="100" step="5">
                                     </div>
+                                    <div class="zoom-control">
+                                        <div class="zoom-header">
+                                            <label>Channel:</label>
+                                            <button id="channelRgbBtn" class="channel-btn active" title="RGB (All Channels)">RGB</button>
+                                            <button id="channelRBtn" class="channel-btn" title="Red Channel Only">R</button>
+                                            <button id="channelGBtn" class="channel-btn" title="Green Channel Only">G</button>
+                                            <button id="channelBBtn" class="channel-btn" title="Blue Channel Only">B</button>
+                                        </div>
+                                    </div>
+                                    <div class="zoom-control">
+                                        <div class="zoom-header">
+                                            <label>CLAHE: <span id="claheValue">Off</span> <span id="claheResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                            <button id="claheLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                        </div>
+                                        <input type="range" id="claheClipLimitSlider" min="1" max="10" value="2" step="0.5" title="Clip Limit">
+                                        <div style="font-size: 0.8em; margin-top: 4px;">Clip Limit: <span id="claheClipLimitValue">2.0</span></div>
+                                    </div>
                                     <div class="slider-control">
                                         <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
                                         <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
@@ -995,6 +1016,11 @@ export class LabelMePanel {
                         contrast: ${this._globalState.get('contrast') ?? 100},
                         brightnessLocked: ${this._globalState.get('brightnessLocked') ?? false},
                         contrastLocked: ${this._globalState.get('contrastLocked') ?? false},
+                        selectedChannel: "${this._globalState.get('selectedChannel') ?? 'rgb'}",
+                        channelLocked: ${this._globalState.get('channelLocked') ?? false},
+                        claheEnabled: ${this._globalState.get('claheEnabled') ?? false},
+                        claheClipLimit: ${this._globalState.get('claheClipLimit') ?? 2.0},
+                        claheLocked: ${this._globalState.get('claheLocked') ?? false},
                         lockViewEnabled: ${this._globalState.get('lockViewEnabled') ?? false},
                         vscodeThemeKind: ${vscode.window.activeColorTheme.kind},
                         onnxModelDir: ${JSON.stringify(this._globalState.get('onnxModelDir') || '')},

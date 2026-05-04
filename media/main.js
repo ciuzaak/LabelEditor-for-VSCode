@@ -213,6 +213,15 @@ let contrast = 100;   // 对比度，默认100%
 let brightnessLocked = false; // 锁定亮度：切换图片时保留
 let contrastLocked = false;   // 锁定对比度：切换图片时保留
 
+// RGB Channel selection
+let selectedChannel = 'rgb'; // 'rgb', 'r', 'g', 'b'
+let channelLocked = false;   // 锁定通道选择：切换图片时保留
+
+// CLAHE settings
+let claheEnabled = false;    // CLAHE enabled/disabled
+let claheClipLimit = 2.0;    // CLAHE clip limit parameter
+let claheLocked = false;     // 锁定CLAHE：切换图片时保留
+
 // Theme state
 let currentTheme = 'auto'; // 'light', 'dark', 'auto'
 let vscodeThemeKind = 2; // 1=Light, 2=Dark, 3=HighContrast, 4=HighContrastLight
@@ -257,6 +266,31 @@ if (typeof initialGlobalSettings !== 'undefined') {
         contrastLocked = vscodeState.contrastLocked;
     } else if (initialGlobalSettings.contrastLocked !== undefined) {
         contrastLocked = initialGlobalSettings.contrastLocked;
+    }
+    if (vscodeState.selectedChannel !== undefined) {
+        selectedChannel = vscodeState.selectedChannel;
+    } else if (initialGlobalSettings.selectedChannel !== undefined) {
+        selectedChannel = initialGlobalSettings.selectedChannel;
+    }
+    if (vscodeState.channelLocked !== undefined) {
+        channelLocked = vscodeState.channelLocked;
+    } else if (initialGlobalSettings.channelLocked !== undefined) {
+        channelLocked = initialGlobalSettings.channelLocked;
+    }
+    if (vscodeState.claheEnabled !== undefined) {
+        claheEnabled = vscodeState.claheEnabled;
+    } else if (initialGlobalSettings.claheEnabled !== undefined) {
+        claheEnabled = initialGlobalSettings.claheEnabled;
+    }
+    if (vscodeState.claheClipLimit !== undefined) {
+        claheClipLimit = vscodeState.claheClipLimit;
+    } else if (initialGlobalSettings.claheClipLimit !== undefined) {
+        claheClipLimit = initialGlobalSettings.claheClipLimit;
+    }
+    if (vscodeState.claheLocked !== undefined) {
+        claheLocked = vscodeState.claheLocked;
+    } else if (initialGlobalSettings.claheLocked !== undefined) {
+        claheLocked = initialGlobalSettings.claheLocked;
     }
     if (vscodeState.theme !== undefined) {
         currentTheme = vscodeState.theme;
@@ -322,6 +356,35 @@ if (brightnessSlider && brightnessValue) {
 if (contrastSlider && contrastValue) {
     contrastSlider.value = contrast;
     contrastValue.textContent = contrast;
+}
+
+// Initialize channel buttons
+const channelRgbBtn = document.getElementById('channelRgbBtn');
+const channelRBtn = document.getElementById('channelRBtn');
+const channelGBtn = document.getElementById('channelGBtn');
+const channelBBtn = document.getElementById('channelBBtn');
+
+function updateChannelButtons() {
+    if (channelRgbBtn) channelRgbBtn.classList.toggle('active', selectedChannel === 'rgb');
+    if (channelRBtn) channelRBtn.classList.toggle('active', selectedChannel === 'r');
+    if (channelGBtn) channelGBtn.classList.toggle('active', selectedChannel === 'g');
+    if (channelBBtn) channelBBtn.classList.toggle('active', selectedChannel === 'b');
+}
+updateChannelButtons();
+
+// Initialize CLAHE controls
+const claheClipLimitSlider = document.getElementById('claheClipLimitSlider');
+const claheClipLimitValue = document.getElementById('claheClipLimitValue');
+const claheValue = document.getElementById('claheValue');
+const claheResetBtn = document.getElementById('claheResetBtn');
+const claheLockBtn = document.getElementById('claheLockBtn');
+
+if (claheClipLimitSlider && claheClipLimitValue) {
+    claheClipLimitSlider.value = claheClipLimit;
+    claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
+}
+if (claheValue) {
+    claheValue.textContent = claheEnabled ? 'On' : 'Off';
 }
 
 // 恢复设置下拉菜单的展开状态
@@ -1034,6 +1097,21 @@ function handleImageUpdate(message) {
         if (contrastValue) contrastValue.textContent = contrast;
         updateContrastResetBtn();
         saveGlobalSettings('contrast', contrast);
+    }
+    if (!channelLocked) {
+        selectedChannel = 'rgb';
+        updateChannelButtons();
+        saveGlobalSettings('selectedChannel', selectedChannel);
+    }
+    if (!claheLocked) {
+        claheEnabled = false;
+        claheClipLimit = 2.0;
+        if (claheClipLimitSlider) claheClipLimitSlider.value = claheClipLimit;
+        if (claheClipLimitValue) claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
+        if (claheValue) claheValue.textContent = 'Off';
+        updateClaheResetBtn();
+        saveGlobalSettings('claheEnabled', claheEnabled);
+        saveGlobalSettings('claheClipLimit', claheClipLimit);
     }
     applyImageAdjust();
 
@@ -4046,7 +4124,13 @@ function updateModeButtons() {
 function draw(mouseEvent) {
     // Canvas只绘制图片
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, img.width, img.height);
+    
+    // Apply channel selection and CLAHE processing
+    if (selectedChannel !== 'rgb' || claheEnabled) {
+        applyChannelAndClahe();
+    } else {
+        ctx.drawImage(img, 0, 0, img.width, img.height);
+    }
 
     // SVG绘制标注
     drawSVGAnnotations(mouseEvent);
@@ -4836,6 +4920,171 @@ function applyImageAdjust() {
     canvas.style.filter = filterValue;
 }
 
+// Apply channel selection and CLAHE to canvas
+function applyChannelAndClahe() {
+    if (!img.src || !img.complete) return;
+    
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Create an offscreen canvas for processing
+    const offscreenCanvas = document.createElement('canvas');
+    offscreenCanvas.width = img.width;
+    offscreenCanvas.height = img.height;
+    const offCtx = offscreenCanvas.getContext('2d');
+    
+    // Draw original image
+    offCtx.drawImage(img, 0, 0, img.width, img.height);
+    
+    // Get image data
+    const imageData = offCtx.getImageData(0, 0, img.width, img.height);
+    const data = imageData.data;
+    
+    // Apply channel selection
+    if (selectedChannel !== 'rgb') {
+        for (let i = 0; i < data.length; i += 4) {
+            const r = data[i];
+            const g = data[i + 1];
+            const b = data[i + 2];
+            
+            let value;
+            if (selectedChannel === 'r') {
+                value = r;
+            } else if (selectedChannel === 'g') {
+                value = g;
+            } else if (selectedChannel === 'b') {
+                value = b;
+            }
+            
+            data[i] = value;
+            data[i + 1] = value;
+            data[i + 2] = value;
+        }
+    }
+    
+    // Apply CLAHE if enabled
+    if (claheEnabled) {
+        applyClahe(data, img.width, img.height, claheClipLimit);
+    }
+    
+    // Put processed image data back
+    offCtx.putImageData(imageData, 0, 0);
+    
+    // Draw to main canvas
+    ctx.drawImage(offscreenCanvas, 0, 0);
+}
+
+// CLAHE implementation
+function applyClahe(data, width, height, clipLimit) {
+    const tileSize = 8; // Tile size for adaptive histogram equalization
+    const tilesX = Math.ceil(width / tileSize);
+    const tilesY = Math.ceil(height / tileSize);
+    
+    // Convert RGB to grayscale for histogram calculation
+    const gray = new Uint8Array(width * height);
+    for (let i = 0; i < data.length; i += 4) {
+        gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    }
+    
+    // Calculate histograms for each tile
+    const histograms = [];
+    const cdfs = [];
+    
+    for (let ty = 0; ty < tilesY; ty++) {
+        for (let tx = 0; tx < tilesX; tx++) {
+            const hist = new Uint32Array(256);
+            
+            // Calculate histogram for this tile
+            const startX = tx * tileSize;
+            const startY = ty * tileSize;
+            const endX = Math.min(startX + tileSize, width);
+            const endY = Math.min(startY + tileSize, height);
+            
+            for (let y = startY; y < endY; y++) {
+                for (let x = startX; x < endX; x++) {
+                    hist[gray[y * width + x]]++;
+                }
+            }
+            
+            // Clip histogram
+            const clipThreshold = Math.floor(clipLimit * tileSize * tileSize / 256);
+            let excess = 0;
+            for (let i = 0; i < 256; i++) {
+                if (hist[i] > clipThreshold) {
+                    excess += hist[i] - clipThreshold;
+                    hist[i] = clipThreshold;
+                }
+            }
+            
+            // Redistribute excess
+            const redistribution = Math.floor(excess / 256);
+            for (let i = 0; i < 256; i++) {
+                hist[i] += redistribution;
+            }
+            
+            // Calculate CDF
+            const cdf = new Uint32Array(256);
+            cdf[0] = hist[0];
+            for (let i = 1; i < 256; i++) {
+                cdf[i] = cdf[i - 1] + hist[i];
+            }
+            
+            // Normalize CDF
+            const totalPixels = (endX - startX) * (endY - startY);
+            const scale = 255 / totalPixels;
+            for (let i = 0; i < 256; i++) {
+                cdf[i] = Math.min(255, Math.floor(cdf[i] * scale));
+            }
+            
+            histograms.push(hist);
+            cdfs.push(cdf);
+        }
+    }
+    
+    // Apply CLAHE using bilinear interpolation between tiles
+    for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+            const tileX = x / tileSize;
+            const tileY = y / tileSize;
+            
+            const tx1 = Math.floor(tileX);
+            const ty1 = Math.floor(tileY);
+            const tx2 = Math.min(tx1 + 1, tilesX - 1);
+            const ty2 = Math.min(ty1 + 1, tilesY - 1);
+            
+            const fx = tileX - tx1;
+            const fy = tileY - ty1;
+            
+            const idx = ty1 * tilesX + tx1;
+            const idx2 = ty1 * tilesX + tx2;
+            const idx3 = ty2 * tilesX + tx1;
+            const idx4 = ty2 * tilesX + tx2;
+            
+            const grayValue = gray[y * width + x];
+            
+            // Bilinear interpolation of CDF values
+            const val1 = cdfs[idx][grayValue];
+            const val2 = cdfs[idx2][grayValue];
+            const val3 = cdfs[idx3][grayValue];
+            const val4 = cdfs[idx4][grayValue];
+            
+            const interpolated = (1 - fx) * (1 - fy) * val1 +
+                                fx * (1 - fy) * val2 +
+                                (1 - fx) * fy * val3 +
+                                fx * fy * val4;
+            
+            const newGray = Math.round(interpolated);
+            
+            // Apply to RGB channels proportionally
+            const pixelIdx = (y * width + x) * 4;
+            const ratio = newGray / (grayValue + 1); // Avoid division by zero
+            
+            data[pixelIdx] = Math.min(255, Math.round(data[pixelIdx] * ratio));
+            data[pixelIdx + 1] = Math.min(255, Math.round(data[pixelIdx + 1] * ratio));
+            data[pixelIdx + 2] = Math.min(255, Math.round(data[pixelIdx + 2] * ratio));
+        }
+    }
+}
+
 function updateBrightnessResetBtn() {
     if (brightnessResetBtn) {
         brightnessResetBtn.classList.toggle('visible', brightness !== 100);
@@ -4876,6 +5125,40 @@ function updateContrastLockUI() {
     }
 }
 
+function updateChannelLockUI() {
+    if (channelLockBtn) {
+        if (channelLocked) {
+            channelLockBtn.textContent = '🔒';
+            channelLockBtn.classList.add('locked');
+            channelLockBtn.title = 'Locked: Keeping channel selection when switching images. Click to unlock.';
+        } else {
+            channelLockBtn.textContent = '🔓';
+            channelLockBtn.classList.remove('locked');
+            channelLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
+        }
+    }
+}
+
+function updateClaheLockUI() {
+    if (claheLockBtn) {
+        if (claheLocked) {
+            claheLockBtn.textContent = '🔒';
+            claheLockBtn.classList.add('locked');
+            claheLockBtn.title = 'Locked: Keeping CLAHE settings when switching images. Click to unlock.';
+        } else {
+            claheLockBtn.textContent = '🔓';
+            claheLockBtn.classList.remove('locked');
+            claheLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
+        }
+    }
+}
+
+function updateClaheResetBtn() {
+    if (claheResetBtn) {
+        claheResetBtn.classList.toggle('visible', claheEnabled || claheClipLimit !== 2.0);
+    }
+}
+
 if (brightnessSlider) {
     brightnessSlider.oninput = (e) => {
         brightness = parseInt(e.target.value);
@@ -4894,6 +5177,85 @@ if (contrastSlider) {
         applyImageAdjust();
     };
     contrastSlider.onchange = () => saveGlobalSettings('contrast', contrast);
+}
+
+// Channel button event handlers
+if (channelRgbBtn) {
+    channelRgbBtn.onclick = () => {
+        selectedChannel = 'rgb';
+        updateChannelButtons();
+        draw();
+        saveGlobalSettings('selectedChannel', selectedChannel);
+    };
+}
+
+if (channelRBtn) {
+    channelRBtn.onclick = () => {
+        selectedChannel = 'r';
+        updateChannelButtons();
+        draw();
+        saveGlobalSettings('selectedChannel', selectedChannel);
+    };
+}
+
+if (channelGBtn) {
+    channelGBtn.onclick = () => {
+        selectedChannel = 'g';
+        updateChannelButtons();
+        draw();
+        saveGlobalSettings('selectedChannel', selectedChannel);
+    };
+}
+
+if (channelBBtn) {
+    channelBBtn.onclick = () => {
+        selectedChannel = 'b';
+        updateChannelButtons();
+        draw();
+        saveGlobalSettings('selectedChannel', selectedChannel);
+    };
+}
+
+// CLAHE clip limit slider
+if (claheClipLimitSlider) {
+    claheClipLimitSlider.oninput = (e) => {
+        claheClipLimit = parseFloat(e.target.value);
+        if (claheClipLimitValue) claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
+        if (!claheEnabled) {
+            claheEnabled = true;
+            if (claheValue) claheValue.textContent = 'On';
+        }
+        updateClaheResetBtn();
+        draw();
+    };
+    claheClipLimitSlider.onchange = () => {
+        saveGlobalSettings('claheClipLimit', claheClipLimit);
+        saveGlobalSettings('claheEnabled', claheEnabled);
+    };
+}
+
+// CLAHE reset button
+if (claheResetBtn) {
+    claheResetBtn.onclick = () => {
+        claheEnabled = false;
+        claheClipLimit = 2.0;
+        if (claheClipLimitSlider) claheClipLimitSlider.value = claheClipLimit;
+        if (claheClipLimitValue) claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
+        if (claheValue) claheValue.textContent = 'Off';
+        updateClaheResetBtn();
+        draw();
+        saveGlobalSettings('claheEnabled', claheEnabled);
+        saveGlobalSettings('claheClipLimit', claheClipLimit);
+    };
+}
+
+// CLAHE lock button
+if (claheLockBtn) {
+    claheLockBtn.onclick = () => {
+        claheLocked = !claheLocked;
+        updateClaheLockUI();
+        saveGlobalSettings('claheLocked', claheLocked);
+    };
 }
 
 if (brightnessResetBtn) {
@@ -4934,11 +5296,25 @@ if (contrastLockBtn) {
     });
 }
 
+// Initialize channel and CLAHE lock buttons
+const channelLockBtn = document.getElementById('channelLockBtn');
+
+if (channelLockBtn) {
+    channelLockBtn.addEventListener('click', () => {
+        channelLocked = !channelLocked;
+        updateChannelLockUI();
+        saveGlobalSettings('channelLocked', channelLocked);
+    });
+}
+
 // Initialize image adjust UI
 updateBrightnessLockUI();
 updateContrastLockUI();
+updateChannelLockUI();
+updateClaheLockUI();
 updateBrightnessResetBtn();
 updateContrastResetBtn();
+updateClaheResetBtn();
 applyImageAdjust();
 
 // Initialize reset button visibility

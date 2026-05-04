@@ -862,6 +862,29 @@ canvas {
     border-color: var(--color-accent);
 }
 
+/* Channel selection buttons */
+.channel-btn {
+    padding: 4px 8px;
+    margin: 0 2px;
+    border: 1px solid var(--color-border-input);
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-primary);
+    cursor: pointer;
+    border-radius: 3px;
+    font-size: 0.9em;
+    transition: all 0.2s;
+}
+
+.channel-btn:hover {
+    background: var(--color-bg-hover-input);
+}
+
+.channel-btn.active {
+    background: var(--color-accent);
+    color: white;
+    border-color: var(--color-accent);
+}
+
 /* Navigation Buttons */
 .nav-btn {
     padding: 4px 10px;
