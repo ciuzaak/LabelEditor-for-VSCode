@@ -138,6 +138,24 @@ const ZOOM_MIN = 0.1;              // 最小缩放倍数
 const ZOOM_FACTOR = 1.1;           // 滚轮缩放因子
 const PIXEL_RENDER_THRESHOLD = 20; // zoomLevel >= 20 (2000%) 时启用像素块渲染+网格
 const PIXEL_VALUES_ZOOM = ZOOM_MAX; // 达到最大缩放时显示像素RGB/灰度值
+
+// Padding (in CSS pixels) around the image inside canvasWrapper.
+// Lets the cursor overshoot the image edge so the outermost pixels are reliably clickable.
+// Must match the padding value in style.css #canvasWrapper.
+const CANVAS_EDGE_PADDING = 5;
+
+// Clamp an image-space (x, y) point to the image bounds.
+// Use at every site that records cursor position as a shape vertex / prompt point.
+// Hit-testing does not need this (clamping does not change the result).
+function clampImageCoords(x, y) {
+    const w = (img && img.width) ? img.width : 0;
+    const h = (img && img.height) ? img.height : 0;
+    return [
+        Math.max(0, Math.min(w, x)),
+        Math.max(0, Math.min(h, y))
+    ];
+}
+
 const CLOSE_DISTANCE_THRESHOLD = 100; // 多边形闭合距离阈值
 
 // Undo/Redo History (实例级别 - 只记录shapes的变化)
@@ -424,8 +442,13 @@ function calculateFitToScreenZoom() {
 
     if (w === 0 || h === 0 || img.width === 0 || img.height === 0) return 1;
 
-    const scaleX = w / img.width;
-    const scaleY = h / img.height;
+    // Reserve CANVAS_EDGE_PADDING on each side so the padding ring fits inside the
+    // viewport without scrollbars at fit-to-screen.
+    const usableW = Math.max(1, w - 2 * CANVAS_EDGE_PADDING);
+    const usableH = Math.max(1, h - 2 * CANVAS_EDGE_PADDING);
+
+    const scaleX = usableW / img.width;
+    const scaleY = usableH / img.height;
 
     return Math.min(scaleX, scaleY) * ZOOM_FIT_RATIO;
 }
@@ -459,9 +482,10 @@ function getNormalizedViewState() {
         // Image fits horizontally, use center
         imageCenterX = 0.5;
     } else {
-        // Calculate which point of the ORIGINAL image is at the viewport center
+        // Calculate which point of the ORIGINAL image is at the viewport center.
+        // Subtract CANVAS_EDGE_PADDING because the image starts +PAD inside the wrapper.
         const viewportCenterScreenX = scrollX + viewportW / 2;
-        const viewportCenterImageX = viewportCenterScreenX / zoomLevel;
+        const viewportCenterImageX = (viewportCenterScreenX - CANVAS_EDGE_PADDING) / zoomLevel;
         imageCenterX = viewportCenterImageX / img.width;
     }
 
@@ -470,7 +494,7 @@ function getNormalizedViewState() {
         imageCenterY = 0.5;
     } else {
         const viewportCenterScreenY = scrollY + viewportH / 2;
-        const viewportCenterImageY = viewportCenterScreenY / zoomLevel;
+        const viewportCenterImageY = (viewportCenterScreenY - CANVAS_EDGE_PADDING) / zoomLevel;
         imageCenterY = viewportCenterImageY / img.height;
     }
 
@@ -500,11 +524,12 @@ function applyNormalizedViewState(state) {
     const viewportW = canvasContainer.clientWidth;
     const viewportH = canvasContainer.clientHeight;
 
-    // Convert image coordinates back to scroll position
+    // Convert image coordinates back to scroll position.
+    // Image pixel sits at +CANVAS_EDGE_PADDING inside the wrapper, so add PAD.
     const imageX = state.imageCenterX * img.width;
     const imageY = state.imageCenterY * img.height;
-    const scrollX = imageX * zoomLevel - viewportW / 2;
-    const scrollY = imageY * zoomLevel - viewportH / 2;
+    const scrollX = imageX * zoomLevel + CANVAS_EDGE_PADDING - viewportW / 2;
+    const scrollY = imageY * zoomLevel + CANVAS_EDGE_PADDING - viewportH / 2;
 
     canvasContainer.scrollLeft = Math.max(0, scrollX);
     canvasContainer.scrollTop = Math.max(0, scrollY);
@@ -825,7 +850,9 @@ function updateCanvasTransform() {
     svgOverlay.style.width = `${displayWidth}px`;
     svgOverlay.style.height = `${displayHeight}px`;
 
-    // Remove transform from wrapper and set explicit size
+    // Remove transform from wrapper and set explicit inner size.
+    // Wrapper has CSS padding = CANVAS_EDGE_PADDING on each side (box-sizing: content-box),
+    // so its outer scroll size is automatically displayWidth + 2*PAD.
     canvasWrapper.style.transform = '';
     canvasWrapper.style.transformOrigin = '';
     canvasWrapper.style.width = `${displayWidth}px`;
@@ -1649,13 +1676,13 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 if (eraserPoints.length > 2 && (dx * dx + dy * dy) < (CLOSE_DISTANCE_THRESHOLD / (zoomLevel * zoomLevel))) {
                     finishEraser();
                 } else {
-                    eraserPoints.push([x, y]);
+                    eraserPoints.push(clampImageCoords(x, y));
                     draw();
                 }
                 return;
             }
             if (eraserMode === 'rectangle' && eraserRectSecondClick) {
-                eraserPoints[1] = [x, y];
+                eraserPoints[1] = clampImageCoords(x, y);
                 finishEraser();
                 return;
             }
@@ -1737,18 +1764,18 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             if (currentMode === 'point') {
                 // Point mode: single click creates a point and immediately finishes
                 isDrawing = true;
-                currentPoints = [[x, y]];
+                currentPoints = [clampImageCoords(x, y)];
                 finishPolygon();
             } else if (currentMode === 'line') {
                 isDrawing = true;
-                currentPoints = [[x, y]];
+                currentPoints = [clampImageCoords(x, y)];
             } else if (currentMode === 'polygon') {
                 isDrawing = true;
-                currentPoints = [[x, y]];
+                currentPoints = [clampImageCoords(x, y)];
             } else if (currentMode === 'rectangle') {
                 isDrawing = true;
                 // Rectangle starts with one point, we'll expand it in mousemove
-                currentPoints = [[x, y]];
+                currentPoints = [clampImageCoords(x, y)];
             }
             // SAM mode is handled separately below
         } else {
@@ -1770,7 +1797,7 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                         finishPolygon();
                     } else {
                         // Add new point
-                        currentPoints.push([x, y]);
+                        currentPoints.push(clampImageCoords(x, y));
                         lastClickX = x;
                         lastClickY = y;
                         lastClickTime = now;
@@ -1785,7 +1812,7 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 if (currentPoints.length > 2 && (dx * dx + dy * dy) < (CLOSE_DISTANCE_THRESHOLD / (zoomLevel * zoomLevel))) {
                     finishPolygon();
                 } else {
-                    currentPoints.push([x, y]);
+                    currentPoints.push(clampImageCoords(x, y));
                 }
             } else if (currentMode === 'rectangle') {
                 // Second click to finish rectangle
@@ -1920,7 +1947,7 @@ canvasWrapper.addEventListener('mousemove', (e) => {
                 const rect = canvas.getBoundingClientRect();
                 const x = (e.clientX - rect.left) / zoomLevel;
                 const y = (e.clientY - rect.top) / zoomLevel;
-                eraserPoints[1] = [x, y];
+                eraserPoints[1] = clampImageCoords(x, y);
                 draw(e);
                 animationFrameId = null;
             });
@@ -1965,7 +1992,7 @@ canvasWrapper.addEventListener('mousemove', (e) => {
 
                     const startPoint = currentPoints[0];
                     // Update currentPoints to be just the start and end points (2 points)
-                    currentPoints = [startPoint, [x, y]];
+                    currentPoints = [startPoint, clampImageCoords(x, y)];
                 }
                 draw(e);
                 animationFrameId = null;
@@ -2065,9 +2092,11 @@ canvasContainer.addEventListener('wheel', (e) => {
             const scrollLeft = canvasContainer.scrollLeft;
             const scrollTop = canvasContainer.scrollTop;
 
-            // Calculate mouse position in image coordinates before zoom
-            const imageX = (scrollLeft + mouseX) / zoomLevel;
-            const imageY = (scrollTop + mouseY) / zoomLevel;
+            // Calculate mouse position in image coordinates before zoom.
+            // Wrapper has CANVAS_EDGE_PADDING of empty space before the image starts,
+            // so subtract PAD when converting wrapper-local position to image space.
+            const imageX = (scrollLeft + mouseX - CANVAS_EDGE_PADDING) / zoomLevel;
+            const imageY = (scrollTop + mouseY - CANVAS_EDGE_PADDING) / zoomLevel;
 
             // Apply zoom with linear scaling
             if (e.deltaY < 0) {
@@ -2099,13 +2128,15 @@ canvasContainer.addEventListener('wheel', (e) => {
             svgOverlay.style.width = `${displayWidth}px`;
             svgOverlay.style.height = `${displayHeight}px`;
 
+            // Wrapper inner size = display size; CSS padding adds the edge ring on top.
             canvasWrapper.style.width = `${displayWidth}px`;
             canvasWrapper.style.height = `${displayHeight}px`;
             canvasWrapper.style.transform = '';
 
-            // Calculate new scroll position to keep the same image point under the mouse
-            const newScrollLeft = imageX * zoomLevel - mouseX;
-            const newScrollTop = imageY * zoomLevel - mouseY;
+            // Calculate new scroll position to keep the same image point under the mouse.
+            // Inverse of the read above: image pixel sits at +PAD inside the wrapper.
+            const newScrollLeft = imageX * zoomLevel + CANVAS_EDGE_PADDING - mouseX;
+            const newScrollTop = imageY * zoomLevel + CANVAS_EDGE_PADDING - mouseY;
 
             // Apply new scroll position
             canvasContainer.scrollLeft = newScrollLeft;
@@ -2362,7 +2393,7 @@ document.addEventListener('mousemove', (e) => {
 
         // Move all points by the delta
         const shape = shapes[shapeBeingEdited];
-        shape.points = originalEditPoints.map(p => [p[0] + dx, p[1] + dy]);
+        shape.points = originalEditPoints.map(p => clampImageCoords(p[0] + dx, p[1] + dy));
 
         draw();
     } else if (isDraggingVertex && activeVertexIndex !== -1) {
@@ -2376,24 +2407,32 @@ document.addEventListener('mousemove', (e) => {
             if (activeVertexIndex === 0 || activeVertexIndex === 2) {
                 // Moving a diagonal corner - straightforward
                 if (activeVertexIndex === 0) {
-                    shape.points[0] = [x, y];
+                    shape.points[0] = clampImageCoords(x, y);
                 } else {
-                    shape.points[1] = [x, y];
+                    shape.points[1] = clampImageCoords(x, y);
                 }
             } else {
-                // Moving non-diagonal corner - need to update both stored points
+                // Moving non-diagonal corner - need to update both stored points.
+                // Clamp the constructed pairs through clampImageCoords so any
+                // pre-existing out-of-bounds stored coord is also brought inside.
                 const [p1, p2] = shape.points;
                 if (activeVertexIndex === 1) {
                     // Top-right: affects p1[1] and p2[0]
-                    shape.points = [[p1[0], y], [x, p2[1]]];
+                    shape.points = [
+                        clampImageCoords(p1[0], y),
+                        clampImageCoords(x, p2[1])
+                    ];
                 } else {
                     // Bottom-left: affects p1[0] and p2[1]
-                    shape.points = [[x, p1[1]], [p2[0], y]];
+                    shape.points = [
+                        clampImageCoords(x, p1[1]),
+                        clampImageCoords(p2[0], y)
+                    ];
                 }
             }
         } else {
             // For polygon/line/point, just update the vertex directly
-            shape.points[activeVertexIndex] = [x, y];
+            shape.points[activeVertexIndex] = clampImageCoords(x, y);
         }
 
         draw();
@@ -3192,6 +3231,7 @@ function showLabelModal(editIndex = -1) {
 
 function hideLabelModal() {
     labelModal.style.display = 'none';
+    cancelShortcutSequence();
 }
 
 function renderRecentLabels() {
@@ -3212,6 +3252,40 @@ function renderRecentLabels() {
         !currentImageLabelsOrdered.includes(label)
     ).slice(0, 10);
 
+    // Shared 1-based counter across both sections so the Ctrl+D leader sequence
+    // maps the next digit (1..9, then 0) to the first 10 chips in the order they
+    // appear (Current Image first, then History).
+    let chipIndex = 0;
+
+    function buildChip(label, extraClass) {
+        chipIndex += 1;
+        const chip = document.createElement('div');
+        chip.className = 'label-chip' + (extraClass ? ' ' + extraClass : '');
+        chip.textContent = label;
+        if (chipIndex <= 10) {
+            // Visible badge: digits 1..9 then 0 for the 10th, matching the Ctrl+D leader's digit map.
+            const badgeText = chipIndex === 10 ? '0' : String(chipIndex);
+            chip.dataset.shortcutIndex = String(chipIndex);
+            const badge = document.createElement('span');
+            badge.className = 'chip-shortcut-badge';
+            badge.textContent = badgeText;
+            chip.appendChild(badge);
+        }
+        chip.onclick = () => {
+            labelInput.value = label;
+            // Highlight the selected chip (clear ALL sections to avoid cross-section dual highlight)
+            recentLabelsDiv.querySelectorAll('.label-chip').forEach(c => c.classList.remove('selected'));
+            chip.classList.add('selected');
+            // Focus description field so user can optionally fill it before confirming
+            descriptionInput.focus();
+        };
+        chip.ondblclick = () => {
+            labelInput.value = label;
+            confirmLabel();
+        };
+        return chip;
+    }
+
     // 渲染当前图片标签区域（如果有的话）
     if (currentImageLabelsOrdered.length > 0) {
         const currentSection = document.createElement('div');
@@ -3225,22 +3299,7 @@ function renderRecentLabels() {
         const currentChips = document.createElement('div');
         currentChips.className = 'label-chips';
         currentImageLabelsOrdered.forEach(label => {
-            const chip = document.createElement('div');
-            chip.className = 'label-chip current-image-label';
-            chip.textContent = label;
-            chip.onclick = () => {
-                labelInput.value = label;
-                // Highlight the selected chip (clear ALL sections to avoid cross-section dual highlight)
-                recentLabelsDiv.querySelectorAll('.label-chip').forEach(c => c.classList.remove('selected'));
-                chip.classList.add('selected');
-                // Focus description field so user can optionally fill it before confirming
-                descriptionInput.focus();
-            };
-            chip.ondblclick = () => {
-                labelInput.value = label;
-                confirmLabel();
-            };
-            currentChips.appendChild(chip);
+            currentChips.appendChild(buildChip(label, 'current-image-label'));
         });
         currentSection.appendChild(currentChips);
         recentLabelsDiv.appendChild(currentSection);
@@ -3259,22 +3318,7 @@ function renderRecentLabels() {
         const historyChips = document.createElement('div');
         historyChips.className = 'label-chips';
         historyLabelsFiltered.forEach(label => {
-            const chip = document.createElement('div');
-            chip.className = 'label-chip';
-            chip.textContent = label;
-            chip.onclick = () => {
-                labelInput.value = label;
-                // Highlight the selected chip (clear ALL sections to avoid cross-section dual highlight)
-                recentLabelsDiv.querySelectorAll('.label-chip').forEach(c => c.classList.remove('selected'));
-                chip.classList.add('selected');
-                // Focus description field so user can optionally fill it before confirming
-                descriptionInput.focus();
-            };
-            chip.ondblclick = () => {
-                labelInput.value = label;
-                confirmLabel();
-            };
-            historyChips.appendChild(chip);
+            historyChips.appendChild(buildChip(label, ''));
         });
         historySection.appendChild(historyChips);
         recentLabelsDiv.appendChild(historySection);
@@ -3355,6 +3399,65 @@ function confirmLabel() {
     renderLabelsList();
     draw();
 }
+
+// Pick the chip with shortcutIndex N, write its label to the input, and confirm.
+// Returns true if a chip with that index existed.
+function pickLabelByShortcut(index) {
+    const chip = recentLabelsDiv.querySelector(`.label-chip[data-shortcut-index="${index}"]`);
+    if (!chip) return false;
+    // chip.textContent includes the badge digit because the badge is a child <span>.
+    // Read the label text from the first text node instead of textContent.
+    let labelText = '';
+    for (const node of chip.childNodes) {
+        if (node.nodeType === Node.TEXT_NODE) {
+            labelText += node.textContent;
+        }
+    }
+    labelText = labelText.trim();
+    if (!labelText) return false;
+    labelInput.value = labelText;
+    confirmLabel();
+    return true;
+}
+
+// Ctrl+D leader sequence for label modal: press Ctrl+D to reveal chip badges,
+// then press 0-9 to pick that chip (0 means chip 10). Any other key cancels
+// the sequence without being consumed.
+let awaitingShortcutDigit = false;
+
+function cancelShortcutSequence() {
+    if (!awaitingShortcutDigit) return;
+    awaitingShortcutDigit = false;
+    recentLabelsDiv.classList.remove('show-shortcuts');
+}
+
+document.addEventListener('keydown', (e) => {
+    if (labelModal.style.display !== 'flex') {
+        // Modal closed — make sure we don't carry stale state.
+        if (awaitingShortcutDigit) cancelShortcutSequence();
+        return;
+    }
+
+    if (awaitingShortcutDigit) {
+        const isPureKey = !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey;
+        if (isPureKey && /^[0-9]$/.test(e.key)) {
+            e.preventDefault();
+            const index = e.key === '0' ? 10 : Number(e.key);
+            cancelShortcutSequence();
+            pickLabelByShortcut(index);
+            return;
+        }
+        // Any other key cancels the sequence and falls through (key not consumed).
+        cancelShortcutSequence();
+    }
+
+    // Leader: Ctrl+D (case-insensitive). No other modifiers allowed.
+    if (e.ctrlKey && !e.altKey && !e.metaKey && !e.shiftKey && (e.key === 'd' || e.key === 'D')) {
+        e.preventDefault();
+        awaitingShortcutDigit = true;
+        recentLabelsDiv.classList.add('show-shortcuts');
+    }
+});
 
 modalOkBtn.onclick = confirmLabel;
 
@@ -4098,8 +4201,9 @@ function drawSVGAnnotations(mouseEvent) {
         // 绘制到鼠标位置的临时线（在polygon或line模式下）
         if (mouseEvent && (currentMode === 'polygon' || currentMode === 'line') && currentPoints.length > 0) {
             const rect = canvas.getBoundingClientRect();
-            const mx = (mouseEvent.clientX - rect.left) / zoomLevel;
-            const my = (mouseEvent.clientY - rect.top) / zoomLevel;
+            const rawMx = (mouseEvent.clientX - rect.left) / zoomLevel;
+            const rawMy = (mouseEvent.clientY - rect.top) / zoomLevel;
+            const [mx, my] = clampImageCoords(rawMx, rawMy);
             const lastPoint = currentPoints[currentPoints.length - 1];
 
             const line = document.createElementNS(SVG_NS, 'line');
@@ -4148,8 +4252,9 @@ function drawSVGAnnotations(mouseEvent) {
             // Draw trailing line to mouse
             if (mouseEvent && eraserPoints.length > 0) {
                 const rect = canvas.getBoundingClientRect();
-                const mx = (mouseEvent.clientX - rect.left) / zoomLevel;
-                const my = (mouseEvent.clientY - rect.top) / zoomLevel;
+                const rawMx = (mouseEvent.clientX - rect.left) / zoomLevel;
+                const rawMy = (mouseEvent.clientY - rect.top) / zoomLevel;
+                const [mx, my] = clampImageCoords(rawMx, rawMy);
                 const lastPoint = eraserPoints[eraserPoints.length - 1];
 
                 const line = document.createElementNS(SVG_NS, 'line');
@@ -6093,10 +6198,13 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             samIsDragging = false;
             return;
         }
-        const x1 = Math.min(samDragStart.x, x);
-        const y1 = Math.min(samDragStart.y, y);
-        const x2 = Math.max(samDragStart.x, x);
-        const y2 = Math.max(samDragStart.y, y);
+        // Clamp both corners to image bounds — the cursor may have ended up in the padding ring.
+        const [cx, cy] = clampImageCoords(x, y);
+        const [csx, csy] = clampImageCoords(samDragStart.x, samDragStart.y);
+        const x1 = Math.min(csx, cx);
+        const y1 = Math.min(csy, cy);
+        const x2 = Math.max(csx, cx);
+        const y2 = Math.max(csy, cy);
 
         samPrompts = [{ type: 'rectangle', data: [x1, y1, x2, y2] }];
         samPromptType = 'box';
@@ -6204,7 +6312,8 @@ canvasWrapper.addEventListener('mouseup', (e) => {
                 }
                 samPromptType = 'point';
 
-                samPrompts.push({ type: 'point', data: [samPendingClick.x, samPendingClick.y], label: label });
+                const [spx, spy] = clampImageCoords(samPendingClick.x, samPendingClick.y);
+                samPrompts.push({ type: 'point', data: [spx, spy], label: label });
                 samPendingClick = null;
                 draw();
                 samDecode();

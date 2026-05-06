@@ -2,6 +2,16 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.14.1] - 2026-05-06
+
+### Improved
+- **Reliable Edge Clicks**: Image is now wrapped in a 5px padding ring inside the canvas viewport so the cursor can overshoot the image edge by a few pixels without losing mouse events. Outermost pixels become reliably clickable in all drawing modes (polygon, rectangle, line, point, eraser, SAM)
+  - Coordinates are clamped to image bounds at every recording site, so shapes never extend outside `[0, img.width] × [0, img.height]`
+  - Polygon/line preview lines and eraser preview lines also clamp to the image edge so the preview matches the click target
+  - Wheel-zoom anchor, fit-to-screen, and lock-view restoration math updated to account for the offset
+  - Pixel grid overlay (visible at zoom ≥ 2000%) repositioned to stay aligned with the image
+- **Keyboard Shortcut for Recent Labels**: In the label modal, press `Ctrl+D` to reveal numbered badges on chips, then press the corresponding digit (`1`–`9`, or `0` for the 10th) to commit that label and close the modal. Any other key cancels the sequence without being consumed (so it falls through to the input)
+
 ## [0.14.0] - 2026-04-22
 
 ### Added

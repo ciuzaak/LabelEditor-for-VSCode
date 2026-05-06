@@ -359,6 +359,20 @@ button.dirty {
     box-shadow: 0 0 10px var(--color-shadow);
 }
 
+#canvasWrapper {
+    position: relative;
+    padding: 5px;                                  /* CANVAS_EDGE_PADDING in JS */
+    background-color: var(--color-bg-primary);     /* visible padding ring */
+    box-sizing: content-box;                        /* width/height set in JS = inner size */
+}
+
+#canvasWrapper > canvas,
+#canvasWrapper > svg {
+    position: absolute;
+    top: 5px;
+    left: 5px;
+}
+
 canvas {
     display: block;
 }
@@ -372,12 +386,13 @@ canvas {
 }
 
 /* Pixel Grid Overlay - shown when zoomed in >= 2000% */
+/* top/left/width values mirror the 5px CANVAS_EDGE_PADDING applied to #canvasWrapper. */
 .pixel-grid-overlay {
     position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
+    top: 5px;
+    left: 5px;
+    width: calc(100% - 10px);
+    height: calc(100% - 10px);
     pointer-events: none;
     z-index: 1;
     background-image: none;
@@ -478,6 +493,7 @@ canvas {
 }
 
 .label-chip {
+    position: relative;                          /* anchor for shortcut badge */
     background-color: var(--color-bg-input);
     padding: 2px 8px;
     border-radius: 10px;
@@ -494,6 +510,26 @@ canvas {
     border-color: var(--color-accent);
     background-color: var(--color-accent);
     color: white;
+}
+
+.chip-shortcut-badge {
+    position: absolute;
+    top: -6px;
+    left: -6px;
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+    background: var(--color-accent);
+    color: white;
+    font-size: 10px;
+    line-height: 16px;
+    text-align: center;
+    pointer-events: none;
+    display: none;
+}
+
+#recentLabels.show-shortcuts .chip-shortcut-badge {
+    display: block;
 }
 
 /* Labels Section Styles */

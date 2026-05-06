@@ -190,6 +190,7 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 - **D**: Next image
 - **Ctrl+S** (`Cmd+S` on Mac): Save annotations
 - **Delete/Backspace**: Delete selected shape
+- **Ctrl+D** (in label modal, New in v0.14.1): Reveal chip shortcut badges, then press a digit (`1`-`9`, or `0` for the 10th) to commit that label
 
 ### Toolbar Buttons
 - **◀ / ▶**: Navigate between images
