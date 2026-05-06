@@ -11,3 +11,4 @@ package-lock.json
 *.md
 !README.md
 !CHANGELOG.md
+docs/**
