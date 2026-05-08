@@ -6530,19 +6530,13 @@ function samEnsureEncoded() {
 }
 
 function updateShiftFeedback() {
-    // Refresh the prior-status snapshot whenever statusSpan currently shows a
-    // non-feedback string. This catches both the initial transition and any
-    // external write that occurred mid-hold (e.g., samEncode/samDecode finishing
-    // during Shift hold) — without it, the snapshot stays pinned to the value
-    // captured on Shift-down and stale text gets restored on Shift-up.
-    if (statusSpan.textContent !== lastFeedbackText) {
+    if (shouldRefreshShiftSnapshot(statusSpan.textContent, lastFeedbackText)) {
         prevStatusText = statusSpan.textContent;
         prevStatusColor = statusSpan.style.color;
     }
 
     if (!shiftPressed || currentMode === 'view') {
-        // Restore prior status only if we still own the status text.
-        if (lastFeedbackText !== null && statusSpan.textContent === lastFeedbackText) {
+        if (shouldRestoreShiftStatus(lastFeedbackText, statusSpan.textContent)) {
             statusSpan.textContent = prevStatusText ?? '';
             statusSpan.style.color = prevStatusColor ?? '';
         }
@@ -6555,17 +6549,7 @@ function updateShiftFeedback() {
         return;
     }
 
-    let text, color, cursor;
-    if (currentMode === 'sam' && samHasPositivePrompt(samPrompts)) {
-        text = 'SAM: Negative point';
-        color = '#ff4444';
-        cursor = 'crosshair';
-    } else {
-        // SAM-empty or any non-SAM annotation mode: eraser
-        text = currentMode === 'sam' ? 'SAM: Eraser mode' : 'Eraser mode';
-        color = '#ff8800';
-        cursor = ERASER_CURSOR_DATA_URI;
-    }
+    const { text, color, cursor } = computeShiftFeedback(currentMode, samPrompts, ERASER_CURSOR_DATA_URI);
 
     statusSpan.textContent = text;
     statusSpan.style.color = color;
