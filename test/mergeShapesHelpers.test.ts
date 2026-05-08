@@ -83,6 +83,16 @@ describe('ringsOverlap', () => {
         const inner = [[10, 10], [20, 10], [20, 20], [10, 20]];
         assert.equal(ringsOverlap(pc, outer, inner), true);
     });
+    it('returns false for a degenerate (zero-area) input', () => {
+        const square = [[0, 0], [10, 0], [10, 10], [0, 10]];
+        const flat = [[2, 2], [8, 2], [8, 2], [2, 2]];
+        assert.equal(ringsOverlap(pc, square, flat), false);
+    });
+    it('returns false when one ring has fewer than 3 points', () => {
+        const square = [[0, 0], [10, 0], [10, 10], [0, 10]];
+        const justTwo = [[5, 5], [6, 6]];
+        assert.equal(ringsOverlap(pc, square, justTwo), false);
+    });
 });
 
 describe('buildOverlapGroups', () => {
@@ -146,16 +156,27 @@ describe('unionOuterRing', () => {
         // Open ring (no closing duplicate).
         assert.notDeepEqual(result[0], result[result.length - 1]);
     });
-    it('drops holes when union has them', () => {
-        // Two overlapping C-shapes can produce a hole in their union — but
-        // simpler: a single big square union doesn't produce a hole. To cover
-        // hole-dropping, we craft a polygon-with-hole input by passing a
-        // self-bridged C-shape. Easier: just verify single-poly output never
-        // includes a closing-point-duplicate at the end.
-        const a = [[0, 0], [10, 0], [10, 10], [0, 10]];
-        const b = [[3, 3], [7, 3], [7, 7], [3, 7]]; // fully inside a
-        const result = unionOuterRing(pc, [a, b]);
-        // Inner ring should be dropped; outer should match a's outline.
+    it('drops holes when the union really contains an inner ring', () => {
+        // C-shape + bar produces a polygon-with-a-hole: outer ring is the
+        // 10x10 square; inner ring is the [4,8] x [3,7] void. Verified
+        // against `polygonClipping.union` directly: result is a multipolygon
+        // with one polygon whose `.length` is 2 (outer + 1 hole).
+        const cShape = [
+            [0, 0], [10, 0], [10, 3],
+            [4, 3], [4, 7],
+            [10, 7], [10, 10], [0, 10]
+        ];
+        const bar = [[8, 3], [10, 3], [10, 7], [8, 7]];
+
+        // Sanity: confirm polygon-clipping really produces a hole here, so
+        // that our helper exercises the hole-drop code path rather than a
+        // simpler no-hole branch.
+        const raw = pc.union([cShape.concat([cShape[0]])], [bar.concat([bar[0]])]);
+        assert.equal(raw.length, 1, 'expected single polygon');
+        assert.equal(raw[0].length, 2, 'expected outer + 1 hole');
+
+        const result = unionOuterRing(pc, [cShape, bar]);
+        // Outer ring (4 corners of 10x10), no inner-ring vertices appended.
         assert.equal(result.length, 4);
         const xs = result.map((p: number[]) => p[0]);
         const ys = result.map((p: number[]) => p[1]);
@@ -163,6 +184,14 @@ describe('unionOuterRing', () => {
         assert.equal(Math.max(...xs), 10);
         assert.equal(Math.min(...ys), 0);
         assert.equal(Math.max(...ys), 10);
+    });
+    it('returns null when given a degenerate ring', () => {
+        const justTwo = [[0, 0], [1, 0]];
+        assert.equal(unionOuterRing(pc, [justTwo]), null);
+    });
+    it('returns null on zero-area input (line-thin rectangle)', () => {
+        const flat = [[0, 0], [10, 0], [10, 0], [0, 0]];
+        assert.equal(unionOuterRing(pc, [flat]), null);
     });
     it('picks the largest outer ring when union returns multiple polygons', () => {
         // Two disjoint squares — union returns a MultiPolygon with two pieces.
@@ -247,5 +276,18 @@ describe('buildMergedShape', () => {
             { allRectangles: true, points: [[0, 0], [1, 1]] }
         );
         assert.equal('visible' in out, false);
+    });
+    it('defaults group_id to null when the seed has none', () => {
+        // Seed shape literally lacks the property — exercises the helper's
+        // `seed.group_id !== undefined ? seed.group_id : null` branch.
+        const seedWithoutGroup: any = { shape_type: 'rectangle', label: 'a', points: [[0, 0], [1, 1]] };
+        const shapes: any[] = [seedWithoutGroup, rect(0, 0, 1, 1, 'a')];
+        const out = buildMergedShape(
+            shapes,
+            [0, 1],
+            'a',
+            { allRectangles: true, points: [[0, 0], [1, 1]] }
+        );
+        assert.equal(out.group_id, null);
     });
 });

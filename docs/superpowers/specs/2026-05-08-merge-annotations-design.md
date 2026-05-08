@@ -86,7 +86,8 @@ unionOuterRing(pc, rings)          // -> [[x,y], ...] (largest outer ring,
 ringSignedArea(ring)               // -> number (for picking largest)
 resolveGroupLabel(shapes, group)   // -> {label} | {needsPrompt: true,
                                    //                modeLabel: string}
-buildMergedShape(shapes, group, allRect, label)
+buildMergedShape(shapes, group, label, options)
+                                   // options = { allRectangles, points }
                                    // -> new shape object (rect or polygon)
 ```
 

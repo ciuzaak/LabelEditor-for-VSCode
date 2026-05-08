@@ -175,7 +175,7 @@ function resolveGroupLabel(shapes, group) {
     }
     if (allSame) return { label: first };
 
-    // Mode label: count occurrences; tie → earliest by index.
+    // Mode label: count occurrences; tie -> earliest by index.
     var counts = {};
     var firstSeen = {};
     for (var k = 0; k < group.length; k++) {

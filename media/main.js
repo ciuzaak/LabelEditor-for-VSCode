@@ -1131,6 +1131,7 @@ function handleImageUpdate(message) {
     boxSelectCurrent = null;
     editingShapeIndex = -1;
     isBatchRenaming = false;
+    if (isMergePending) clearMergePendingState();
     hideLabelModal();
 
     // Reset brightness/contrast if not locked (independently)
@@ -2465,6 +2466,22 @@ function setMergeStatus(text, color) {
     statusSpan.style.color = color || '';
 }
 
+// Look up the pure merge helpers either as hoisted globals (webview) or via
+// the optional `window.mergeShapesHelpers` namespace. Returns null if any
+// helper is missing.
+function resolveMergeHelpers() {
+    const ns = window.mergeShapesHelpers || (typeof mergeShapesHelpers !== 'undefined' ? mergeShapesHelpers : null);
+    const fn = {
+        shapeToOuterRing: (typeof shapeToOuterRing !== 'undefined') ? shapeToOuterRing : (ns && ns.shapeToOuterRing),
+        buildOverlapGroups: (typeof buildOverlapGroups !== 'undefined') ? buildOverlapGroups : (ns && ns.buildOverlapGroups),
+        computeAABBPoints: (typeof computeAABBPoints !== 'undefined') ? computeAABBPoints : (ns && ns.computeAABBPoints),
+        unionOuterRing: (typeof unionOuterRing !== 'undefined') ? unionOuterRing : (ns && ns.unionOuterRing),
+        resolveGroupLabel: (typeof resolveGroupLabel !== 'undefined') ? resolveGroupLabel : (ns && ns.resolveGroupLabel),
+        buildMergedShape: (typeof buildMergedShape !== 'undefined') ? buildMergedShape : (ns && ns.buildMergedShape)
+    };
+    return Object.values(fn).every(f => typeof f === 'function') ? fn : null;
+}
+
 function mergeSelectedShapes() {
     if (selectedShapeIndices.size < 2) return;
     const indices = [...selectedShapeIndices];
@@ -2481,18 +2498,8 @@ function mergeSelectedShapes() {
         setMergeStatus('Polygon clipping unavailable', 'red');
         return;
     }
-    const helpers = window.mergeShapesHelpers || (typeof mergeShapesHelpers !== 'undefined' ? mergeShapesHelpers : null);
-    // The helpers module exports onto Node `module.exports`, but in the webview
-    // each function is hoisted onto the global scope by the <script> tag.
-    const fn = {
-        shapeToOuterRing: (typeof shapeToOuterRing !== 'undefined') ? shapeToOuterRing : (helpers && helpers.shapeToOuterRing),
-        buildOverlapGroups: (typeof buildOverlapGroups !== 'undefined') ? buildOverlapGroups : (helpers && helpers.buildOverlapGroups),
-        computeAABBPoints: (typeof computeAABBPoints !== 'undefined') ? computeAABBPoints : (helpers && helpers.computeAABBPoints),
-        unionOuterRing: (typeof unionOuterRing !== 'undefined') ? unionOuterRing : (helpers && helpers.unionOuterRing),
-        resolveGroupLabel: (typeof resolveGroupLabel !== 'undefined') ? resolveGroupLabel : (helpers && helpers.resolveGroupLabel),
-        buildMergedShape: (typeof buildMergedShape !== 'undefined') ? buildMergedShape : (helpers && helpers.buildMergedShape)
-    };
-    if (!fn.buildOverlapGroups) {
+    const fn = resolveMergeHelpers();
+    if (!fn) {
         setMergeStatus('Merge helpers missing', 'red');
         return;
     }
@@ -2613,19 +2620,21 @@ function commitMergePendingFromModal() {
     if (!isMergePending) return false;
     const chosen = labelInput.value.trim();
     if (!chosen) return false; // keep modal open; user must pick something
+    const fn = resolveMergeHelpers();
+    if (!fn) {
+        setMergeStatus('Merge helpers missing', 'red');
+        clearMergePendingState();
+        hideLabelModal();
+        return true;
+    }
     const labels = pendingMergeLabels.map(l => l === null ? chosen : l);
     const valid = pendingMergeGroups.map((group, i) => ({
         group,
         out: pendingMergeOutputs[i]
     }));
-    const fnRefs = {
-        buildMergedShape: (typeof buildMergedShape !== 'undefined')
-            ? buildMergedShape
-            : (window.mergeShapesHelpers && window.mergeShapesHelpers.buildMergedShape)
-    };
     hideLabelModal();
     clearMergePendingState();
-    finalizeMerge(valid, labels, fnRefs);
+    finalizeMerge(valid, labels, fn);
     // Persist the chosen label as MRU (mirrors confirmLabel behavior).
     const existingIdx = recentLabels.indexOf(chosen);
     if (existingIdx !== -1) recentLabels.splice(existingIdx, 1);
