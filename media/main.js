@@ -99,7 +99,6 @@ let samServicePort = 8765;
 let samServiceRunning = false;
 let samCurrentImagePath = null;   // 当前已 encode 的图片路径
 let samPrompts = [];              // 当前的 prompt 列表
-let samPromptType = null;         // 'point' | 'box'
 let samMaskContour = null;        // 当前推理结果（轮廓点数组）
 let samIsDragging = false;        // 是否正在拖拽框选
 let samDragStart = null;          // 框选起点 {x, y}
@@ -114,6 +113,17 @@ const SAM_LONG_PRESS_MS = 300;    // SAM 长按阈值（ms）
 let samEncodeMode = 'full';       // 'full' | 'local' — encode entire image or visible viewport
 let samCachedCrop = null;         // { x, y, w, h } — crop region of the currently cached encoding (null = full image)
 let samIsFreshSequence = true;    // True if we are starting a new prompt sequence and can adopt a new crop
+
+// --- Shift feedback state ---
+let shiftPressed = false;
+let prevStatusText = null;       // Status before Shift took over
+let prevStatusColor = null;
+let lastFeedbackText = null;     // What we last wrote, for safe restore
+const ERASER_CURSOR_DATA_URI = 'url("data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'>' +
+    '<path d=\'M3 17l6-6 5 5 7-7v3l-7 7-5-5-6 6z\' fill=\'%23ff6b35\' stroke=\'white\' stroke-width=\'1.5\'/>' +
+    '</svg>'
+) + '") 3 17, crosshair';
 
 // --- Eraser State ---
 let eraserActive = false;          // Whether currently in eraser drawing mode
@@ -1345,6 +1355,35 @@ function updateImageBrowserHighlight(newRelativePath) {
 
 // --- Shortcuts ---
 
+// Track Shift press for eraser/negative-point feedback (cursor + status bar).
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Shift' && !shiftPressed) {
+        if (labelModal.style.display === 'flex') return;
+        if (samConfigModal && samConfigModal.style.display === 'flex') return;
+        if (colorPickerModal && colorPickerModal.style.display === 'flex') return;
+        if (onnxInferModal && onnxInferModal.style.display === 'flex') return;
+        const focusedTag = document.activeElement?.tagName;
+        if (focusedTag === 'INPUT' || focusedTag === 'TEXTAREA' || focusedTag === 'SELECT') return;
+        if (eraserActive) return;
+        shiftPressed = true;
+        updateShiftFeedback();
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift') {
+        shiftPressed = false;
+        updateShiftFeedback();
+    }
+});
+
+window.addEventListener('blur', () => {
+    if (shiftPressed) {
+        shiftPressed = false;
+        updateShiftFeedback();
+    }
+});
+
 document.addEventListener('keydown', (e) => {
     // Ignore shortcuts if any modal is open (except Enter/Esc handled in input)
     if (labelModal.style.display === 'flex') return;
@@ -1779,8 +1818,13 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             return;
         }
 
-        // Shift+click to START eraser (only needed for the first click)
-        if (e.shiftKey && currentMode !== 'sam' && currentMode !== 'view' && !isDrawing) {
+        // Shift+click to START eraser (only needed for the first click).
+        // In SAM mode, only allow eraser when no positive prompt is in progress —
+        // otherwise Shift is reserved for adding a negative point.
+        if (e.shiftKey
+            && (currentMode !== 'sam' || !samHasPositivePrompt(samPrompts))
+            && currentMode !== 'view'
+            && !isDrawing) {
             eraserMouseDownTime = Date.now();
             eraserMouseDownPos = { x, y };
             eraserIsDragging = false;
@@ -2095,6 +2139,9 @@ canvasWrapper.addEventListener('mousemove', (e) => {
         const x = mx / zoomLevel;
         const y = my / zoomLevel;
 
+        // Skip cursor refresh while Shift feedback owns the cursor.
+        if (shiftPressed) return;
+
         const hoveredIndex = findShapeIndexAt(x, y);
         const desiredCursor = hoveredIndex !== -1 ? 'pointer' :
             (currentMode === 'view' ? 'default' : 'crosshair');
@@ -2399,7 +2446,9 @@ function exitShapeEditMode(saveChanges = true) {
     isDraggingVertex = false;
     isDraggingWholeShape = false;
     activeVertexIndex = -1;
-    canvasWrapper.style.cursor = currentMode === 'view' ? 'default' : 'crosshair';
+    if (!shiftPressed) {
+        canvasWrapper.style.cursor = currentMode === 'view' ? 'default' : 'crosshair';
+    }
     draw();
 }
 
@@ -2454,7 +2503,10 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         if (clickedIndex === shapeBeingEdited) {
             isDraggingWholeShape = true;
             dragStartPoint = { x, y };
-            canvasWrapper.style.cursor = 'move';
+            // Don't overwrite the Shift feedback cursor; it'll be cleared on Shift-up.
+            if (!shiftPressed) {
+                canvasWrapper.style.cursor = 'move';
+            }
             e.stopPropagation();
             e.preventDefault();
             return;
@@ -2526,8 +2578,9 @@ document.addEventListener('mousemove', (e) => {
         }
 
         draw();
-    } else if (isEditingShape) {
+    } else if (isEditingShape && !shiftPressed) {
         // Update cursor based on what's under the mouse
+        // (skip while Shift feedback owns the cursor)
         const vertexIndex = findVertexAt(shapeBeingEdited, x, y);
         if (vertexIndex !== -1) {
             canvasWrapper.style.cursor = 'move';
@@ -2542,7 +2595,10 @@ document.addEventListener('mouseup', (e) => {
     if (isDraggingWholeShape) {
         isDraggingWholeShape = false;
         dragStartPoint = null;
-        canvasWrapper.style.cursor = 'default';
+        // Don't overwrite the Shift feedback cursor; it'll be cleared on Shift-up.
+        if (!shiftPressed) {
+            canvasWrapper.style.cursor = 'default';
+        }
         // Update originalEditPoints to current position for next drag
         if (shapeBeingEdited !== -1) {
             originalEditPoints = JSON.parse(JSON.stringify(shapes[shapeBeingEdited].points));
@@ -3583,7 +3639,6 @@ function cancelLabelInput() {
         // SAM mode: restore prompts, mask, crop, sequence state, and embedding identity
         if (samSavedStateBeforeConfirm) {
             samPrompts = samSavedStateBeforeConfirm.prompts;
-            samPromptType = samSavedStateBeforeConfirm.promptType;
             samMaskContour = samSavedStateBeforeConfirm.maskContour;
             samCachedCrop = samSavedStateBeforeConfirm.cachedCrop;
             samIsFreshSequence = samSavedStateBeforeConfirm.isFreshSequence;
@@ -3592,6 +3647,7 @@ function cancelLabelInput() {
         }
         currentPoints = [];
         draw();
+        updateShiftFeedback();
         return;
     }
 
@@ -6350,6 +6406,9 @@ async function samDecode() {
                 samPrompts = [samPrompts[samPrompts.length - 1]]; // Keep only the latest prompt
                 samMaskContour = null;
                 samIsFreshSequence = true; // We are essentially starting over
+                // Prompts mutated — refresh Shift feedback in case the routing
+                // role flipped (e.g. trimmed away the only positive prompt).
+                updateShiftFeedback();
             }
         }
     }
@@ -6406,6 +6465,9 @@ async function samDecode() {
             statusSpan.textContent = `SAM Decoded [${modeLabel}] (${data.time_ms || 0}ms)`;
             statusSpan.style.color = 'limegreen';
             draw();
+            // Note: don't call updateShiftFeedback here — samDecode doesn't
+            // mutate samPrompts, so feedback content is unchanged. Calling it
+            // would only clobber the decode status message during Shift hold.
         }
     } catch (err) {
         if (requestVersion !== samDecodeVersion) return;
@@ -6421,7 +6483,6 @@ async function samDecode() {
 function samClearState() {
     samDecodeVersion++;  // Invalidate any in-flight decode
     samPrompts = [];
-    samPromptType = null;
     samMaskContour = null;
     samIsDragging = false;
     samDragStart = null;
@@ -6434,6 +6495,7 @@ function samClearState() {
     statusSpan.textContent = '';
     statusSpan.style.color = '';
     draw();
+    updateShiftFeedback();
 }
 
 async function samCheckAndEnterMode() {
@@ -6467,12 +6529,57 @@ function samEnsureEncoded() {
     }
 }
 
+function updateShiftFeedback() {
+    // Refresh the prior-status snapshot whenever statusSpan currently shows a
+    // non-feedback string. This catches both the initial transition and any
+    // external write that occurred mid-hold (e.g., samEncode/samDecode finishing
+    // during Shift hold) — without it, the snapshot stays pinned to the value
+    // captured on Shift-down and stale text gets restored on Shift-up.
+    if (statusSpan.textContent !== lastFeedbackText) {
+        prevStatusText = statusSpan.textContent;
+        prevStatusColor = statusSpan.style.color;
+    }
+
+    if (!shiftPressed || currentMode === 'view') {
+        // Restore prior status only if we still own the status text.
+        if (lastFeedbackText !== null && statusSpan.textContent === lastFeedbackText) {
+            statusSpan.textContent = prevStatusText ?? '';
+            statusSpan.style.color = prevStatusColor ?? '';
+        }
+        prevStatusText = null;
+        prevStatusColor = null;
+        lastFeedbackText = null;
+        // Cursor reset: clear inline style and let the existing mousemove logic re-derive
+        currentCursor = null;
+        canvasWrapper.style.cursor = '';
+        return;
+    }
+
+    let text, color, cursor;
+    if (currentMode === 'sam' && samHasPositivePrompt(samPrompts)) {
+        text = 'SAM: Negative point';
+        color = '#ff4444';
+        cursor = 'crosshair';
+    } else {
+        // SAM-empty or any non-SAM annotation mode: eraser
+        text = currentMode === 'sam' ? 'SAM: Eraser mode' : 'Eraser mode';
+        color = '#ff8800';
+        cursor = ERASER_CURSOR_DATA_URI;
+    }
+
+    statusSpan.textContent = text;
+    statusSpan.style.color = color;
+    canvasWrapper.style.cursor = cursor;
+    currentCursor = cursor;
+    lastFeedbackText = text;
+}
+
 function samUndoLastPrompt() {
     if (samPrompts.length > 0) {
         samPrompts.pop();
+        samPrompts = cleanupOrphanNegatives(samPrompts);
         if (samPrompts.length === 0) {
             samDecodeVersion++;  // Invalidate any in-flight decode
-            samPromptType = null;
             samMaskContour = null;
             samCachedCrop = null;
             samCurrentImagePath = null;
@@ -6482,6 +6589,7 @@ function samUndoLastPrompt() {
             samDecode();
         }
     }
+    updateShiftFeedback();
 }
 
 let samSavedStateBeforeConfirm = null; // For restoring on modal cancel
@@ -6492,7 +6600,6 @@ function samConfirmAnnotation() {
     // Save SAM state so we can restore if user cancels the label modal
     samSavedStateBeforeConfirm = {
         prompts: JSON.parse(JSON.stringify(samPrompts)),
-        promptType: samPromptType,
         maskContour: JSON.parse(JSON.stringify(samMaskContour)),
         cachedCrop: samCachedCrop ? JSON.parse(JSON.stringify(samCachedCrop)) : null,
         isFreshSequence: samIsFreshSequence,
@@ -6505,7 +6612,6 @@ function samConfirmAnnotation() {
 
     // Clear SAM prompt state but keep service running
     samPrompts = [];
-    samPromptType = null;
     samMaskContour = null;
     samIsDragging = false;
     samDragStart = null;
@@ -6516,6 +6622,7 @@ function samConfirmAnnotation() {
 
     // Show label modal (same as finishPolygon)
     isDrawing = false;
+    updateShiftFeedback();
     showLabelModal();
 }
 
@@ -6530,6 +6637,17 @@ canvasWrapper.addEventListener('mousedown', (e) => {
 
     // Skip if event was already consumed by another capture-phase handler (e.g. edit mode exit)
     if (e.defaultPrevented) return;
+
+    // Defer to the main handler when the eraser owns the click stream
+    // (eraser mid-draw, or shift+empty starting a new eraser).
+    if (samShouldDeferToMainHandler({
+        shiftKey: e.shiftKey,
+        eraserActive,
+        samBoxSecondClick,
+        prompts: samPrompts
+    })) {
+        return;
+    }
 
     // If click is on the context menu itself, let it handle the click
     if (shapeContextMenu && shapeContextMenu.contains(e.target)) {
@@ -6565,13 +6683,13 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         const x2 = Math.max(csx, cx);
         const y2 = Math.max(csy, cy);
 
-        samPrompts = [{ type: 'rectangle', data: [x1, y1, x2, y2] }];
-        samPromptType = 'box';
+        samPrompts = mergeBoxIntoPrompts(samPrompts, { type: 'rectangle', data: [x1, y1, x2, y2] });
         samBoxSecondClick = false;
         samDragStart = null;
         samDragCurrent = null;
         samIsDragging = false;
         draw();
+        updateShiftFeedback();
         samDecode();
         e.stopPropagation();
         e.preventDefault();
@@ -6664,17 +6782,11 @@ canvasWrapper.addEventListener('mouseup', (e) => {
         samClickTimer = setTimeout(() => {
             if (samPendingClick) {
                 const label = samPendingClick.shiftKey ? 0 : 1;
-
-                // If previous was box, clear it (point and box don't coexist)
-                if (samPromptType === 'box') {
-                    samPrompts = [];
-                }
-                samPromptType = 'point';
-
                 const [spx, spy] = clampImageCoords(samPendingClick.x, samPendingClick.y);
                 samPrompts.push({ type: 'point', data: [spx, spy], label: label });
                 samPendingClick = null;
                 draw();
+                updateShiftFeedback();
                 samDecode();
             }
             samClickTimer = null;
@@ -6712,7 +6824,6 @@ window._samOnImageUpdate = function () {
     if (currentMode === 'sam') {
         samDecodeVersion++;  // Invalidate any in-flight decode
         samPrompts = [];
-        samPromptType = null;
         samMaskContour = null;
         samIsDragging = false;
         samDragStart = null;
@@ -6722,6 +6833,7 @@ window._samOnImageUpdate = function () {
         samCachedCrop = null;
         // Clear samCurrentImagePath so lazy encode triggers on next interaction
         samCurrentImagePath = null;
+        updateShiftFeedback();
     }
 };
 // Patch handleImageUpdate

@@ -678,6 +678,10 @@ export class LabelMePanel {
         const polyClipPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'polygon-clipping.umd.min.js');
         const polyClipUri = webview.asWebviewUri(polyClipPath);
 
+        // SAM prompt helpers (pure functions, must load before main.js)
+        const samHelpersPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'samPromptHelpers.js');
+        const samHelpersUri = webview.asWebviewUri(samHelpersPath);
+
         // Read CSS file content and inline it to prevent race condition on Windows
         // where JS executes before CSS finishes loading via external <link>, causing
         // layout chaos (zero container dimensions, unstyled dropdowns visible, etc.)
@@ -1044,6 +1048,7 @@ export class LabelMePanel {
                     };
                 </script>
                 <script src="${polyClipUri}"></script>
+                <script src="${samHelpersUri}"></script>
                 <script src="${scriptUri}"></script>
             </body>
             </html>`;
