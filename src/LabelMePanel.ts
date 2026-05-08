@@ -780,6 +780,7 @@ export class LabelMePanel {
                                     <button id="saveBtn" class="sidebar-icon-btn" title="Save (Ctrl+S)" disabled>💾</button>
                                 </div>
                                 <div id="settingsMenuDropdown" class="sidebar-dropdown" style="display: none;">
+                                    <div class="settings-group-header">Theme</div>
                                     <div class="theme-control">
                                         <label>Theme</label>
                                         <div class="theme-toggle-group">
@@ -788,10 +789,30 @@ export class LabelMePanel {
                                             <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code">🔄</button>
                                         </div>
                                     </div>
+                                    <div class="settings-group-header">View</div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen">&#8634;</span></label>
                                             <button id="zoomLockBtn" class="zoom-lock-btn" title="Lock: Keep zoom and position when switching images">🔓</button>
+                                        </div>
+                                    </div>
+                                    <div class="settings-group-header">Annotation Style</div>
+                                    <div class="slider-control">
+                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                        <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
+                                    </div>
+                                    <div class="slider-control">
+                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                        <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
+                                    </div>
+                                    <div class="settings-group-header">Image Adjustment</div>
+                                    <div class="zoom-control">
+                                        <div class="zoom-header">
+                                            <label>Channel:</label>
+                                            <button id="channelRgbBtn" class="channel-btn active" title="RGB (All Channels)">RGB</button>
+                                            <button id="channelRBtn" class="channel-btn" title="Red Channel Only">R</button>
+                                            <button id="channelGBtn" class="channel-btn" title="Green Channel Only">G</button>
+                                            <button id="channelBBtn" class="channel-btn" title="Blue Channel Only">B</button>
                                         </div>
                                     </div>
                                     <div class="zoom-control">
@@ -810,28 +831,11 @@ export class LabelMePanel {
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Channel:</label>
-                                            <button id="channelRgbBtn" class="channel-btn active" title="RGB (All Channels)">RGB</button>
-                                            <button id="channelRBtn" class="channel-btn" title="Red Channel Only">R</button>
-                                            <button id="channelGBtn" class="channel-btn" title="Green Channel Only">G</button>
-                                            <button id="channelBBtn" class="channel-btn" title="Blue Channel Only">B</button>
-                                        </div>
-                                    </div>
-                                    <div class="zoom-control">
-                                        <div class="zoom-header">
                                             <label>CLAHE: <span id="claheValue">Off</span> <span id="claheResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
                                             <button id="claheLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
                                         </div>
                                         <input type="range" id="claheClipLimitSlider" min="1" max="10" value="2" step="0.5" title="Clip Limit">
                                         <div style="font-size: 0.8em; margin-top: 4px;">Clip Limit: <span id="claheClipLimitValue">2.0</span></div>
-                                    </div>
-                                    <div class="slider-control">
-                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                        <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
-                                    </div>
-                                    <div class="slider-control">
-                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                        <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
                                     </div>
                                 </div>
                                 <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
