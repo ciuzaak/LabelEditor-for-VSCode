@@ -1688,8 +1688,13 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             return;
         }
 
-        // Shift+click to START eraser (only needed for the first click)
-        if (e.shiftKey && currentMode !== 'sam' && currentMode !== 'view' && !isDrawing) {
+        // Shift+click to START eraser (only needed for the first click).
+        // In SAM mode, only allow eraser when no positive prompt is in progress —
+        // otherwise Shift is reserved for adding a negative point.
+        if (e.shiftKey
+            && (currentMode !== 'sam' || !samHasPositivePrompt(samPrompts))
+            && currentMode !== 'view'
+            && !isDrawing) {
             eraserMouseDownTime = Date.now();
             eraserMouseDownPos = { x, y };
             eraserIsDragging = false;
