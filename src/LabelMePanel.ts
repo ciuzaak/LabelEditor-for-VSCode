@@ -794,6 +794,28 @@ export class LabelMePanel {
                                             <button id="zoomLockBtn" class="zoom-lock-btn" title="Lock: Keep zoom and position when switching images">🔓</button>
                                         </div>
                                     </div>
+                                    <div class="settings-group-header">Annotation Style</div>
+                                    <div class="slider-control">
+                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                        <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
+                                    </div>
+                                    <div class="slider-control">
+                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                        <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
+                                    </div>
+                                    <div class="settings-group-header">Image Adjustment</div>
+                                    <div class="zoom-control">
+                                        <div class="zoom-header">
+                                            <label>Channel:</label>
+                                            <button id="channelLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                        </div>
+                                        <div class="onnx-radio-group">
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="rgb" checked /> RGB</label>
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="r" /> R</label>
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="g" /> G</label>
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="b" /> B</label>
+                                        </div>
+                                    </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Brightness: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
@@ -808,13 +830,17 @@ export class LabelMePanel {
                                         </div>
                                         <input type="range" id="contrastSlider" min="10" max="300" value="100" step="5">
                                     </div>
-                                    <div class="slider-control">
-                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                        <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
-                                    </div>
-                                    <div class="slider-control">
-                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                        <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
+                                    <div class="zoom-control">
+                                        <div class="zoom-header">
+                                            <label>CLAHE:</label>
+                                            <button id="claheToggleBtn" class="channel-btn" title="Click to enable">Off</button>
+                                            <span id="claheResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span>
+                                            <button id="claheLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                        </div>
+                                        <div id="claheControls" style="display: none;">
+                                            <div style="font-size: 0.8em; margin-top: 4px;">Clip Limit: <span id="claheClipLimitValue">2.0</span></div>
+                                            <input type="range" id="claheClipLimitSlider" min="1" max="10" value="2" step="0.5" title="Clip Limit">
+                                        </div>
                                     </div>
                                 </div>
                                 <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
@@ -995,6 +1021,11 @@ export class LabelMePanel {
                         contrast: ${this._globalState.get('contrast') ?? 100},
                         brightnessLocked: ${this._globalState.get('brightnessLocked') ?? false},
                         contrastLocked: ${this._globalState.get('contrastLocked') ?? false},
+                        selectedChannel: ${JSON.stringify(this._globalState.get('selectedChannel') ?? 'rgb')},
+                        channelLocked: ${this._globalState.get('channelLocked') ?? false},
+                        claheEnabled: ${this._globalState.get('claheEnabled') ?? false},
+                        claheClipLimit: ${this._globalState.get('claheClipLimit') ?? 2.0},
+                        claheLocked: ${this._globalState.get('claheLocked') ?? false},
                         lockViewEnabled: ${this._globalState.get('lockViewEnabled') ?? false},
                         vscodeThemeKind: ${vscode.window.activeColorTheme.kind},
                         onnxModelDir: ${JSON.stringify(this._globalState.get('onnxModelDir') || '')},

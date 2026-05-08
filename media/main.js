@@ -231,6 +231,20 @@ let contrast = 100;   // 对比度，默认100%
 let brightnessLocked = false; // 锁定亮度：切换图片时保留
 let contrastLocked = false;   // 锁定对比度：切换图片时保留
 
+// RGB Channel selection
+let selectedChannel = 'rgb'; // 'rgb', 'r', 'g', 'b'
+let channelLocked = false;   // 锁定通道选择：切换图片时保留
+
+// CLAHE settings
+let claheEnabled = false;    // CLAHE enabled/disabled
+let claheClipLimit = 2.0;    // CLAHE clip limit parameter
+let claheLocked = false;     // 锁定CLAHE：切换图片时保留
+
+// Processed-image cache for channel selection / CLAHE.
+// Key encodes the inputs that affect output; cache hit avoids reprocessing on every draw().
+let processedCanvas = null;
+let processedKey = '';
+
 // Theme state
 let currentTheme = 'auto'; // 'light', 'dark', 'auto'
 let vscodeThemeKind = 2; // 1=Light, 2=Dark, 3=HighContrast, 4=HighContrastLight
@@ -275,6 +289,31 @@ if (typeof initialGlobalSettings !== 'undefined') {
         contrastLocked = vscodeState.contrastLocked;
     } else if (initialGlobalSettings.contrastLocked !== undefined) {
         contrastLocked = initialGlobalSettings.contrastLocked;
+    }
+    if (vscodeState.selectedChannel !== undefined) {
+        selectedChannel = vscodeState.selectedChannel;
+    } else if (initialGlobalSettings.selectedChannel !== undefined) {
+        selectedChannel = initialGlobalSettings.selectedChannel;
+    }
+    if (vscodeState.channelLocked !== undefined) {
+        channelLocked = vscodeState.channelLocked;
+    } else if (initialGlobalSettings.channelLocked !== undefined) {
+        channelLocked = initialGlobalSettings.channelLocked;
+    }
+    if (vscodeState.claheEnabled !== undefined) {
+        claheEnabled = vscodeState.claheEnabled;
+    } else if (initialGlobalSettings.claheEnabled !== undefined) {
+        claheEnabled = initialGlobalSettings.claheEnabled;
+    }
+    if (vscodeState.claheClipLimit !== undefined) {
+        claheClipLimit = vscodeState.claheClipLimit;
+    } else if (initialGlobalSettings.claheClipLimit !== undefined) {
+        claheClipLimit = initialGlobalSettings.claheClipLimit;
+    }
+    if (vscodeState.claheLocked !== undefined) {
+        claheLocked = vscodeState.claheLocked;
+    } else if (initialGlobalSettings.claheLocked !== undefined) {
+        claheLocked = initialGlobalSettings.claheLocked;
     }
     if (vscodeState.theme !== undefined) {
         currentTheme = vscodeState.theme;
@@ -341,6 +380,38 @@ if (contrastSlider && contrastValue) {
     contrastSlider.value = contrast;
     contrastValue.textContent = contrast;
 }
+
+// Initialize channel radios
+const channelRadios = document.querySelectorAll('input[name="imageChannel"]');
+
+function updateChannelRadios() {
+    channelRadios.forEach(r => { r.checked = r.value === selectedChannel; });
+}
+updateChannelRadios();
+
+// Initialize CLAHE controls
+const claheClipLimitSlider = document.getElementById('claheClipLimitSlider');
+const claheClipLimitValue = document.getElementById('claheClipLimitValue');
+const claheToggleBtn = document.getElementById('claheToggleBtn');
+const claheControls = document.getElementById('claheControls');
+const claheResetBtn = document.getElementById('claheResetBtn');
+const claheLockBtn = document.getElementById('claheLockBtn');
+
+if (claheClipLimitSlider && claheClipLimitValue) {
+    claheClipLimitSlider.value = claheClipLimit;
+    claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
+}
+
+function updateClaheToggleUI() {
+    if (claheToggleBtn) {
+        claheToggleBtn.textContent = claheEnabled ? 'On' : 'Off';
+        claheToggleBtn.classList.toggle('active', claheEnabled);
+    }
+    if (claheControls) {
+        claheControls.style.display = claheEnabled ? '' : 'none';
+    }
+}
+updateClaheToggleUI();
 
 // 恢复设置下拉菜单的展开状态
 if (settingsMenuDropdown && vscodeState.settingsMenuExpanded) {
@@ -1018,6 +1089,10 @@ window.addEventListener('message', event => {
 
 // Handle incremental image update (without full HTML reload)
 function handleImageUpdate(message) {
+    // Force-invalidate the processed-image cache: a same-URL image may carry different
+    // bytes after an external edit, so we cannot rely on the URL alone for invalidation.
+    processedKey = '';
+
     // Exit shape edit mode if currently editing (without saving changes to the old image)
     if (isEditingShape) {
         exitShapeEditMode(false);
@@ -1061,6 +1136,21 @@ function handleImageUpdate(message) {
         if (contrastValue) contrastValue.textContent = contrast;
         updateContrastResetBtn();
         saveGlobalSettings('contrast', contrast);
+    }
+    if (!channelLocked) {
+        selectedChannel = 'rgb';
+        updateChannelRadios();
+        saveGlobalSettings('selectedChannel', selectedChannel);
+    }
+    if (!claheLocked) {
+        claheEnabled = false;
+        claheClipLimit = 2.0;
+        if (claheClipLimitSlider) claheClipLimitSlider.value = claheClipLimit;
+        if (claheClipLimitValue) claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
+        updateClaheToggleUI();
+        updateClaheResetBtn();
+        saveGlobalSettings('claheEnabled', claheEnabled);
+        saveGlobalSettings('claheClipLimit', claheClipLimit);
     }
     applyImageAdjust();
 
@@ -4149,7 +4239,14 @@ function updateModeButtons() {
 function draw(mouseEvent) {
     // Canvas只绘制图片
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.drawImage(img, 0, 0, img.width, img.height);
+
+    const needsProcessing = selectedChannel !== 'rgb' || claheEnabled;
+    const source = needsProcessing ? getProcessedCanvas() : null;
+    if (source) {
+        ctx.drawImage(source, 0, 0, img.width, img.height);
+    } else {
+        ctx.drawImage(img, 0, 0, img.width, img.height);
+    }
 
     // SVG绘制标注
     drawSVGAnnotations(mouseEvent);
@@ -4941,6 +5038,163 @@ function applyImageAdjust() {
     canvas.style.filter = filterValue;
 }
 
+// Render channel-selected and/or CLAHE-processed image into the cached offscreen canvas.
+// Returns the cached canvas, or null if the source image is not ready.
+// CLAHE runs in YCbCr space on the Y plane only, so colors are preserved.
+function getProcessedCanvas() {
+    if (!img.src || !img.complete || !img.width || !img.height) return null;
+
+    const w = img.width;
+    const h = img.height;
+    const key = img.src + '|' + selectedChannel + '|' + claheEnabled + '|' + claheClipLimit + '|' + w + 'x' + h;
+    if (processedCanvas && key === processedKey) return processedCanvas;
+
+    if (!processedCanvas) {
+        processedCanvas = document.createElement('canvas');
+    }
+    if (processedCanvas.width !== w || processedCanvas.height !== h) {
+        processedCanvas.width = w;
+        processedCanvas.height = h;
+    }
+    const pCtx = processedCanvas.getContext('2d');
+    pCtx.drawImage(img, 0, 0, w, h);
+    const imageData = pCtx.getImageData(0, 0, w, h);
+    const data = imageData.data;
+
+    if (selectedChannel !== 'rgb') {
+        const offset = selectedChannel === 'r' ? 0 : selectedChannel === 'g' ? 1 : 2;
+        for (let i = 0; i < data.length; i += 4) {
+            const v = data[i + offset];
+            data[i] = v;
+            data[i + 1] = v;
+            data[i + 2] = v;
+        }
+    }
+
+    if (claheEnabled) {
+        applyClaheYCbCr(data, w, h, claheClipLimit);
+    }
+
+    pCtx.putImageData(imageData, 0, 0);
+    processedKey = key;
+    return processedCanvas;
+}
+
+// CLAHE in YCbCr (Rec.601). Equalizes Y; Cb/Cr pass through. In-place on `data` (RGBA).
+function applyClaheYCbCr(data, width, height, clipLimit) {
+    const n = width * height;
+    const y = new Uint8Array(n);
+    const cb = new Uint8Array(n);
+    const cr = new Uint8Array(n);
+    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        y[p]  = Math.round( 0.299 * r + 0.587 * g + 0.114 * b);
+        cb[p] = Math.round(128 - 0.168736 * r - 0.331264 * g + 0.5      * b);
+        cr[p] = Math.round(128 + 0.5      * r - 0.418688 * g - 0.081312 * b);
+    }
+
+    claheOnPlane(y, width, height, clipLimit);
+
+    for (let p = 0, i = 0; p < n; p++, i += 4) {
+        const Y  = y[p];
+        const Cb = cb[p] - 128;
+        const Cr = cr[p] - 128;
+        const r = Y + 1.402 * Cr;
+        const g = Y - 0.344136 * Cb - 0.714136 * Cr;
+        const b = Y + 1.772 * Cb;
+        data[i]     = r < 0 ? 0 : r > 255 ? 255 : Math.round(r);
+        data[i + 1] = g < 0 ? 0 : g > 255 ? 255 : Math.round(g);
+        data[i + 2] = b < 0 ? 0 : b > 255 ? 255 : Math.round(b);
+    }
+}
+
+// CLAHE on a single 8-bit plane. 8x8 tile grid sized adaptively to the plane.
+// Float clip threshold avoids the floor-to-zero collapse seen with small tiles.
+function claheOnPlane(plane, width, height, clipLimit) {
+    const tilesX = 8;
+    const tilesY = 8;
+    const tileW = Math.ceil(width / tilesX);
+    const tileH = Math.ceil(height / tilesY);
+
+    const cdfs = new Array(tilesX * tilesY);
+
+    for (let ty = 0; ty < tilesY; ty++) {
+        for (let tx = 0; tx < tilesX; tx++) {
+            const startX = tx * tileW;
+            const startY = ty * tileH;
+            const endX = Math.min(startX + tileW, width);
+            const endY = Math.min(startY + tileH, height);
+            const tilePixels = (endX - startX) * (endY - startY);
+
+            const hist = new Uint32Array(256);
+            for (let py = startY; py < endY; py++) {
+                const row = py * width;
+                for (let px = startX; px < endX; px++) {
+                    hist[plane[row + px]]++;
+                }
+            }
+
+            // Clip in floating point. Storing back into the integer hist would truncate
+            // sub-1.0 thresholds and re-introduce the floor-to-zero collapse on small tiles.
+            const clippedHist = new Float64Array(256);
+            const clipThreshold = clipLimit * tilePixels / 256;
+            let excess = 0;
+            for (let i = 0; i < 256; i++) {
+                if (hist[i] > clipThreshold) {
+                    excess += hist[i] - clipThreshold;
+                    clippedHist[i] = clipThreshold;
+                } else {
+                    clippedHist[i] = hist[i];
+                }
+            }
+            const redistribution = excess / 256;
+
+            const cdf = new Uint8Array(256);
+            let acc = 0;
+            const scale = 255 / tilePixels;
+            for (let i = 0; i < 256; i++) {
+                acc += clippedHist[i] + redistribution;
+                let v = Math.round(acc * scale);
+                if (v > 255) v = 255;
+                cdf[i] = v;
+            }
+            cdfs[ty * tilesX + tx] = cdf;
+        }
+    }
+
+    // Bilinear interpolation between the 4 surrounding tile CDFs.
+    // fx/fy are the pixel position in tile-center coordinates, clamped to the valid range
+    // so that edge / corner pixels collapse to a single CDF without reaching across the boundary.
+    for (let py = 0; py < height; py++) {
+        const row = py * width;
+        const rawFy = (py + 0.5) / tileH - 0.5;
+        const fy = rawFy < 0 ? 0 : rawFy > tilesY - 1 ? tilesY - 1 : rawFy;
+        const ty1 = Math.floor(fy);
+        const ty2 = ty1 + 1 > tilesY - 1 ? tilesY - 1 : ty1 + 1;
+        const dy = fy - ty1;
+
+        for (let px = 0; px < width; px++) {
+            const rawFx = (px + 0.5) / tileW - 0.5;
+            const fx = rawFx < 0 ? 0 : rawFx > tilesX - 1 ? tilesX - 1 : rawFx;
+            const tx1 = Math.floor(fx);
+            const tx2 = tx1 + 1 > tilesX - 1 ? tilesX - 1 : tx1 + 1;
+            const dx = fx - tx1;
+
+            const v = plane[row + px];
+            const v11 = cdfs[ty1 * tilesX + tx1][v];
+            const v12 = cdfs[ty1 * tilesX + tx2][v];
+            const v21 = cdfs[ty2 * tilesX + tx1][v];
+            const v22 = cdfs[ty2 * tilesX + tx2][v];
+
+            const top = v11 * (1 - dx) + v12 * dx;
+            const bot = v21 * (1 - dx) + v22 * dx;
+            plane[row + px] = Math.round(top * (1 - dy) + bot * dy);
+        }
+    }
+}
+
 function updateBrightnessResetBtn() {
     if (brightnessResetBtn) {
         brightnessResetBtn.classList.toggle('visible', brightness !== 100);
@@ -4981,6 +5235,40 @@ function updateContrastLockUI() {
     }
 }
 
+function updateChannelLockUI() {
+    if (channelLockBtn) {
+        if (channelLocked) {
+            channelLockBtn.textContent = '🔒';
+            channelLockBtn.classList.add('locked');
+            channelLockBtn.title = 'Locked: Keeping channel selection when switching images. Click to unlock.';
+        } else {
+            channelLockBtn.textContent = '🔓';
+            channelLockBtn.classList.remove('locked');
+            channelLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
+        }
+    }
+}
+
+function updateClaheLockUI() {
+    if (claheLockBtn) {
+        if (claheLocked) {
+            claheLockBtn.textContent = '🔒';
+            claheLockBtn.classList.add('locked');
+            claheLockBtn.title = 'Locked: Keeping CLAHE settings when switching images. Click to unlock.';
+        } else {
+            claheLockBtn.textContent = '🔓';
+            claheLockBtn.classList.remove('locked');
+            claheLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
+        }
+    }
+}
+
+function updateClaheResetBtn() {
+    if (claheResetBtn) {
+        claheResetBtn.classList.toggle('visible', claheEnabled || claheClipLimit !== 2.0);
+    }
+}
+
 if (brightnessSlider) {
     brightnessSlider.oninput = (e) => {
         brightness = parseInt(e.target.value);
@@ -4999,6 +5287,63 @@ if (contrastSlider) {
         applyImageAdjust();
     };
     contrastSlider.onchange = () => saveGlobalSettings('contrast', contrast);
+}
+
+// Channel radio event handler
+channelRadios.forEach(r => {
+    r.addEventListener('change', () => {
+        if (r.checked) {
+            selectedChannel = r.value;
+            draw();
+            saveGlobalSettings('selectedChannel', selectedChannel);
+        }
+    });
+});
+
+// CLAHE clip limit slider — only adjusts the value; does not toggle enabled state.
+if (claheClipLimitSlider) {
+    claheClipLimitSlider.oninput = (e) => {
+        claheClipLimit = parseFloat(e.target.value);
+        if (claheClipLimitValue) claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
+        updateClaheResetBtn();
+        draw();
+    };
+    claheClipLimitSlider.onchange = () => saveGlobalSettings('claheClipLimit', claheClipLimit);
+}
+
+// CLAHE toggle button
+if (claheToggleBtn) {
+    claheToggleBtn.onclick = () => {
+        claheEnabled = !claheEnabled;
+        updateClaheToggleUI();
+        updateClaheResetBtn();
+        draw();
+        saveGlobalSettings('claheEnabled', claheEnabled);
+    };
+}
+
+// CLAHE reset button — clears enabled state and restores default clip limit.
+if (claheResetBtn) {
+    claheResetBtn.onclick = () => {
+        claheEnabled = false;
+        claheClipLimit = 2.0;
+        if (claheClipLimitSlider) claheClipLimitSlider.value = claheClipLimit;
+        if (claheClipLimitValue) claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
+        updateClaheToggleUI();
+        updateClaheResetBtn();
+        draw();
+        saveGlobalSettings('claheEnabled', claheEnabled);
+        saveGlobalSettings('claheClipLimit', claheClipLimit);
+    };
+}
+
+// CLAHE lock button
+if (claheLockBtn) {
+    claheLockBtn.onclick = () => {
+        claheLocked = !claheLocked;
+        updateClaheLockUI();
+        saveGlobalSettings('claheLocked', claheLocked);
+    };
 }
 
 if (brightnessResetBtn) {
@@ -5039,11 +5384,25 @@ if (contrastLockBtn) {
     });
 }
 
+// Initialize channel and CLAHE lock buttons
+const channelLockBtn = document.getElementById('channelLockBtn');
+
+if (channelLockBtn) {
+    channelLockBtn.addEventListener('click', () => {
+        channelLocked = !channelLocked;
+        updateChannelLockUI();
+        saveGlobalSettings('channelLocked', channelLocked);
+    });
+}
+
 // Initialize image adjust UI
 updateBrightnessLockUI();
 updateContrastLockUI();
+updateChannelLockUI();
+updateClaheLockUI();
 updateBrightnessResetBtn();
 updateContrastResetBtn();
+updateClaheResetBtn();
 applyImageAdjust();
 
 // Initialize reset button visibility
