@@ -682,6 +682,10 @@ export class LabelMePanel {
         const samHelpersPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'samPromptHelpers.js');
         const samHelpersUri = webview.asWebviewUri(samHelpersPath);
 
+        // Merge-shape helpers (pure functions, must load before main.js)
+        const mergeHelpersPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'mergeShapesHelpers.js');
+        const mergeHelpersUri = webview.asWebviewUri(mergeHelpersPath);
+
         // Read CSS file content and inline it to prevent race condition on Windows
         // where JS executes before CSS finishes loading via external <link>, causing
         // layout chaos (zero container dimensions, unstyled dropdowns visible, etc.)
@@ -760,6 +764,7 @@ export class LabelMePanel {
                                 <div id="shapeContextMenu" class="shape-context-menu" style="display: none;">
                                     <div class="context-menu-item" id="contextMenuEdit">Edit</div>
                                     <div class="context-menu-item" id="contextMenuRename">Rename</div>
+                                    <div class="context-menu-item" id="contextMenuMerge" style="display: none;">Merge</div>
                                     <div class="context-menu-item" id="contextMenuToggleVisible">Hide</div>
                                     <div class="context-menu-item context-menu-danger" id="contextMenuDelete">Delete</div>
                                 </div>
@@ -1049,6 +1054,7 @@ export class LabelMePanel {
                 </script>
                 <script src="${polyClipUri}"></script>
                 <script src="${samHelpersUri}"></script>
+                <script src="${mergeHelpersUri}"></script>
                 <script src="${scriptUri}"></script>
             </body>
             </html>`;

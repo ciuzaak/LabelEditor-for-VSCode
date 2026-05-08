@@ -224,6 +224,7 @@ let activeVertexIndex = -1;          // Vertex being dragged
 const shapeContextMenu = document.getElementById('shapeContextMenu');
 const contextMenuEdit = document.getElementById('contextMenuEdit');
 const contextMenuRename = document.getElementById('contextMenuRename');
+const contextMenuMerge = document.getElementById('contextMenuMerge');
 const contextMenuToggleVisible = document.getElementById('contextMenuToggleVisible');
 const contextMenuDelete = document.getElementById('contextMenuDelete');
 
@@ -1466,13 +1467,38 @@ document.addEventListener('keydown', (e) => {
         return;
     }
 
+    // Ctrl+G: Merge selected shapes
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
+        e.preventDefault();
+        mergeSelectedShapes();
+        return;
+    }
+
+    // Ctrl+R: Rename selected shape(s)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
+        e.preventDefault();
+        if (selectedShapeIndices.size > 1) {
+            showBatchRenameModal();
+        } else if (selectedShapeIndex !== -1) {
+            showLabelModal(selectedShapeIndex);
+        }
+        return;
+    }
+
+    // Ctrl+H: Toggle visibility of selected shape(s)
+    if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) {
+        e.preventDefault();
+        toggleSelectedVisibility();
+        return;
+    }
+
     // A: Prev Image (only without Ctrl)
     if ((e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.metaKey) {
         vscode.postMessage({ command: 'prev' });
     }
 
     // D: Next Image
-    if (e.key === 'd' || e.key === 'D') {
+    if ((e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey) {
         vscode.postMessage({ command: 'next' });
     }
 
@@ -1549,32 +1575,32 @@ document.addEventListener('keydown', (e) => {
     }
 
     // V: View Mode
-    if (e.key === 'v' || e.key === 'V') {
+    if ((e.key === 'v' || e.key === 'V') && !e.ctrlKey && !e.metaKey) {
         setMode('view');
     }
 
     // O: Point Mode
-    if (e.key === 'o' || e.key === 'O') {
+    if ((e.key === 'o' || e.key === 'O') && !e.ctrlKey && !e.metaKey) {
         setMode('point');
     }
 
     // L: Line Mode
-    if (e.key === 'l' || e.key === 'L') {
+    if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey) {
         setMode('line');
     }
 
     // P: Polygon Mode
-    if (e.key === 'p' || e.key === 'P') {
+    if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey) {
         setMode('polygon');
     }
 
     // R: Rectangle Mode
-    if (e.key === 'r' || e.key === 'R') {
+    if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey) {
         setMode('rectangle');
     }
 
     // I: SAM AI Mode
-    if (e.key === 'i' || e.key === 'I') {
+    if ((e.key === 'i' || e.key === 'I') && !e.ctrlKey && !e.metaKey) {
         setMode('sam');
     }
 });
@@ -2324,6 +2350,17 @@ function showShapeContextMenu(clientX, clientY, shapeIndex) {
     if (contextMenuRename) {
         contextMenuRename.textContent = multi ? `Rename (${selectedShapeIndices.size})` : 'Rename';
     }
+    if (contextMenuMerge) {
+        const eligibleForMerge = selectedShapeIndices.size >= 2
+            && [...selectedShapeIndices].every(i => {
+                const t = shapes[i] && shapes[i].shape_type;
+                return t === 'polygon' || t === 'rectangle';
+            });
+        contextMenuMerge.style.display = eligibleForMerge ? '' : 'none';
+        if (eligibleForMerge) {
+            contextMenuMerge.textContent = `Merge (${selectedShapeIndices.size})`;
+        }
+    }
     if (contextMenuToggleVisible) {
         if (multi) {
             const anyVisible = [...selectedShapeIndices].some(idx => shapes[idx].visible !== false);
@@ -2377,29 +2414,221 @@ if (contextMenuRename) {
     });
 }
 
+// Toggle visibility for the current selection (used by context menu and Ctrl+H).
+function toggleSelectedVisibility() {
+    if (selectedShapeIndices.size > 1) {
+        // Deterministic: hide all if any visible, show all if all hidden
+        const anyVisible = [...selectedShapeIndices].some(idx => shapes[idx].visible !== false);
+        const newState = !anyVisible; // true = show, false = hide
+        for (const idx of selectedShapeIndices) {
+            shapes[idx].visible = newState;
+        }
+        renderShapeList();
+        renderLabelsList();
+        draw();
+    } else if (selectedShapeIndex !== -1) {
+        const shape = shapes[selectedShapeIndex];
+        shape.visible = shape.visible === undefined ? false : !shape.visible;
+        renderShapeList();
+        renderLabelsList();
+        draw();
+    }
+}
+
 // Context menu item click handler - toggle visibility
 if (contextMenuToggleVisible) {
     contextMenuToggleVisible.addEventListener('click', (e) => {
         e.stopPropagation();
         hideShapeContextMenu();
-        if (selectedShapeIndices.size > 1) {
-            // Deterministic: hide all if any visible, show all if all hidden
-            const anyVisible = [...selectedShapeIndices].some(idx => shapes[idx].visible !== false);
-            const newState = !anyVisible; // true = show, false = hide
-            for (const idx of selectedShapeIndices) {
-                shapes[idx].visible = newState;
-            }
-            renderShapeList();
-            renderLabelsList();
-            draw();
-        } else if (selectedShapeIndex !== -1) {
-            const shape = shapes[selectedShapeIndex];
-            shape.visible = shape.visible === undefined ? false : !shape.visible;
-            renderShapeList();
-            renderLabelsList();
-            draw();
-        }
+        toggleSelectedVisibility();
     });
+}
+
+// Context menu item click handler - merge
+if (contextMenuMerge) {
+    contextMenuMerge.addEventListener('click', (e) => {
+        e.stopPropagation();
+        hideShapeContextMenu();
+        mergeSelectedShapes();
+    });
+}
+
+// --- Merge selected shapes ---
+let isMergePending = false;
+let pendingMergeGroups = null;   // Array<Array<index>>, ascending min-index per group
+let pendingMergeOutputs = null;  // Array<{ allRect: bool, points: ... }>
+let pendingMergeLabels = null;   // Array<string|null>; null = use modal input
+
+function setMergeStatus(text, color) {
+    if (!statusSpan) return;
+    statusSpan.textContent = text;
+    statusSpan.style.color = color || '';
+}
+
+function mergeSelectedShapes() {
+    if (selectedShapeIndices.size < 2) return;
+    const indices = [...selectedShapeIndices];
+    const allEligible = indices.every(i => {
+        const t = shapes[i] && shapes[i].shape_type;
+        return t === 'polygon' || t === 'rectangle';
+    });
+    if (!allEligible) {
+        setMergeStatus('Merge supports polygon/rectangle only', 'orange');
+        return;
+    }
+    const pc = window.polygonClipping || (typeof polygonClipping !== 'undefined' ? polygonClipping : null);
+    if (!pc) {
+        setMergeStatus('Polygon clipping unavailable', 'red');
+        return;
+    }
+    const helpers = window.mergeShapesHelpers || (typeof mergeShapesHelpers !== 'undefined' ? mergeShapesHelpers : null);
+    // The helpers module exports onto Node `module.exports`, but in the webview
+    // each function is hoisted onto the global scope by the <script> tag.
+    const fn = {
+        shapeToOuterRing: (typeof shapeToOuterRing !== 'undefined') ? shapeToOuterRing : (helpers && helpers.shapeToOuterRing),
+        buildOverlapGroups: (typeof buildOverlapGroups !== 'undefined') ? buildOverlapGroups : (helpers && helpers.buildOverlapGroups),
+        computeAABBPoints: (typeof computeAABBPoints !== 'undefined') ? computeAABBPoints : (helpers && helpers.computeAABBPoints),
+        unionOuterRing: (typeof unionOuterRing !== 'undefined') ? unionOuterRing : (helpers && helpers.unionOuterRing),
+        resolveGroupLabel: (typeof resolveGroupLabel !== 'undefined') ? resolveGroupLabel : (helpers && helpers.resolveGroupLabel),
+        buildMergedShape: (typeof buildMergedShape !== 'undefined') ? buildMergedShape : (helpers && helpers.buildMergedShape)
+    };
+    if (!fn.buildOverlapGroups) {
+        setMergeStatus('Merge helpers missing', 'red');
+        return;
+    }
+
+    const groups = fn.buildOverlapGroups(pc, shapes, indices);
+    if (groups.length === 0) {
+        setMergeStatus('No overlapping shapes to merge', 'orange');
+        return;
+    }
+
+    // Pre-compute geometry for each group.
+    const valid = [];
+    for (const group of groups) {
+        const allRect = group.every(i => shapes[i].shape_type === 'rectangle');
+        const rings = group.map(i => fn.shapeToOuterRing(shapes[i]));
+        let out;
+        if (allRect) {
+            const aabb = fn.computeAABBPoints(rings);
+            if (!aabb) continue;
+            out = { allRect: true, points: aabb };
+        } else {
+            const outer = fn.unionOuterRing(pc, rings);
+            if (!outer || outer.length < 3) continue;
+            out = { allRect: false, points: outer };
+        }
+        valid.push({ group, out });
+    }
+    if (valid.length === 0) {
+        setMergeStatus('Merge produced no valid geometry', 'orange');
+        return;
+    }
+
+    // Resolve labels.
+    const resolved = valid.map(({ group }) => fn.resolveGroupLabel(shapes, group));
+    const anyPrompt = resolved.some(r => r.needsPrompt);
+
+    if (!anyPrompt) {
+        finalizeMerge(valid, resolved.map(r => r.label), fn);
+        return;
+    }
+
+    // Open modal in merge-pending mode; mode label is the first prompted group's mode label.
+    pendingMergeGroups = valid.map(v => v.group);
+    pendingMergeOutputs = valid.map(v => v.out);
+    pendingMergeLabels = resolved.map(r => r.needsPrompt ? null : r.label);
+    isMergePending = true;
+    const seedLabel = resolved.find(r => r.needsPrompt).modeLabel || '';
+    showLabelModalForMerge(seedLabel);
+}
+
+function showLabelModalForMerge(seedLabel) {
+    editingShapeIndex = -1;
+    isBatchRenaming = false;
+    labelModal.style.display = 'flex';
+    labelInput.value = seedLabel;
+    descriptionInput.value = '';
+    labelInput.focus();
+    labelInput.select();
+    renderRecentLabels();
+}
+
+function finalizeMerge(valid, perGroupLabel, fnRefs) {
+    pushHistory();
+    const removeIdx = new Set();
+    for (const v of valid) for (const i of v.group) removeIdx.add(i);
+
+    // Build merged shapes; key on the smallest original index for stable ordering.
+    const inserts = new Map();
+    const insertedShapes = new Set();
+    valid.forEach((v, i) => {
+        const merged = fnRefs.buildMergedShape(
+            shapes,
+            v.group,
+            perGroupLabel[i],
+            { allRectangles: v.out.allRect, points: v.out.points }
+        );
+        inserts.set(v.group[0], merged);
+        insertedShapes.add(merged);
+    });
+
+    const newShapes = [];
+    for (let i = 0; i < shapes.length; i++) {
+        if (inserts.has(i)) newShapes.push(inserts.get(i));
+        else if (!removeIdx.has(i)) newShapes.push(shapes[i]);
+    }
+    shapes.length = 0;
+    for (const s of newShapes) shapes.push(s);
+
+    // Update selection to point at merged shapes only.
+    selectedShapeIndices.clear();
+    for (let i = 0; i < shapes.length; i++) {
+        if (insertedShapes.has(shapes[i])) selectedShapeIndices.add(i);
+    }
+    selectedShapeIndex = selectedShapeIndices.size > 0
+        ? [...selectedShapeIndices][selectedShapeIndices.size - 1]
+        : -1;
+
+    markDirty();
+    saveHistory();
+    renderShapeList();
+    renderLabelsList();
+    draw();
+    setMergeStatus(`Merged into ${valid.length} instance${valid.length > 1 ? 's' : ''}`, 'limegreen');
+}
+
+function clearMergePendingState() {
+    isMergePending = false;
+    pendingMergeGroups = null;
+    pendingMergeOutputs = null;
+    pendingMergeLabels = null;
+}
+
+function commitMergePendingFromModal() {
+    if (!isMergePending) return false;
+    const chosen = labelInput.value.trim();
+    if (!chosen) return false; // keep modal open; user must pick something
+    const labels = pendingMergeLabels.map(l => l === null ? chosen : l);
+    const valid = pendingMergeGroups.map((group, i) => ({
+        group,
+        out: pendingMergeOutputs[i]
+    }));
+    const fnRefs = {
+        buildMergedShape: (typeof buildMergedShape !== 'undefined')
+            ? buildMergedShape
+            : (window.mergeShapesHelpers && window.mergeShapesHelpers.buildMergedShape)
+    };
+    hideLabelModal();
+    clearMergePendingState();
+    finalizeMerge(valid, labels, fnRefs);
+    // Persist the chosen label as MRU (mirrors confirmLabel behavior).
+    const existingIdx = recentLabels.indexOf(chosen);
+    if (existingIdx !== -1) recentLabels.splice(existingIdx, 1);
+    recentLabels.unshift(chosen);
+    if (recentLabels.length > 10) recentLabels.pop();
+    saveGlobalSettings('recentLabels', recentLabels);
+    return true;
 }
 
 // Context menu item click handler - delete
@@ -3472,6 +3701,13 @@ function renderRecentLabels() {
 }
 
 function confirmLabel() {
+    // Merge-pending mode: commit the merge using the chosen label.
+    if (isMergePending) {
+        if (commitMergePendingFromModal()) return;
+        // commit returned false (empty label); fall through so user can re-enter.
+        return;
+    }
+
     const label = labelInput.value.trim();
     if (!label) return;
 
@@ -3610,6 +3846,13 @@ modalOkBtn.onclick = confirmLabel;
 // 取消标签输入的通用处理函数
 function cancelLabelInput() {
     hideLabelModal();
+
+    // If a merge was waiting on a label, abort it without mutating shapes.
+    if (isMergePending) {
+        clearMergePendingState();
+        draw();
+        return;
+    }
 
     // If batch renaming, just cancel
     if (isBatchRenaming) {
