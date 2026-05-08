@@ -6113,6 +6113,7 @@ function samEnsureEncoded() {
 function samUndoLastPrompt() {
     if (samPrompts.length > 0) {
         samPrompts.pop();
+        samPrompts = cleanupOrphanNegatives(samPrompts);
         if (samPrompts.length === 0) {
             samDecodeVersion++;  // Invalidate any in-flight decode
             samMaskContour = null;
