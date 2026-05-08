@@ -1062,6 +1062,10 @@ window.addEventListener('message', event => {
 
 // Handle incremental image update (without full HTML reload)
 function handleImageUpdate(message) {
+    // Force-invalidate the processed-image cache: a same-URL image may carry different
+    // bytes after an external edit, so we cannot rely on the URL alone for invalidation.
+    processedKey = '';
+
     // Exit shape edit mode if currently editing (without saving changes to the old image)
     if (isEditingShape) {
         exitShapeEditMode(false);
@@ -5027,12 +5031,17 @@ function claheOnPlane(plane, width, height, clipLimit) {
                 }
             }
 
+            // Clip in floating point. Storing back into the integer hist would truncate
+            // sub-1.0 thresholds and re-introduce the floor-to-zero collapse on small tiles.
+            const clippedHist = new Float64Array(256);
             const clipThreshold = clipLimit * tilePixels / 256;
             let excess = 0;
             for (let i = 0; i < 256; i++) {
                 if (hist[i] > clipThreshold) {
                     excess += hist[i] - clipThreshold;
-                    hist[i] = clipThreshold;
+                    clippedHist[i] = clipThreshold;
+                } else {
+                    clippedHist[i] = hist[i];
                 }
             }
             const redistribution = excess / 256;
@@ -5041,7 +5050,7 @@ function claheOnPlane(plane, width, height, clipLimit) {
             let acc = 0;
             const scale = 255 / tilePixels;
             for (let i = 0; i < 256; i++) {
-                acc += hist[i] + redistribution;
+                acc += clippedHist[i] + redistribution;
                 let v = Math.round(acc * scale);
                 if (v > 255) v = 255;
                 cdf[i] = v;
