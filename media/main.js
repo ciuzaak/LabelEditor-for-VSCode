@@ -2466,95 +2466,81 @@ function setMergeStatus(text, color) {
 }
 
 function mergeSelectedShapes() {
-    try {
-        console.log('[merge] entry; selection size=', selectedShapeIndices.size);
-        setMergeStatus(`Merge: entry (sel=${selectedShapeIndices.size})`, 'cyan');
-        if (selectedShapeIndices.size < 2) {
-            setMergeStatus(`Merge: need >=2 selected (got ${selectedShapeIndices.size})`, 'orange');
-            return;
-        }
-        const indices = [...selectedShapeIndices];
-        console.log('[merge] indices=', indices, 'shape_types=', indices.map(i => shapes[i] && shapes[i].shape_type));
-        const allEligible = indices.every(i => {
-            const t = shapes[i] && shapes[i].shape_type;
-            return t === 'polygon' || t === 'rectangle';
-        });
-        if (!allEligible) {
-            setMergeStatus('Merge supports polygon/rectangle only', 'orange');
-            return;
-        }
-        const pc = window.polygonClipping || (typeof polygonClipping !== 'undefined' ? polygonClipping : null);
-        console.log('[merge] pc=', pc && typeof pc.intersection);
-        if (!pc) {
-            setMergeStatus('Polygon clipping unavailable', 'red');
-            return;
-        }
-        const helpers = window.mergeShapesHelpers || (typeof mergeShapesHelpers !== 'undefined' ? mergeShapesHelpers : null);
-        const fn = {
-            shapeToOuterRing: (typeof shapeToOuterRing !== 'undefined') ? shapeToOuterRing : (helpers && helpers.shapeToOuterRing),
-            buildOverlapGroups: (typeof buildOverlapGroups !== 'undefined') ? buildOverlapGroups : (helpers && helpers.buildOverlapGroups),
-            computeAABBPoints: (typeof computeAABBPoints !== 'undefined') ? computeAABBPoints : (helpers && helpers.computeAABBPoints),
-            unionOuterRing: (typeof unionOuterRing !== 'undefined') ? unionOuterRing : (helpers && helpers.unionOuterRing),
-            resolveGroupLabel: (typeof resolveGroupLabel !== 'undefined') ? resolveGroupLabel : (helpers && helpers.resolveGroupLabel),
-            buildMergedShape: (typeof buildMergedShape !== 'undefined') ? buildMergedShape : (helpers && helpers.buildMergedShape)
-        };
-        console.log('[merge] fn lookup=', Object.fromEntries(Object.entries(fn).map(([k, v]) => [k, typeof v])));
-        if (!fn.buildOverlapGroups) {
-            setMergeStatus('Merge helpers missing', 'red');
-            return;
-        }
-
-        const groups = fn.buildOverlapGroups(pc, shapes, indices);
-        console.log('[merge] groups=', groups);
-        if (groups.length === 0) {
-            setMergeStatus('No overlapping shapes to merge', 'orange');
-            return;
-        }
-
-        // Pre-compute geometry for each group.
-        const valid = [];
-        for (const group of groups) {
-            const allRect = group.every(i => shapes[i].shape_type === 'rectangle');
-            const rings = group.map(i => fn.shapeToOuterRing(shapes[i]));
-            let out;
-            if (allRect) {
-                const aabb = fn.computeAABBPoints(rings);
-                if (!aabb) continue;
-                out = { allRect: true, points: aabb };
-            } else {
-                const outer = fn.unionOuterRing(pc, rings);
-                if (!outer || outer.length < 3) continue;
-                out = { allRect: false, points: outer };
-            }
-            valid.push({ group, out });
-        }
-        console.log('[merge] valid=', valid.length);
-        if (valid.length === 0) {
-            setMergeStatus('Merge produced no valid geometry', 'orange');
-            return;
-        }
-
-        // Resolve labels.
-        const resolved = valid.map(({ group }) => fn.resolveGroupLabel(shapes, group));
-        const anyPrompt = resolved.some(r => r.needsPrompt);
-        console.log('[merge] resolved labels=', resolved, 'anyPrompt=', anyPrompt);
-
-        if (!anyPrompt) {
-            finalizeMerge(valid, resolved.map(r => r.label), fn);
-            return;
-        }
-
-        // Open modal in merge-pending mode; mode label is the first prompted group's mode label.
-        pendingMergeGroups = valid.map(v => v.group);
-        pendingMergeOutputs = valid.map(v => v.out);
-        pendingMergeLabels = resolved.map(r => r.needsPrompt ? null : r.label);
-        isMergePending = true;
-        const seedLabel = resolved.find(r => r.needsPrompt).modeLabel || '';
-        showLabelModalForMerge(seedLabel);
-    } catch (err) {
-        console.error('[merge] uncaught', err);
-        setMergeStatus('Merge crashed: ' + (err && err.message), 'red');
+    if (selectedShapeIndices.size < 2) return;
+    const indices = [...selectedShapeIndices];
+    const allEligible = indices.every(i => {
+        const t = shapes[i] && shapes[i].shape_type;
+        return t === 'polygon' || t === 'rectangle';
+    });
+    if (!allEligible) {
+        setMergeStatus('Merge supports polygon/rectangle only', 'orange');
+        return;
     }
+    const pc = window.polygonClipping || (typeof polygonClipping !== 'undefined' ? polygonClipping : null);
+    if (!pc) {
+        setMergeStatus('Polygon clipping unavailable', 'red');
+        return;
+    }
+    const helpers = window.mergeShapesHelpers || (typeof mergeShapesHelpers !== 'undefined' ? mergeShapesHelpers : null);
+    // The helpers module exports onto Node `module.exports`, but in the webview
+    // each function is hoisted onto the global scope by the <script> tag.
+    const fn = {
+        shapeToOuterRing: (typeof shapeToOuterRing !== 'undefined') ? shapeToOuterRing : (helpers && helpers.shapeToOuterRing),
+        buildOverlapGroups: (typeof buildOverlapGroups !== 'undefined') ? buildOverlapGroups : (helpers && helpers.buildOverlapGroups),
+        computeAABBPoints: (typeof computeAABBPoints !== 'undefined') ? computeAABBPoints : (helpers && helpers.computeAABBPoints),
+        unionOuterRing: (typeof unionOuterRing !== 'undefined') ? unionOuterRing : (helpers && helpers.unionOuterRing),
+        resolveGroupLabel: (typeof resolveGroupLabel !== 'undefined') ? resolveGroupLabel : (helpers && helpers.resolveGroupLabel),
+        buildMergedShape: (typeof buildMergedShape !== 'undefined') ? buildMergedShape : (helpers && helpers.buildMergedShape)
+    };
+    if (!fn.buildOverlapGroups) {
+        setMergeStatus('Merge helpers missing', 'red');
+        return;
+    }
+
+    const groups = fn.buildOverlapGroups(pc, shapes, indices);
+    if (groups.length === 0) {
+        setMergeStatus('No overlapping shapes to merge', 'orange');
+        return;
+    }
+
+    // Pre-compute geometry for each group.
+    const valid = [];
+    for (const group of groups) {
+        const allRect = group.every(i => shapes[i].shape_type === 'rectangle');
+        const rings = group.map(i => fn.shapeToOuterRing(shapes[i]));
+        let out;
+        if (allRect) {
+            const aabb = fn.computeAABBPoints(rings);
+            if (!aabb) continue;
+            out = { allRect: true, points: aabb };
+        } else {
+            const outer = fn.unionOuterRing(pc, rings);
+            if (!outer || outer.length < 3) continue;
+            out = { allRect: false, points: outer };
+        }
+        valid.push({ group, out });
+    }
+    if (valid.length === 0) {
+        setMergeStatus('Merge produced no valid geometry', 'orange');
+        return;
+    }
+
+    // Resolve labels.
+    const resolved = valid.map(({ group }) => fn.resolveGroupLabel(shapes, group));
+    const anyPrompt = resolved.some(r => r.needsPrompt);
+
+    if (!anyPrompt) {
+        finalizeMerge(valid, resolved.map(r => r.label), fn);
+        return;
+    }
+
+    // Open modal in merge-pending mode; mode label is the first prompted group's mode label.
+    pendingMergeGroups = valid.map(v => v.group);
+    pendingMergeOutputs = valid.map(v => v.out);
+    pendingMergeLabels = resolved.map(r => r.needsPrompt ? null : r.label);
+    isMergePending = true;
+    const seedLabel = resolved.find(r => r.needsPrompt).modeLabel || '';
+    showLabelModalForMerge(seedLabel);
 }
 
 function showLabelModalForMerge(seedLabel) {
@@ -2569,7 +2555,6 @@ function showLabelModalForMerge(seedLabel) {
 }
 
 function finalizeMerge(valid, perGroupLabel, fnRefs) {
-    pushHistory();
     const removeIdx = new Set();
     for (const v of valid) for (const i of v.group) removeIdx.add(i);
 
