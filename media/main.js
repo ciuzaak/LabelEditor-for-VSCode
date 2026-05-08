@@ -363,19 +363,13 @@ if (contrastSlider && contrastValue) {
     contrastValue.textContent = contrast;
 }
 
-// Initialize channel buttons
-const channelRgbBtn = document.getElementById('channelRgbBtn');
-const channelRBtn = document.getElementById('channelRBtn');
-const channelGBtn = document.getElementById('channelGBtn');
-const channelBBtn = document.getElementById('channelBBtn');
+// Initialize channel radios
+const channelRadios = document.querySelectorAll('input[name="imageChannel"]');
 
-function updateChannelButtons() {
-    if (channelRgbBtn) channelRgbBtn.classList.toggle('active', selectedChannel === 'rgb');
-    if (channelRBtn) channelRBtn.classList.toggle('active', selectedChannel === 'r');
-    if (channelGBtn) channelGBtn.classList.toggle('active', selectedChannel === 'g');
-    if (channelBBtn) channelBBtn.classList.toggle('active', selectedChannel === 'b');
+function updateChannelRadios() {
+    channelRadios.forEach(r => { r.checked = r.value === selectedChannel; });
 }
-updateChannelButtons();
+updateChannelRadios();
 
 // Initialize CLAHE controls
 const claheClipLimitSlider = document.getElementById('claheClipLimitSlider');
@@ -1105,7 +1099,7 @@ function handleImageUpdate(message) {
     }
     if (!channelLocked) {
         selectedChannel = 'rgb';
-        updateChannelButtons();
+        updateChannelRadios();
         saveGlobalSettings('selectedChannel', selectedChannel);
     }
     if (!claheLocked) {
@@ -5172,42 +5166,16 @@ if (contrastSlider) {
     contrastSlider.onchange = () => saveGlobalSettings('contrast', contrast);
 }
 
-// Channel button event handlers
-if (channelRgbBtn) {
-    channelRgbBtn.onclick = () => {
-        selectedChannel = 'rgb';
-        updateChannelButtons();
-        draw();
-        saveGlobalSettings('selectedChannel', selectedChannel);
-    };
-}
-
-if (channelRBtn) {
-    channelRBtn.onclick = () => {
-        selectedChannel = 'r';
-        updateChannelButtons();
-        draw();
-        saveGlobalSettings('selectedChannel', selectedChannel);
-    };
-}
-
-if (channelGBtn) {
-    channelGBtn.onclick = () => {
-        selectedChannel = 'g';
-        updateChannelButtons();
-        draw();
-        saveGlobalSettings('selectedChannel', selectedChannel);
-    };
-}
-
-if (channelBBtn) {
-    channelBBtn.onclick = () => {
-        selectedChannel = 'b';
-        updateChannelButtons();
-        draw();
-        saveGlobalSettings('selectedChannel', selectedChannel);
-    };
-}
+// Channel radio event handler
+channelRadios.forEach(r => {
+    r.addEventListener('change', () => {
+        if (r.checked) {
+            selectedChannel = r.value;
+            draw();
+            saveGlobalSettings('selectedChannel', selectedChannel);
+        }
+    });
+});
 
 // CLAHE clip limit slider
 if (claheClipLimitSlider) {

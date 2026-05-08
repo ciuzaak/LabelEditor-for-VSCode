@@ -809,10 +809,13 @@ export class LabelMePanel {
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Channel:</label>
-                                            <button id="channelRgbBtn" class="channel-btn active" title="RGB (All Channels)">RGB</button>
-                                            <button id="channelRBtn" class="channel-btn" title="Red Channel Only">R</button>
-                                            <button id="channelGBtn" class="channel-btn" title="Green Channel Only">G</button>
-                                            <button id="channelBBtn" class="channel-btn" title="Blue Channel Only">B</button>
+                                            <button id="channelLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                        </div>
+                                        <div class="onnx-radio-group">
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="rgb" checked /> RGB</label>
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="r" /> R</label>
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="g" /> G</label>
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="b" /> B</label>
                                         </div>
                                     </div>
                                     <div class="zoom-control">
