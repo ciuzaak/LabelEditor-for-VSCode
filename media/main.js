@@ -6257,16 +6257,14 @@ canvasWrapper.addEventListener('mousedown', (e) => {
     // Skip if event was already consumed by another capture-phase handler (e.g. edit mode exit)
     if (e.defaultPrevented) return;
 
-    // Eraser is mid-draw: let the main handler continue extending the eraser
-    // shape. Once the eraser is active, subsequent clicks no longer require
-    // Shift (consistent with non-SAM modes).
-    if (eraserActive) {
-        return;
-    }
-
-    // Shift+mousedown with no positive SAM prompt: defer to the main handler,
-    // which starts the eraser. We don't stopPropagation so the main handler runs.
-    if (e.shiftKey && !samBoxSecondClick && !samHasPositivePrompt(samPrompts)) {
+    // Defer to the main handler when the eraser owns the click stream
+    // (eraser mid-draw, or shift+empty starting a new eraser).
+    if (samShouldDeferToMainHandler({
+        shiftKey: e.shiftKey,
+        eraserActive,
+        samBoxSecondClick,
+        prompts: samPrompts
+    })) {
         return;
     }
 

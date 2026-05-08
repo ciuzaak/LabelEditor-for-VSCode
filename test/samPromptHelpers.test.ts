@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 // Test runs from out-test/test/, so resolve to <repo-root>/media/samPromptHelpers.js
 const helpers = require(path.resolve(__dirname, '..', '..', 'media', 'samPromptHelpers.js'));
-const { samHasPositivePrompt, mergeBoxIntoPrompts, cleanupOrphanNegatives } = helpers;
+const { samHasPositivePrompt, mergeBoxIntoPrompts, cleanupOrphanNegatives, samShouldDeferToMainHandler } = helpers;
 
 describe('samHasPositivePrompt', () => {
     it('returns false for empty array', () => {
@@ -71,5 +71,56 @@ describe('cleanupOrphanNegatives', () => {
     });
     it('returns empty array for empty input (idempotent)', () => {
         assert.deepEqual(cleanupOrphanNegatives([]), []);
+    });
+});
+
+describe('samShouldDeferToMainHandler', () => {
+    const positivePoint = { type: 'point', data: [1, 1], label: 1 };
+    const negativePoint = { type: 'point', data: [2, 2], label: 0 };
+    const box = { type: 'rectangle', data: [0, 0, 10, 10] };
+
+    it('defers when eraser is active, regardless of shift state', () => {
+        assert.equal(samShouldDeferToMainHandler({
+            shiftKey: false, eraserActive: true, samBoxSecondClick: false, prompts: []
+        }), true);
+        assert.equal(samShouldDeferToMainHandler({
+            shiftKey: true, eraserActive: true, samBoxSecondClick: false, prompts: [positivePoint]
+        }), true);
+    });
+
+    it('defers when shift held with no positive prompt (start eraser)', () => {
+        assert.equal(samShouldDeferToMainHandler({
+            shiftKey: true, eraserActive: false, samBoxSecondClick: false, prompts: []
+        }), true);
+        assert.equal(samShouldDeferToMainHandler({
+            shiftKey: true, eraserActive: false, samBoxSecondClick: false, prompts: [negativePoint]
+        }), true);
+    });
+
+    it('does not defer when shift held with a positive prompt (negative-point routing)', () => {
+        assert.equal(samShouldDeferToMainHandler({
+            shiftKey: true, eraserActive: false, samBoxSecondClick: false, prompts: [positivePoint]
+        }), false);
+        assert.equal(samShouldDeferToMainHandler({
+            shiftKey: true, eraserActive: false, samBoxSecondClick: false, prompts: [box]
+        }), false);
+    });
+
+    it('does not defer during box second-click finalization, even with shift', () => {
+        assert.equal(samShouldDeferToMainHandler({
+            shiftKey: true, eraserActive: false, samBoxSecondClick: true, prompts: []
+        }), false);
+        assert.equal(samShouldDeferToMainHandler({
+            shiftKey: true, eraserActive: false, samBoxSecondClick: true, prompts: [positivePoint]
+        }), false);
+    });
+
+    it('does not defer for plain SAM clicks (no shift, no eraser)', () => {
+        assert.equal(samShouldDeferToMainHandler({
+            shiftKey: false, eraserActive: false, samBoxSecondClick: false, prompts: []
+        }), false);
+        assert.equal(samShouldDeferToMainHandler({
+            shiftKey: false, eraserActive: false, samBoxSecondClick: false, prompts: [positivePoint]
+        }), false);
     });
 });
