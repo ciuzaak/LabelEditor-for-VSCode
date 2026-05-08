@@ -29,12 +29,14 @@ Non-goals: changing label/visibility semantics; affecting `point`/`linestrip` sh
 - Components of size 1 (isolated, non-overlapping selections) are left untouched. This applies even when several disjoint groups exist in one selection (e.g. `{A,B}` + `{C,D}` produces two merged outputs).
 
 ### Output shape per group
-Decided by inspecting the `shape_type` of the group's members:
+Decided by the **whole selection's** composition (not the individual group):
 
-| Group composition | Output `shape_type` | Geometry |
+| Selection composition | Output `shape_type` for every group | Geometry |
 |---|---|---|
-| All members are `rectangle` | `rectangle` | AABB of every member's corners — `[[minX, minY], [maxX, maxY]]` |
-| Mixed `rectangle` + `polygon`, or all `polygon` | `polygon` | `polygonClipping.union(rings...)` → take the **largest-area outer ring**, drop holes (inner rings) |
+| Every selected shape is `rectangle` | `rectangle` | AABB of every group member's corners — `[[minX, minY], [maxX, maxY]]` |
+| Selection contains at least one `polygon` | `polygon` | `polygonClipping.union(rings...)` → take the **largest-area outer ring**, drop holes (inner rings) |
+
+This means a selection like `{poly_A, rect_B, rect_C}` where only `B` and `C` overlap still emits a polygon (rectangles are treated as polygons), because the selection itself is mixed.
 
 Rationale for "largest outer ring": because all members of a group are pairwise-connected through transitive overlaps, the union should yield a single outer polygon. If polygon-clipping happens to return a `MultiPolygon` with multiple disjoint pieces (e.g., due to numerical edge cases), we pick the largest by signed-area magnitude.
 

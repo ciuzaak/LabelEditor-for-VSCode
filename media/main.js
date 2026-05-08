@@ -2503,10 +2503,15 @@ function mergeSelectedShapes() {
         return;
     }
 
+    // Output type is decided by the selection as a whole, not per group:
+    // a mixed selection treats every rectangle as a polygon, so all merged
+    // outputs become polygons.
+    const selectionAllRect = indices.every(i => shapes[i].shape_type === 'rectangle');
+
     // Pre-compute geometry for each group.
     const valid = [];
     for (const group of groups) {
-        const allRect = group.every(i => shapes[i].shape_type === 'rectangle');
+        const allRect = selectionAllRect;
         const rings = group.map(i => fn.shapeToOuterRing(shapes[i]));
         let out;
         if (allRect) {
