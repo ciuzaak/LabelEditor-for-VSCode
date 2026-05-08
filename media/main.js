@@ -6200,7 +6200,7 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         const x2 = Math.max(csx, cx);
         const y2 = Math.max(csy, cy);
 
-        samPrompts = [{ type: 'rectangle', data: [x1, y1, x2, y2] }];
+        samPrompts = mergeBoxIntoPrompts(samPrompts, { type: 'rectangle', data: [x1, y1, x2, y2] });
         samBoxSecondClick = false;
         samDragStart = null;
         samDragCurrent = null;
