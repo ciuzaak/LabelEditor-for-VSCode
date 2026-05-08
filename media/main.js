@@ -3557,6 +3557,7 @@ function cancelLabelInput() {
         }
         currentPoints = [];
         draw();
+        updateShiftFeedback();
         return;
     }
 
@@ -6473,6 +6474,7 @@ window._samOnImageUpdate = function () {
         samCachedCrop = null;
         // Clear samCurrentImagePath so lazy encode triggers on next interaction
         samCurrentImagePath = null;
+        updateShiftFeedback();
     }
 };
 // Patch handleImageUpdate
