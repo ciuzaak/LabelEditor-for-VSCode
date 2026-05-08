@@ -6171,6 +6171,12 @@ canvasWrapper.addEventListener('mousedown', (e) => {
     // Skip if event was already consumed by another capture-phase handler (e.g. edit mode exit)
     if (e.defaultPrevented) return;
 
+    // Shift+mousedown with no positive SAM prompt: defer to the main handler,
+    // which starts the eraser. We don't stopPropagation so the main handler runs.
+    if (e.shiftKey && !samBoxSecondClick && !samHasPositivePrompt(samPrompts)) {
+        return;
+    }
+
     // If click is on the context menu itself, let it handle the click
     if (shapeContextMenu && shapeContextMenu.contains(e.target)) {
         return;
