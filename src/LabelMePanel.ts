@@ -780,7 +780,6 @@ export class LabelMePanel {
                                     <button id="saveBtn" class="sidebar-icon-btn" title="Save (Ctrl+S)" disabled>💾</button>
                                 </div>
                                 <div id="settingsMenuDropdown" class="sidebar-dropdown" style="display: none;">
-                                    <div class="settings-group-header">Theme</div>
                                     <div class="theme-control">
                                         <label>Theme</label>
                                         <div class="theme-toggle-group">
@@ -789,7 +788,6 @@ export class LabelMePanel {
                                             <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code">🔄</button>
                                         </div>
                                     </div>
-                                    <div class="settings-group-header">View</div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen">&#8634;</span></label>

@@ -839,8 +839,8 @@ canvas {
     padding: 4px 8px;
     font-size: 14px;
     margin: 0;
-    width: 33.33%;
-    flex: 0 0 33.33%;
+    width: 16.67%;
+    flex: 0 0 16.67%;
     box-sizing: border-box;
     background-color: var(--color-bg-tertiary);
     border: 1px solid var(--color-border-input);
@@ -866,6 +866,7 @@ canvas {
 .channel-btn {
     padding: 4px 8px;
     margin: 0 2px;
+    min-width: 40px;
     border: 1px solid var(--color-border-input);
     background: var(--color-bg-tertiary);
     color: var(--color-text-primary);
@@ -1418,6 +1419,3 @@ canvas {
     border-bottom: 1px solid var(--color-border);
 }
 
-.settings-group-header:first-child {
-    margin-top: 0;
-}
