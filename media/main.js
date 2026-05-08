@@ -114,6 +114,17 @@ let samEncodeMode = 'full';       // 'full' | 'local' — encode entire image or
 let samCachedCrop = null;         // { x, y, w, h } — crop region of the currently cached encoding (null = full image)
 let samIsFreshSequence = true;    // True if we are starting a new prompt sequence and can adopt a new crop
 
+// --- Shift feedback state ---
+let shiftPressed = false;
+let prevStatusText = null;       // Status before Shift took over
+let prevStatusColor = null;
+let lastFeedbackText = null;     // What we last wrote, for safe restore
+const ERASER_CURSOR_DATA_URI = 'url("data:image/svg+xml;utf8,' + encodeURIComponent(
+    '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'>' +
+    '<path d=\'M3 17l6-6 5 5 7-7v3l-7 7-5-5-6 6z\' fill=\'%23ff6b35\' stroke=\'white\' stroke-width=\'1.5\'/>' +
+    '</svg>'
+) + '") 3 17, crosshair';
+
 // --- Eraser State ---
 let eraserActive = false;          // Whether currently in eraser drawing mode
 let eraserPoints = [];             // Points of the eraser shape being drawn
@@ -1253,6 +1264,35 @@ function updateImageBrowserHighlight(newRelativePath) {
 
 
 // --- Shortcuts ---
+
+// Track Shift press for eraser/negative-point feedback (cursor + status bar).
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Shift' && !shiftPressed) {
+        if (labelModal.style.display === 'flex') return;
+        if (samConfigModal && samConfigModal.style.display === 'flex') return;
+        if (colorPickerModal && colorPickerModal.style.display === 'flex') return;
+        if (onnxInferModal && onnxInferModal.style.display === 'flex') return;
+        const focusedTag = document.activeElement?.tagName;
+        if (focusedTag === 'INPUT' || focusedTag === 'TEXTAREA' || focusedTag === 'SELECT') return;
+        if (eraserActive) return;
+        shiftPressed = true;
+        updateShiftFeedback();
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'Shift') {
+        shiftPressed = false;
+        updateShiftFeedback();
+    }
+});
+
+window.addEventListener('blur', () => {
+    if (shiftPressed) {
+        shiftPressed = false;
+        updateShiftFeedback();
+    }
+});
 
 document.addEventListener('keydown', (e) => {
     // Ignore shortcuts if any modal is open (except Enter/Esc handled in input)
@@ -6050,6 +6090,7 @@ async function samDecode() {
             statusSpan.textContent = `SAM Decoded [${modeLabel}] (${data.time_ms || 0}ms)`;
             statusSpan.style.color = 'limegreen';
             draw();
+            updateShiftFeedback();
         }
     } catch (err) {
         if (requestVersion !== samDecodeVersion) return;
@@ -6077,6 +6118,7 @@ function samClearState() {
     statusSpan.textContent = '';
     statusSpan.style.color = '';
     draw();
+    updateShiftFeedback();
 }
 
 async function samCheckAndEnterMode() {
@@ -6110,6 +6152,47 @@ function samEnsureEncoded() {
     }
 }
 
+function updateShiftFeedback() {
+    if (!shiftPressed || currentMode === 'view') {
+        // Restore prior status only if nothing else has overwritten it.
+        if (lastFeedbackText !== null && statusSpan.textContent === lastFeedbackText) {
+            statusSpan.textContent = prevStatusText ?? '';
+            statusSpan.style.color = prevStatusColor ?? '';
+        }
+        prevStatusText = null;
+        prevStatusColor = null;
+        lastFeedbackText = null;
+        // Cursor reset: clear inline style and let the existing mousemove logic re-derive
+        currentCursor = null;
+        canvasWrapper.style.cursor = '';
+        return;
+    }
+
+    // Snapshot prior state on first transition to feedback.
+    if (lastFeedbackText === null) {
+        prevStatusText = statusSpan.textContent;
+        prevStatusColor = statusSpan.style.color;
+    }
+
+    let text, color, cursor;
+    if (currentMode === 'sam' && samHasPositivePrompt(samPrompts)) {
+        text = 'SAM: Negative point';
+        color = '#ff4444';
+        cursor = 'crosshair';
+    } else {
+        // SAM-empty or any non-SAM annotation mode: eraser
+        text = currentMode === 'sam' ? 'SAM: Eraser mode' : 'Eraser mode';
+        color = '#ff8800';
+        cursor = ERASER_CURSOR_DATA_URI;
+    }
+
+    statusSpan.textContent = text;
+    statusSpan.style.color = color;
+    canvasWrapper.style.cursor = cursor;
+    currentCursor = cursor;
+    lastFeedbackText = text;
+}
+
 function samUndoLastPrompt() {
     if (samPrompts.length > 0) {
         samPrompts.pop();
@@ -6125,6 +6208,7 @@ function samUndoLastPrompt() {
             samDecode();
         }
     }
+    updateShiftFeedback();
 }
 
 let samSavedStateBeforeConfirm = null; // For restoring on modal cancel
@@ -6157,6 +6241,7 @@ function samConfirmAnnotation() {
 
     // Show label modal (same as finishPolygon)
     isDrawing = false;
+    updateShiftFeedback();
     showLabelModal();
 }
 
@@ -6218,6 +6303,7 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         samDragCurrent = null;
         samIsDragging = false;
         draw();
+        updateShiftFeedback();
         samDecode();
         e.stopPropagation();
         e.preventDefault();
@@ -6314,6 +6400,7 @@ canvasWrapper.addEventListener('mouseup', (e) => {
                 samPrompts.push({ type: 'point', data: [spx, spy], label: label });
                 samPendingClick = null;
                 draw();
+                updateShiftFeedback();
                 samDecode();
             }
             samClickTimer = null;
