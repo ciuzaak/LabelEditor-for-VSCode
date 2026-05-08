@@ -374,7 +374,8 @@ updateChannelRadios();
 // Initialize CLAHE controls
 const claheClipLimitSlider = document.getElementById('claheClipLimitSlider');
 const claheClipLimitValue = document.getElementById('claheClipLimitValue');
-const claheValue = document.getElementById('claheValue');
+const claheToggleBtn = document.getElementById('claheToggleBtn');
+const claheControls = document.getElementById('claheControls');
 const claheResetBtn = document.getElementById('claheResetBtn');
 const claheLockBtn = document.getElementById('claheLockBtn');
 
@@ -382,9 +383,17 @@ if (claheClipLimitSlider && claheClipLimitValue) {
     claheClipLimitSlider.value = claheClipLimit;
     claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
 }
-if (claheValue) {
-    claheValue.textContent = claheEnabled ? 'On' : 'Off';
+
+function updateClaheToggleUI() {
+    if (claheToggleBtn) {
+        claheToggleBtn.textContent = claheEnabled ? 'On' : 'Off';
+        claheToggleBtn.classList.toggle('active', claheEnabled);
+    }
+    if (claheControls) {
+        claheControls.style.display = claheEnabled ? '' : 'none';
+    }
 }
+updateClaheToggleUI();
 
 // 恢复设置下拉菜单的展开状态
 if (settingsMenuDropdown && vscodeState.settingsMenuExpanded) {
@@ -1107,7 +1116,7 @@ function handleImageUpdate(message) {
         claheClipLimit = 2.0;
         if (claheClipLimitSlider) claheClipLimitSlider.value = claheClipLimit;
         if (claheClipLimitValue) claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
-        if (claheValue) claheValue.textContent = 'Off';
+        updateClaheToggleUI();
         updateClaheResetBtn();
         saveGlobalSettings('claheEnabled', claheEnabled);
         saveGlobalSettings('claheClipLimit', claheClipLimit);
@@ -5177,32 +5186,36 @@ channelRadios.forEach(r => {
     });
 });
 
-// CLAHE clip limit slider
+// CLAHE clip limit slider — only adjusts the value; does not toggle enabled state.
 if (claheClipLimitSlider) {
     claheClipLimitSlider.oninput = (e) => {
         claheClipLimit = parseFloat(e.target.value);
         if (claheClipLimitValue) claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
-        if (!claheEnabled) {
-            claheEnabled = true;
-            if (claheValue) claheValue.textContent = 'On';
-        }
         updateClaheResetBtn();
         draw();
     };
-    claheClipLimitSlider.onchange = () => {
-        saveGlobalSettings('claheClipLimit', claheClipLimit);
+    claheClipLimitSlider.onchange = () => saveGlobalSettings('claheClipLimit', claheClipLimit);
+}
+
+// CLAHE toggle button
+if (claheToggleBtn) {
+    claheToggleBtn.onclick = () => {
+        claheEnabled = !claheEnabled;
+        updateClaheToggleUI();
+        updateClaheResetBtn();
+        draw();
         saveGlobalSettings('claheEnabled', claheEnabled);
     };
 }
 
-// CLAHE reset button
+// CLAHE reset button — clears enabled state and restores default clip limit.
 if (claheResetBtn) {
     claheResetBtn.onclick = () => {
         claheEnabled = false;
         claheClipLimit = 2.0;
         if (claheClipLimitSlider) claheClipLimitSlider.value = claheClipLimit;
         if (claheClipLimitValue) claheClipLimitValue.textContent = claheClipLimit.toFixed(1);
-        if (claheValue) claheValue.textContent = 'Off';
+        updateClaheToggleUI();
         updateClaheResetBtn();
         draw();
         saveGlobalSettings('claheEnabled', claheEnabled);

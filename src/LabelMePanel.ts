@@ -834,11 +834,15 @@ export class LabelMePanel {
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>CLAHE: <span id="claheValue">Off</span> <span id="claheResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                            <label>CLAHE:</label>
+                                            <button id="claheToggleBtn" class="channel-btn" title="Click to enable">Off</button>
+                                            <span id="claheResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span>
                                             <button id="claheLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
                                         </div>
-                                        <input type="range" id="claheClipLimitSlider" min="1" max="10" value="2" step="0.5" title="Clip Limit">
-                                        <div style="font-size: 0.8em; margin-top: 4px;">Clip Limit: <span id="claheClipLimitValue">2.0</span></div>
+                                        <div id="claheControls" style="display: none;">
+                                            <div style="font-size: 0.8em; margin-top: 4px;">Clip Limit: <span id="claheClipLimitValue">2.0</span></div>
+                                            <input type="range" id="claheClipLimitSlider" min="1" max="10" value="2" step="0.5" title="Clip Limit">
+                                        </div>
                                     </div>
                                 </div>
                                 <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
