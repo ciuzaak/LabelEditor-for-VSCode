@@ -2356,7 +2356,9 @@ function exitShapeEditMode(saveChanges = true) {
     isDraggingVertex = false;
     isDraggingWholeShape = false;
     activeVertexIndex = -1;
-    canvasWrapper.style.cursor = currentMode === 'view' ? 'default' : 'crosshair';
+    if (!shiftPressed) {
+        canvasWrapper.style.cursor = currentMode === 'view' ? 'default' : 'crosshair';
+    }
     draw();
 }
 
@@ -2411,7 +2413,10 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         if (clickedIndex === shapeBeingEdited) {
             isDraggingWholeShape = true;
             dragStartPoint = { x, y };
-            canvasWrapper.style.cursor = 'move';
+            // Don't overwrite the Shift feedback cursor; it'll be cleared on Shift-up.
+            if (!shiftPressed) {
+                canvasWrapper.style.cursor = 'move';
+            }
             e.stopPropagation();
             e.preventDefault();
             return;
@@ -2500,7 +2505,10 @@ document.addEventListener('mouseup', (e) => {
     if (isDraggingWholeShape) {
         isDraggingWholeShape = false;
         dragStartPoint = null;
-        canvasWrapper.style.cursor = 'default';
+        // Don't overwrite the Shift feedback cursor; it'll be cleared on Shift-up.
+        if (!shiftPressed) {
+            canvasWrapper.style.cursor = 'default';
+        }
         // Update originalEditPoints to current position for next drag
         if (shapeBeingEdited !== -1) {
             originalEditPoints = JSON.parse(JSON.stringify(shapes[shapeBeingEdited].points));
@@ -6038,6 +6046,9 @@ async function samDecode() {
                 samPrompts = [samPrompts[samPrompts.length - 1]]; // Keep only the latest prompt
                 samMaskContour = null;
                 samIsFreshSequence = true; // We are essentially starting over
+                // Prompts mutated — refresh Shift feedback in case the routing
+                // role flipped (e.g. trimmed away the only positive prompt).
+                updateShiftFeedback();
             }
         }
     }
