@@ -215,12 +215,8 @@ export class LabelMePanel {
         // Set panel title once — it stays fixed during image navigation
         this._panel.title = this._panelTitle;
 
-        // Set panel icon - use fallback if icon.png doesn't exist
-        try {
-            this._panel.iconPath = vscode.Uri.joinPath(extensionUri, 'icon.png');
-        } catch (e) {
-            console.warn('Icon file not found, using default', e);
-        }
+        // Set panel icon
+        this._panel.iconPath = vscode.Uri.joinPath(extensionUri, 'icon.png');
 
         // Set the webview's initial html content (with empty image list for fast startup)
         this._update();
@@ -1016,7 +1012,7 @@ export class LabelMePanel {
                         contrast: ${this._globalState.get('contrast') ?? 100},
                         brightnessLocked: ${this._globalState.get('brightnessLocked') ?? false},
                         contrastLocked: ${this._globalState.get('contrastLocked') ?? false},
-                        selectedChannel: "${this._globalState.get('selectedChannel') ?? 'rgb'}",
+                        selectedChannel: ${JSON.stringify(this._globalState.get('selectedChannel') ?? 'rgb')},
                         channelLocked: ${this._globalState.get('channelLocked') ?? false},
                         claheEnabled: ${this._globalState.get('claheEnabled') ?? false},
                         claheClipLimit: ${this._globalState.get('claheClipLimit') ?? 2.0},
