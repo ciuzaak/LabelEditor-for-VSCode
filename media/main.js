@@ -2049,6 +2049,9 @@ canvasWrapper.addEventListener('mousemove', (e) => {
         const x = mx / zoomLevel;
         const y = my / zoomLevel;
 
+        // Skip cursor refresh while Shift feedback owns the cursor.
+        if (shiftPressed) return;
+
         const hoveredIndex = findShapeIndexAt(x, y);
         const desiredCursor = hoveredIndex !== -1 ? 'pointer' :
             (currentMode === 'view' ? 'default' : 'crosshair');
@@ -2480,8 +2483,9 @@ document.addEventListener('mousemove', (e) => {
         }
 
         draw();
-    } else if (isEditingShape) {
+    } else if (isEditingShape && !shiftPressed) {
         // Update cursor based on what's under the mouse
+        // (skip while Shift feedback owns the cursor)
         const vertexIndex = findVertexAt(shapeBeingEdited, x, y);
         if (vertexIndex !== -1) {
             canvasWrapper.style.cursor = 'move';
@@ -6090,7 +6094,9 @@ async function samDecode() {
             statusSpan.textContent = `SAM Decoded [${modeLabel}] (${data.time_ms || 0}ms)`;
             statusSpan.style.color = 'limegreen';
             draw();
-            updateShiftFeedback();
+            // Note: don't call updateShiftFeedback here — samDecode doesn't
+            // mutate samPrompts, so feedback content is unchanged. Calling it
+            // would only clobber the decode status message during Shift hold.
         }
     } catch (err) {
         if (requestVersion !== samDecodeVersion) return;
@@ -6153,8 +6159,18 @@ function samEnsureEncoded() {
 }
 
 function updateShiftFeedback() {
+    // Refresh the prior-status snapshot whenever statusSpan currently shows a
+    // non-feedback string. This catches both the initial transition and any
+    // external write that occurred mid-hold (e.g., samEncode/samDecode finishing
+    // during Shift hold) — without it, the snapshot stays pinned to the value
+    // captured on Shift-down and stale text gets restored on Shift-up.
+    if (statusSpan.textContent !== lastFeedbackText) {
+        prevStatusText = statusSpan.textContent;
+        prevStatusColor = statusSpan.style.color;
+    }
+
     if (!shiftPressed || currentMode === 'view') {
-        // Restore prior status only if nothing else has overwritten it.
+        // Restore prior status only if we still own the status text.
         if (lastFeedbackText !== null && statusSpan.textContent === lastFeedbackText) {
             statusSpan.textContent = prevStatusText ?? '';
             statusSpan.style.color = prevStatusColor ?? '';
@@ -6166,12 +6182,6 @@ function updateShiftFeedback() {
         currentCursor = null;
         canvasWrapper.style.cursor = '';
         return;
-    }
-
-    // Snapshot prior state on first transition to feedback.
-    if (lastFeedbackText === null) {
-        prevStatusText = statusSpan.textContent;
-        prevStatusColor = statusSpan.style.color;
     }
 
     let text, color, cursor;
