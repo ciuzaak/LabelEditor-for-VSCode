@@ -222,6 +222,11 @@ let claheEnabled = false;    // CLAHE enabled/disabled
 let claheClipLimit = 2.0;    // CLAHE clip limit parameter
 let claheLocked = false;     // 锁定CLAHE：切换图片时保留
 
+// Processed-image cache for channel selection / CLAHE.
+// Key encodes the inputs that affect output; cache hit avoids reprocessing on every draw().
+let processedCanvas = null;
+let processedKey = '';
+
 // Theme state
 let currentTheme = 'auto'; // 'light', 'dark', 'auto'
 let vscodeThemeKind = 2; // 1=Light, 2=Dark, 3=HighContrast, 4=HighContrastLight
@@ -4124,10 +4129,11 @@ function updateModeButtons() {
 function draw(mouseEvent) {
     // Canvas只绘制图片
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Apply channel selection and CLAHE processing
-    if (selectedChannel !== 'rgb' || claheEnabled) {
-        applyChannelAndClahe();
+
+    const needsProcessing = selectedChannel !== 'rgb' || claheEnabled;
+    const source = needsProcessing ? getProcessedCanvas() : null;
+    if (source) {
+        ctx.drawImage(source, 0, 0, img.width, img.height);
     } else {
         ctx.drawImage(img, 0, 0, img.width, img.height);
     }
@@ -4920,93 +4926,105 @@ function applyImageAdjust() {
     canvas.style.filter = filterValue;
 }
 
-// Apply channel selection and CLAHE to canvas
-function applyChannelAndClahe() {
-    if (!img.src || !img.complete) return;
-    
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    
-    // Create an offscreen canvas for processing
-    const offscreenCanvas = document.createElement('canvas');
-    offscreenCanvas.width = img.width;
-    offscreenCanvas.height = img.height;
-    const offCtx = offscreenCanvas.getContext('2d');
-    
-    // Draw original image
-    offCtx.drawImage(img, 0, 0, img.width, img.height);
-    
-    // Get image data
-    const imageData = offCtx.getImageData(0, 0, img.width, img.height);
+// Render channel-selected and/or CLAHE-processed image into the cached offscreen canvas.
+// Returns the cached canvas, or null if the source image is not ready.
+// CLAHE runs in YCbCr space on the Y plane only, so colors are preserved.
+function getProcessedCanvas() {
+    if (!img.src || !img.complete || !img.width || !img.height) return null;
+
+    const w = img.width;
+    const h = img.height;
+    const key = img.src + '|' + selectedChannel + '|' + claheEnabled + '|' + claheClipLimit + '|' + w + 'x' + h;
+    if (processedCanvas && key === processedKey) return processedCanvas;
+
+    if (!processedCanvas) {
+        processedCanvas = document.createElement('canvas');
+    }
+    if (processedCanvas.width !== w || processedCanvas.height !== h) {
+        processedCanvas.width = w;
+        processedCanvas.height = h;
+    }
+    const pCtx = processedCanvas.getContext('2d');
+    pCtx.drawImage(img, 0, 0, w, h);
+    const imageData = pCtx.getImageData(0, 0, w, h);
     const data = imageData.data;
-    
-    // Apply channel selection
+
     if (selectedChannel !== 'rgb') {
+        const offset = selectedChannel === 'r' ? 0 : selectedChannel === 'g' ? 1 : 2;
         for (let i = 0; i < data.length; i += 4) {
-            const r = data[i];
-            const g = data[i + 1];
-            const b = data[i + 2];
-            
-            let value;
-            if (selectedChannel === 'r') {
-                value = r;
-            } else if (selectedChannel === 'g') {
-                value = g;
-            } else if (selectedChannel === 'b') {
-                value = b;
-            }
-            
-            data[i] = value;
-            data[i + 1] = value;
-            data[i + 2] = value;
+            const v = data[i + offset];
+            data[i] = v;
+            data[i + 1] = v;
+            data[i + 2] = v;
         }
     }
-    
-    // Apply CLAHE if enabled
+
     if (claheEnabled) {
-        applyClahe(data, img.width, img.height, claheClipLimit);
+        applyClaheYCbCr(data, w, h, claheClipLimit);
     }
-    
-    // Put processed image data back
-    offCtx.putImageData(imageData, 0, 0);
-    
-    // Draw to main canvas
-    ctx.drawImage(offscreenCanvas, 0, 0);
+
+    pCtx.putImageData(imageData, 0, 0);
+    processedKey = key;
+    return processedCanvas;
 }
 
-// CLAHE implementation
-function applyClahe(data, width, height, clipLimit) {
-    const tileSize = 8; // Tile size for adaptive histogram equalization
-    const tilesX = Math.ceil(width / tileSize);
-    const tilesY = Math.ceil(height / tileSize);
-    
-    // Convert RGB to grayscale for histogram calculation
-    const gray = new Uint8Array(width * height);
-    for (let i = 0; i < data.length; i += 4) {
-        gray[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+// CLAHE in YCbCr (Rec.601). Equalizes Y; Cb/Cr pass through. In-place on `data` (RGBA).
+function applyClaheYCbCr(data, width, height, clipLimit) {
+    const n = width * height;
+    const y = new Uint8Array(n);
+    const cb = new Uint8Array(n);
+    const cr = new Uint8Array(n);
+    for (let i = 0, p = 0; i < data.length; i += 4, p++) {
+        const r = data[i];
+        const g = data[i + 1];
+        const b = data[i + 2];
+        y[p]  = Math.round( 0.299 * r + 0.587 * g + 0.114 * b);
+        cb[p] = Math.round(128 - 0.168736 * r - 0.331264 * g + 0.5      * b);
+        cr[p] = Math.round(128 + 0.5      * r - 0.418688 * g - 0.081312 * b);
     }
-    
-    // Calculate histograms for each tile
-    const histograms = [];
-    const cdfs = [];
-    
+
+    claheOnPlane(y, width, height, clipLimit);
+
+    for (let p = 0, i = 0; p < n; p++, i += 4) {
+        const Y  = y[p];
+        const Cb = cb[p] - 128;
+        const Cr = cr[p] - 128;
+        const r = Y + 1.402 * Cr;
+        const g = Y - 0.344136 * Cb - 0.714136 * Cr;
+        const b = Y + 1.772 * Cb;
+        data[i]     = r < 0 ? 0 : r > 255 ? 255 : Math.round(r);
+        data[i + 1] = g < 0 ? 0 : g > 255 ? 255 : Math.round(g);
+        data[i + 2] = b < 0 ? 0 : b > 255 ? 255 : Math.round(b);
+    }
+}
+
+// CLAHE on a single 8-bit plane. 8x8 tile grid sized adaptively to the plane.
+// Float clip threshold avoids the floor-to-zero collapse seen with small tiles.
+function claheOnPlane(plane, width, height, clipLimit) {
+    const tilesX = 8;
+    const tilesY = 8;
+    const tileW = Math.ceil(width / tilesX);
+    const tileH = Math.ceil(height / tilesY);
+
+    const cdfs = new Array(tilesX * tilesY);
+
     for (let ty = 0; ty < tilesY; ty++) {
         for (let tx = 0; tx < tilesX; tx++) {
+            const startX = tx * tileW;
+            const startY = ty * tileH;
+            const endX = Math.min(startX + tileW, width);
+            const endY = Math.min(startY + tileH, height);
+            const tilePixels = (endX - startX) * (endY - startY);
+
             const hist = new Uint32Array(256);
-            
-            // Calculate histogram for this tile
-            const startX = tx * tileSize;
-            const startY = ty * tileSize;
-            const endX = Math.min(startX + tileSize, width);
-            const endY = Math.min(startY + tileSize, height);
-            
-            for (let y = startY; y < endY; y++) {
-                for (let x = startX; x < endX; x++) {
-                    hist[gray[y * width + x]]++;
+            for (let py = startY; py < endY; py++) {
+                const row = py * width;
+                for (let px = startX; px < endX; px++) {
+                    hist[plane[row + px]]++;
                 }
             }
-            
-            // Clip histogram
-            const clipThreshold = Math.floor(clipLimit * tileSize * tileSize / 256);
+
+            const clipThreshold = clipLimit * tilePixels / 256;
             let excess = 0;
             for (let i = 0; i < 256; i++) {
                 if (hist[i] > clipThreshold) {
@@ -5014,73 +5032,48 @@ function applyClahe(data, width, height, clipLimit) {
                     hist[i] = clipThreshold;
                 }
             }
-            
-            // Redistribute excess
-            const redistribution = Math.floor(excess / 256);
+            const redistribution = excess / 256;
+
+            const cdf = new Uint8Array(256);
+            let acc = 0;
+            const scale = 255 / tilePixels;
             for (let i = 0; i < 256; i++) {
-                hist[i] += redistribution;
+                acc += hist[i] + redistribution;
+                let v = Math.round(acc * scale);
+                if (v > 255) v = 255;
+                cdf[i] = v;
             }
-            
-            // Calculate CDF
-            const cdf = new Uint32Array(256);
-            cdf[0] = hist[0];
-            for (let i = 1; i < 256; i++) {
-                cdf[i] = cdf[i - 1] + hist[i];
-            }
-            
-            // Normalize CDF
-            const totalPixels = (endX - startX) * (endY - startY);
-            const scale = 255 / totalPixels;
-            for (let i = 0; i < 256; i++) {
-                cdf[i] = Math.min(255, Math.floor(cdf[i] * scale));
-            }
-            
-            histograms.push(hist);
-            cdfs.push(cdf);
+            cdfs[ty * tilesX + tx] = cdf;
         }
     }
-    
-    // Apply CLAHE using bilinear interpolation between tiles
-    for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-            const tileX = x / tileSize;
-            const tileY = y / tileSize;
-            
-            const tx1 = Math.floor(tileX);
-            const ty1 = Math.floor(tileY);
-            const tx2 = Math.min(tx1 + 1, tilesX - 1);
-            const ty2 = Math.min(ty1 + 1, tilesY - 1);
-            
-            const fx = tileX - tx1;
-            const fy = tileY - ty1;
-            
-            const idx = ty1 * tilesX + tx1;
-            const idx2 = ty1 * tilesX + tx2;
-            const idx3 = ty2 * tilesX + tx1;
-            const idx4 = ty2 * tilesX + tx2;
-            
-            const grayValue = gray[y * width + x];
-            
-            // Bilinear interpolation of CDF values
-            const val1 = cdfs[idx][grayValue];
-            const val2 = cdfs[idx2][grayValue];
-            const val3 = cdfs[idx3][grayValue];
-            const val4 = cdfs[idx4][grayValue];
-            
-            const interpolated = (1 - fx) * (1 - fy) * val1 +
-                                fx * (1 - fy) * val2 +
-                                (1 - fx) * fy * val3 +
-                                fx * fy * val4;
-            
-            const newGray = Math.round(interpolated);
-            
-            // Apply to RGB channels proportionally
-            const pixelIdx = (y * width + x) * 4;
-            const ratio = newGray / (grayValue + 1); // Avoid division by zero
-            
-            data[pixelIdx] = Math.min(255, Math.round(data[pixelIdx] * ratio));
-            data[pixelIdx + 1] = Math.min(255, Math.round(data[pixelIdx + 1] * ratio));
-            data[pixelIdx + 2] = Math.min(255, Math.round(data[pixelIdx + 2] * ratio));
+
+    // Bilinear interpolation between the 4 surrounding tile CDFs.
+    // fx/fy are the pixel position in tile-center coordinates, clamped to the valid range
+    // so that edge / corner pixels collapse to a single CDF without reaching across the boundary.
+    for (let py = 0; py < height; py++) {
+        const row = py * width;
+        const rawFy = (py + 0.5) / tileH - 0.5;
+        const fy = rawFy < 0 ? 0 : rawFy > tilesY - 1 ? tilesY - 1 : rawFy;
+        const ty1 = Math.floor(fy);
+        const ty2 = ty1 + 1 > tilesY - 1 ? tilesY - 1 : ty1 + 1;
+        const dy = fy - ty1;
+
+        for (let px = 0; px < width; px++) {
+            const rawFx = (px + 0.5) / tileW - 0.5;
+            const fx = rawFx < 0 ? 0 : rawFx > tilesX - 1 ? tilesX - 1 : rawFx;
+            const tx1 = Math.floor(fx);
+            const tx2 = tx1 + 1 > tilesX - 1 ? tilesX - 1 : tx1 + 1;
+            const dx = fx - tx1;
+
+            const v = plane[row + px];
+            const v11 = cdfs[ty1 * tilesX + tx1][v];
+            const v12 = cdfs[ty1 * tilesX + tx2][v];
+            const v21 = cdfs[ty2 * tilesX + tx1][v];
+            const v22 = cdfs[ty2 * tilesX + tx2][v];
+
+            const top = v11 * (1 - dx) + v12 * dx;
+            const bot = v21 * (1 - dx) + v22 * dx;
+            plane[row + px] = Math.round(top * (1 - dy) + bot * dy);
         }
     }
 }
