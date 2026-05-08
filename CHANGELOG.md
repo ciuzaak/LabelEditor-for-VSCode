@@ -2,6 +2,39 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.15.0] - 2026-05-08
+
+### Added
+- **Annotation Merging**: Combine overlapping polygon/rectangle instances into a single shape
+  - Right-click multi-selection → **Merge** (visible only when ≥2 polygon/rectangle shapes are selected)
+  - Keyboard shortcut: `Ctrl+G`
+  - Only overlapping pairs are merged. Disjoint groups within one selection are merged separately (DSU); isolated non-overlapping shapes are left untouched
+  - **All-rectangle selection** → output is a single rectangle (axis-aligned bounding box of all members' corners)
+  - **Mixed or any-polygon selection** → output is a polygon (rectangles are treated as polygons), produced via `polygon-clipping` union with holes dropped (LabelMe format does not support holes)
+  - Mixed-label groups prompt the user once via the existing label modal; unanimous-label groups commit silently
+  - Single undo step restores all original shapes
+- **Rename / Hide Shortcuts**: `Ctrl+R` triggers the existing rename action (single or batch) on the current selection; `Ctrl+H` toggles visibility (deterministic — hides all if any visible, shows all if all hidden)
+- **RGB Channel Selection** (PR #1, thanks to [@lizongnan](https://github.com/lizongnan)!): Inspect individual color channels in the Image Adjustment panel
+  - Native radio group: RGB / R / G / B with a 🔓/🔒 lock button to preserve the choice across image switches
+  - Single-channel views render as grayscale (the chosen channel mapped to all of R/G/B)
+- **CLAHE Image Enhancement** (PR #1, thanks to [@lizongnan](https://github.com/lizongnan)!): Contrast Limited Adaptive Histogram Equalization for low-contrast images
+  - Explicit Off/On toggle plus a clip-limit slider; controls only render when CLAHE is on
+  - Computed in YCbCr space (luminance-only) so colors are not distorted; cached in an offscreen canvas keyed on image + parameters to avoid recomputing during pan/zoom
+  - Independent 🔓/🔒 lock; setting persists across sessions
+
+### Changed
+- **Settings Panel Reorganized**: The ⚙️ dropdown is grouped into **Theme**, **View** (zoom, lock view), **Annotation Style** (border width, fill opacity), and **Image Adjustment** (brightness, contrast, channel, CLAHE)
+  - Theme/View headers removed for compactness; lock buttons slimmed; CLAHE toggle pinned to a fixed width so the row stops jumping when toggled
+- **SAM Prompt Combination**: Point and rectangle prompts can now coexist within a single SAM annotation
+  - Adding a new box replaces only the previous box, preserving any existing point prompts
+  - Negative-point routing still requires at least one positive prompt (point or box)
+  - Undoing the last positive prompt drops orphan negative points so the next decode does not run with negatives-only input
+- **Eraser in SAM Mode**: Shift+click while no positive SAM prompt is in progress now starts the eraser (consistent with non-SAM modes), instead of being silently rejected
+  - Mid-draw eraser clicks always reach the main eraser handler so subsequent points/closure work even with the SAM mousedown listener active
+
+### Fixed
+- **Shift Visual Feedback Races**: Holding Shift now reliably shows the cursor and status-bar hint regardless of whether SAM encoding/decoding completes during the hold; mid-hold external status writes are no longer clobbered when Shift is released
+
 ## [0.14.1] - 2026-05-06
 
 ### Improved

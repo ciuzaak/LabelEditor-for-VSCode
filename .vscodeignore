@@ -3,8 +3,12 @@
 .gitignore
 node_modules/**
 src/**
+test/**
+out-test/**
 *.ts
+**/*.ts
 tsconfig.json
+tsconfig.test.json
 package-lock.json
 *.vsix
 .github/**

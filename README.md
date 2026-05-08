@@ -98,10 +98,11 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 - **Interactive Segmentation**: Annotate with the Segment Anything Model (SAM)
   - Enter SAM mode via toolbar button (🧠) or keyboard shortcut (`I`)
   - **Left click**: Positive point prompt
-  - **Shift+Left click**: Negative point prompt
+  - **Shift+Left click**: Negative point prompt (requires at least one positive prompt; otherwise Shift starts the eraser, just like in non-SAM modes)
   - **Left click + Drag**: Rectangle (box) prompt
   - **Right click**: Undo last prompt
   - **Double click**: Confirm annotation and enter label
+  - **Prompt Combination** (New in v0.15.0): Point and rectangle prompts can coexist; adding a new box replaces only the previous box
   - Real-time mask preview with SVG overlay
   - Lazy encoding: image embedding computed on first interaction for efficiency
   - Supports SAM1 and SAM2 ONNX models with automatic detection
@@ -131,6 +132,19 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
   - Boolean subtraction removes the erased area from all overlapping annotations
   - Interior punch-outs are decomposed into hole-free polygons (LabelMe compatible)
   - Right-click or ESC to cancel
+
+### Annotation Merging (New in v0.15.0)
+- **Merge Overlapping Instances**: Combine multi-selected polygon/rectangle shapes whose geometries overlap
+  - Right-click → **Merge** or `Ctrl+G`
+  - Only overlapping pairs are merged; disjoint groups are merged independently; isolated shapes are untouched
+  - **All-rectangle selection** → single rectangle (axis-aligned bounding box)
+  - **Mixed or any-polygon selection** → polygon (rectangles treated as polygons), via boolean union with holes dropped
+  - Mixed labels prompt the user once via the label modal; unanimous-label groups commit silently
+  - Single undo step restores all originals
+
+### Image Adjustment (New / expanded in v0.15.0)
+- **RGB Channel Selection**: Inspect a single color channel as grayscale (R / G / B) in the ⚙️ Image Adjustment group; lock to preserve across image switches
+- **CLAHE (Contrast Limited Adaptive Histogram Equalization)**: Brighten low-contrast images without color distortion (luminance-only YCbCr); explicit Off/On toggle, clip-limit slider, independent lock
 
 ## 📦 Installation
 
@@ -185,6 +199,9 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 - **Shift+Click**: Start polygon eraser
 - **Shift+Long-press+Drag**: Start rectangle eraser
 - **Ctrl+A** (`Cmd+A` on Mac): Select all instances
+- **Ctrl+G** (New in v0.15.0): Merge selected polygon/rectangle instances (overlapping ones only)
+- **Ctrl+R** (New in v0.15.0): Rename the selected shape (single or batch)
+- **Ctrl+H** (New in v0.15.0): Toggle visibility of the selected shape(s)
 - **ESC**: Cancel current drawing / Cancel eraser / Clear selection
 - **A**: Previous image
 - **D**: Next image
@@ -237,16 +254,19 @@ This extension is still under active development. Some known limitations include
 
 ## 🤖 Development
 
-**All code in this extension was written by AI:**
+**Most code in this extension was written by AI:**
 - **Gemini 3 Pro**
 - **Gemini 3.1 Pro**
 - **Claude Sonnet 4.5**
 - **Claude Opus 4.5**
 - **Claude Opus 4.6**
+- **Claude Opus 4.7** (1M context)
 
 **Code review by AI:**
 - **GPT 5.3 Codex**
 - **GPT 5.4**
+
+Community PRs are also welcome — see CHANGELOG for per-release contributor credit.
 
 This project serves as a demonstration of AI-assisted development capabilities.
 
@@ -293,7 +313,7 @@ MIT License - see LICENSE file for details
 
 - Inspired by the LabelMe annotation tool
 - Built for the VS Code extension ecosystem
-- Developed entirely by AI language models
+- Developed primarily by AI language models, with feature contributions from the community — see "Development" above
 
 ---
 
