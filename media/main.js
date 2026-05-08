@@ -99,7 +99,6 @@ let samServicePort = 8765;
 let samServiceRunning = false;
 let samCurrentImagePath = null;   // 当前已 encode 的图片路径
 let samPrompts = [];              // 当前的 prompt 列表
-let samPromptType = null;         // 'point' | 'box'
 let samMaskContour = null;        // 当前推理结果（轮廓点数组）
 let samIsDragging = false;        // 是否正在拖拽框选
 let samDragStart = null;          // 框选起点 {x, y}
@@ -3493,7 +3492,6 @@ function cancelLabelInput() {
         // SAM mode: restore prompts, mask, crop, sequence state, and embedding identity
         if (samSavedStateBeforeConfirm) {
             samPrompts = samSavedStateBeforeConfirm.prompts;
-            samPromptType = samSavedStateBeforeConfirm.promptType;
             samMaskContour = samSavedStateBeforeConfirm.maskContour;
             samCachedCrop = samSavedStateBeforeConfirm.cachedCrop;
             samIsFreshSequence = samSavedStateBeforeConfirm.isFreshSequence;
@@ -6062,7 +6060,6 @@ async function samDecode() {
 function samClearState() {
     samDecodeVersion++;  // Invalidate any in-flight decode
     samPrompts = [];
-    samPromptType = null;
     samMaskContour = null;
     samIsDragging = false;
     samDragStart = null;
@@ -6113,7 +6110,6 @@ function samUndoLastPrompt() {
         samPrompts.pop();
         if (samPrompts.length === 0) {
             samDecodeVersion++;  // Invalidate any in-flight decode
-            samPromptType = null;
             samMaskContour = null;
             samCachedCrop = null;
             samCurrentImagePath = null;
@@ -6133,7 +6129,6 @@ function samConfirmAnnotation() {
     // Save SAM state so we can restore if user cancels the label modal
     samSavedStateBeforeConfirm = {
         prompts: JSON.parse(JSON.stringify(samPrompts)),
-        promptType: samPromptType,
         maskContour: JSON.parse(JSON.stringify(samMaskContour)),
         cachedCrop: samCachedCrop ? JSON.parse(JSON.stringify(samCachedCrop)) : null,
         isFreshSequence: samIsFreshSequence,
@@ -6146,7 +6141,6 @@ function samConfirmAnnotation() {
 
     // Clear SAM prompt state but keep service running
     samPrompts = [];
-    samPromptType = null;
     samMaskContour = null;
     samIsDragging = false;
     samDragStart = null;
@@ -6207,7 +6201,6 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         const y2 = Math.max(csy, cy);
 
         samPrompts = [{ type: 'rectangle', data: [x1, y1, x2, y2] }];
-        samPromptType = 'box';
         samBoxSecondClick = false;
         samDragStart = null;
         samDragCurrent = null;
@@ -6305,13 +6298,6 @@ canvasWrapper.addEventListener('mouseup', (e) => {
         samClickTimer = setTimeout(() => {
             if (samPendingClick) {
                 const label = samPendingClick.shiftKey ? 0 : 1;
-
-                // If previous was box, clear it (point and box don't coexist)
-                if (samPromptType === 'box') {
-                    samPrompts = [];
-                }
-                samPromptType = 'point';
-
                 const [spx, spy] = clampImageCoords(samPendingClick.x, samPendingClick.y);
                 samPrompts.push({ type: 'point', data: [spx, spy], label: label });
                 samPendingClick = null;
@@ -6353,7 +6339,6 @@ window._samOnImageUpdate = function () {
     if (currentMode === 'sam') {
         samDecodeVersion++;  // Invalidate any in-flight decode
         samPrompts = [];
-        samPromptType = null;
         samMaskContour = null;
         samIsDragging = false;
         samDragStart = null;
