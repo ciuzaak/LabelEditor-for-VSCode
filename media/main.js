@@ -5964,6 +5964,7 @@ if (searchImagesBtn && searchInputContainer && searchInput) {
             // Hide and clear search
             searchInputContainer.style.display = 'none';
             searchInput.value = '';
+            if (searchCloseBtn) searchCloseBtn.classList.remove('visible');
             filterImages('');
         }
     };
