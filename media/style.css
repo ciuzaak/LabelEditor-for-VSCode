@@ -178,13 +178,16 @@ body {
     display: flex;
     flex-direction: column;
     padding: var(--space-3);
-    overflow: hidden;
+    /* overflow: visible so the settings/tools popover is not clipped. */
+    overflow: visible;
     min-width: 150px;
 }
 
-/* Sidebar Config Section - Always visible, no scroll */
+/* Sidebar Config Section - Always visible, no scroll. overflow: visible so
+   the settings/tools popover anchored inside it is not clipped. */
 .sidebar-config-section {
     flex-shrink: 0;
+    overflow: visible;
 }
 
 /* Sidebar Content - Contains Labels and Instances */
@@ -1067,10 +1070,6 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     flex-direction: column;
     gap: var(--space-2);
 }
-/* Allow popover to overflow without being clipped */
-.sidebar-config-section { overflow: visible; }
-.sidebar { overflow: visible; }
-
 /* Sidebar Dropdown Menu */
 .sidebar-dropdown .theme-control,
 .sidebar-dropdown .zoom-control,

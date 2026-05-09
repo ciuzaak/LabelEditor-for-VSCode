@@ -89,18 +89,6 @@ const TIPS = {
     'context.toggleVisible': { title: 'Show/Hide', desc: 'Toggle visibility of the selected shape(s).', shortcut: 'Ctrl+H' },
     'context.delete':        { title: 'Delete', desc: 'Delete the selected shape(s).' },
 
-    // Recently added features (no native title= today). These IDs are kept as
-    // a forward-compatible inventory so a future surface (help panel, status
-    // hints) can pick them up.
-    'shortcut.merge':         { title: 'Merge Shapes', desc: 'Union overlapping polygons of the same label, otherwise group selected shapes into one merged annotation.', shortcut: 'Ctrl+G' },
-    'shortcut.rename':        { title: 'Rename Selected', desc: 'Open the rename dialog for the selected shape(s).', shortcut: 'Ctrl+R' },
-    'shortcut.toggleVisible': { title: 'Toggle Visibility', desc: 'Hide or show the selected shape(s).', shortcut: 'Ctrl+H' },
-    'sam.positivePoint':      { title: 'Positive Prompt', desc: 'Left-click in SAM mode to add a positive point that pulls the mask toward it.' },
-    'sam.negativePoint':      { title: 'Negative Prompt', desc: 'Right-click in SAM mode to add a negative point that pushes the mask away.' },
-    'sam.eraser':             { title: 'Prompt Eraser', desc: 'Hold Shift in SAM mode to switch to the eraser; click a prompt or drag to remove it.' },
-    'select.box':             { title: 'Box Select', desc: 'In View mode, drag on empty space to box-select shapes. Hold Shift to add to the current selection.' },
-    'select.multi':           { title: 'Multi-Select', desc: 'Ctrl-click in the instance list to select multiple shapes.' },
-
     // ONNX modal
     'onnx.modelDir':       { title: 'Model Directory', desc: 'Directory holding the .onnx model and a labels.json mapping mask values (skip 0 = background) to label names.' },
     'onnx.pythonPath':     { title: 'Python Interpreter', desc: 'Path to the Python interpreter that has onnxruntime installed.' },
