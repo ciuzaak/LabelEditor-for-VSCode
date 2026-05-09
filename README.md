@@ -1,8 +1,11 @@
 # LabelEditor for VSCode
 
-A VS Code extension for annotating images with polygon, rectangle, line, and point shapes, compatible with the LabelMe JSON format. Perfect for creating datasets for machine learning and computer vision projects.
+[![Visual Studio Marketplace](https://vsmarketplacebadges.dev/version/ciuzaak.labeleditor-vscode.png)](https://marketplace.visualstudio.com/items?itemName=ciuzaak.labeleditor-vscode)
+[![VS Marketplace Installs](https://vsmarketplacebadges.dev/installs/ciuzaak.labeleditor-vscode.png)](https://marketplace.visualstudio.com/items?itemName=ciuzaak.labeleditor-vscode)
+[![Open VSX](https://raster.shields.io/open-vsx/v/ciuzaak/labeleditor-vscode?label=Open%20VSX)](https://open-vsx.org/extension/ciuzaak/labeleditor-vscode)
+[![Open VSX Downloads](https://raster.shields.io/open-vsx/dt/ciuzaak/labeleditor-vscode?label=OVSX%20Downloads)](https://open-vsx.org/extension/ciuzaak/labeleditor-vscode)
 
-> **Note**: This extension is in early development. Many features are still being refined and improved. Contributions and feedback are welcome!
+Annotate images directly in VS Code — polygon, rectangle, line, point, and **SAM AI-assisted** masks — and save in the LabelMe JSON format used by most ML pipelines. No extra app, no context switch.
 
 ## ✨ Features
 
