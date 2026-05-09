@@ -4019,7 +4019,9 @@ function renderShapeList() {
             const descSpan = document.createElement('span');
             descSpan.className = 'shape-description';
             descSpan.textContent = shape.description;
-            descSpan.title = shape.description;
+            // Runtime data — use data-tip-text so the rich tooltip can show
+            // the full description on hover when the row truncates.
+            descSpan.setAttribute('data-tip-text', shape.description);
             li.appendChild(descSpan);
         }
 
@@ -4047,6 +4049,7 @@ function renderShapeList() {
         const visibleBtn = document.createElement('span');
         visibleBtn.className = 'visible-btn';
         visibleBtn.innerHTML = shape.visible === false ? '&#128065;' : '&#128065;'; // Eye icon
+        visibleBtn.setAttribute('data-tip-id', 'shape.toggleVisible');
         if (shape.visible === false) {
             visibleBtn.classList.add('hidden-shape');
             visibleBtn.style.opacity = '0.5';
@@ -4072,6 +4075,7 @@ function renderShapeList() {
         const editBtn = document.createElement('span');
         editBtn.className = 'edit-btn';
         editBtn.innerHTML = '&#9998;'; // Pencil icon
+        editBtn.setAttribute('data-tip-id', 'shape.editVertices');
         editBtn.onclick = (e) => {
             e.stopPropagation();
             hideShapeContextMenu();
@@ -4086,6 +4090,7 @@ function renderShapeList() {
         const delBtn = document.createElement('span');
         delBtn.className = 'delete-btn';
         delBtn.textContent = '×';
+        delBtn.setAttribute('data-tip-id', 'shape.delete');
         delBtn.onclick = (e) => {
             e.stopPropagation();
             hideShapeContextMenu();
@@ -4106,6 +4111,10 @@ function renderShapeList() {
     // 一次性更新 DOM
     shapeList.innerHTML = '';
     shapeList.appendChild(fragment);
+
+    // Bind rich tooltips to the freshly-rendered per-row controls. attach()
+    // is idempotent (skips already-bound nodes via WeakSet).
+    if (window.tooltip && window.TIPS) window.tooltip.attach(shapeList, window.TIPS);
 
     // 更新 Instances 计数
     const instancesCountEl = document.getElementById('instancesCount');
@@ -4185,7 +4194,7 @@ function renderLabelsList() {
         colorIndicator.className = 'label-color-indicator';
         const colors = getColorsForLabel(label);
         colorIndicator.style.backgroundColor = colors.stroke;
-        colorIndicator.title = 'Click to change color';
+        colorIndicator.setAttribute('data-tip-id', 'label.color');
         colorIndicator.onclick = (e) => {
             e.stopPropagation();
             showColorPicker(label);
@@ -4205,10 +4214,10 @@ function renderLabelsList() {
         const visibilityBtn = document.createElement('span');
         visibilityBtn.className = 'label-visibility-btn';
         visibilityBtn.innerHTML = '&#128065;'; // Eye icon
+        visibilityBtn.setAttribute('data-tip-id', 'label.toggleVisible');
         if (stat.allHidden) {
             visibilityBtn.classList.add('all-hidden');
         }
-        visibilityBtn.title = stat.allHidden ? 'Show all' : 'Hide all';
         visibilityBtn.onclick = (e) => {
             e.stopPropagation();
             toggleLabelVisibility(label);
@@ -4218,7 +4227,7 @@ function renderLabelsList() {
         const resetBtn = document.createElement('span');
         resetBtn.className = 'label-reset-btn';
         resetBtn.innerHTML = '&#8634;'; // Circular arrow icon
-        resetBtn.title = 'Reset color';
+        resetBtn.setAttribute('data-tip-id', 'label.colorReset');
         if (customColors.has(label)) {
             resetBtn.classList.add('visible');
         }
@@ -4237,6 +4246,9 @@ function renderLabelsList() {
 
     labelsList.innerHTML = '';
     labelsList.appendChild(fragment);
+
+    // Bind rich tooltips to the freshly-rendered per-row controls.
+    if (window.tooltip && window.TIPS) window.tooltip.attach(labelsList, window.TIPS);
 
     // 更新 Labels 计数
     const labelsCountEl = document.getElementById('labelsCount');
@@ -6156,9 +6168,11 @@ function updateVirtualScroll() {
             li.classList.add('active');
         }
 
-        // Use relative path as display name
+        // Use relative path as display name. Path itself is the most useful
+        // hover content when the row truncates, so route through the rich
+        // tooltip via data-tip-text rather than a native title bubble.
         li.textContent = imagePath;
-        li.title = imagePath;
+        li.setAttribute('data-tip-text', imagePath);
 
         // Store data attribute for click handling
         li.dataset.imagePath = imagePath;
@@ -6181,6 +6195,10 @@ function updateVirtualScroll() {
     }
 
     spacer.appendChild(fragment);
+
+    // Bind rich tooltips to the freshly-rendered virtual rows. attach() is
+    // idempotent so it tolerates being called every scroll tick.
+    if (window.tooltip && window.TIPS) window.tooltip.attach(spacer, window.TIPS);
 }
 
 // Scroll handler for virtual scrolling (throttled)

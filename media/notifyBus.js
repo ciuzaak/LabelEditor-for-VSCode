@@ -16,8 +16,13 @@
     let getNow = () => Date.now();
 
     // Active transient (auto-dismissing) entry, or null.
-    //   { level, text, shownAtMs, minMs, durationMs, timerId }
+    //   { level, text, shownAtMs, minMs, durationMs, timerId, token }
+    // `token` is a monotonically increasing id captured by the scheduled
+    // timeout callback. The callback only clears the transient if its token
+    // still matches — preventing a stale timer (whose entry has already been
+    // replaced or cleared) from wiping a newer message.
     let transient = null;
+    let transientSeq = 0;
 
     // Map<key, { level, text, updatedAtMs }>. Sticky channels persist until
     // their owner replaces or clears them.
@@ -49,6 +54,14 @@
         rerender();
     }
 
+    // Called by a scheduled timeout. Only takes effect if the transient hasn't
+    // been replaced or cleared since this timer was set.
+    function expireTransientIfCurrent(token) {
+        if (!transient || transient.token !== token) return;
+        transient = null;
+        rerender();
+    }
+
     function show(level, text, opts) {
         opts = opts || {};
         const now = getNow();
@@ -70,12 +83,14 @@
             : helpers.DEFAULT_DURATIONS[level];
         const minMs = (opts.minMs != null) ? opts.minMs : durationMs;
 
+        const token = ++transientSeq;
         transient = {
             level, text,
             shownAtMs: now,
             minMs,
             durationMs,
-            timerId: setTimeout(() => { clearTransient(); }, durationMs)
+            token,
+            timerId: setTimeout(() => { expireTransientIfCurrent(token); }, durationMs)
         };
         applyToDom(incoming);
     }

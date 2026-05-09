@@ -75,9 +75,16 @@
     }
 
     function tipFor(el) {
+        // Two routing options:
+        //   1. data-tip-id="ns.key" → look up in tipsDict (static controls)
+        //   2. data-tip-text="..."  → use the literal attribute as desc
+        // Static IDs take precedence so a misconfigured element with both
+        // still picks up the canonical text from the dictionary.
         const id = el.getAttribute('data-tip-id');
-        if (!id || !tipsDict) return null;
-        return tipsDict[id] || null;
+        if (id && tipsDict && tipsDict[id]) return tipsDict[id];
+        const text = el.getAttribute('data-tip-text');
+        if (text) return { desc: text };
+        return null;
     }
 
     function onEnter(e) {
@@ -102,7 +109,7 @@
     function attach(rootEl, tips) {
         if (tips) tipsDict = tips;
         const root = rootEl || document;
-        const nodes = root.querySelectorAll('[data-tip-id]');
+        const nodes = root.querySelectorAll('[data-tip-id], [data-tip-text]');
         for (const n of nodes) {
             if (attachedEls.has(n)) continue;
             attachedEls.add(n);

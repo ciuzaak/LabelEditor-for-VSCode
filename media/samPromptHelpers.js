@@ -32,22 +32,6 @@ function samShouldDeferToMainHandler({ shiftKey, eraserActive, samBoxSecondClick
 
 // --- Shift feedback decision helpers (pure) ---
 
-// Refresh the prior-status snapshot whenever statusSpan currently holds a
-// non-feedback string. This catches both the initial Shift-down transition
-// and any external write that happened mid-hold (e.g., SAM encode/decode
-// finishing during Shift hold). Without this refresh, on Shift-up we would
-// restore the stale snapshot and clobber the external write.
-function shouldRefreshShiftSnapshot(currentStatusText, lastFeedbackText) {
-    return currentStatusText !== lastFeedbackText;
-}
-
-// Restore the prior-status only when we still own the status bar — i.e.
-// statusSpan still contains the feedback string we wrote. If something
-// else has overwritten it, leave their text in place.
-function shouldRestoreShiftStatus(lastFeedbackText, currentStatusText) {
-    return lastFeedbackText !== null && currentStatusText === lastFeedbackText;
-}
-
 // Compute the feedback descriptor for the current mode and prompt state.
 // `eraserCursor` is supplied by the caller so this stays free of any
 // DOM-only constants. Returns { text, color, cursor }.
@@ -65,8 +49,6 @@ if (typeof module !== 'undefined' && module.exports) {
         mergeBoxIntoPrompts,
         cleanupOrphanNegatives,
         samShouldDeferToMainHandler,
-        shouldRefreshShiftSnapshot,
-        shouldRestoreShiftStatus,
         computeShiftFeedback
     };
 }

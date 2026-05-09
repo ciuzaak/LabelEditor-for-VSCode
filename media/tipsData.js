@@ -3,7 +3,11 @@
 //   title:    very short label (3-6 words). May be omitted if desc is enough.
 //   desc:     one sentence describing what the control does.
 //   shortcut: optional keyboard shortcut string rendered as a <kbd> chip.
+//
+// Wrapped in a function so the top-level `const TIPS` does not enter the
+// classic-script lexical scope shared by all <script> tags on the page.
 
+(function (root) {
 const TIPS = {
     // Top toolbar / image browser
     'nav.toggleBrowser':   { title: 'Toggle Image Browser', desc: 'Show or hide the image list on the left.' },
@@ -68,6 +72,16 @@ const TIPS = {
     'tools.exportSvg':      { title: 'Export SVG', desc: 'Export current shapes as a standalone SVG file next to the image.' },
     'tools.onnxBatchInfer': { title: 'ONNX Batch Infer', desc: 'Run an ONNX segmentation model over selected images and write polygons.' },
 
+    // Per-row controls in the Labels list (dynamically rendered in main.js)
+    'label.color':      { title: 'Label Color', desc: 'Click to change the color used for shapes with this label.' },
+    'label.colorReset': { title: 'Reset Color', desc: 'Restore this label color to the default.' },
+    'label.toggleVisible': { title: 'Show/Hide All', desc: 'Click to show or hide every shape that uses this label.' },
+
+    // Per-row controls in the Instances (shape) list (dynamically rendered)
+    'shape.editVertices':  { title: 'Edit Vertices', desc: 'Switch this shape into vertex-edit mode.' },
+    'shape.toggleVisible': { title: 'Show/Hide Shape', desc: 'Toggle visibility of this single shape.' },
+    'shape.delete':        { title: 'Delete Shape', desc: 'Delete this shape from the annotation.' },
+
     // Shape context menu (rendered dynamically in main.js)
     'context.edit':          { title: 'Edit', desc: 'Edit polygon vertices.' },
     'context.rename':        { title: 'Rename', desc: 'Change the label of the selected shape(s).', shortcut: 'Ctrl+R' },
@@ -111,6 +125,7 @@ const TIPS = {
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = { TIPS };
-} else if (typeof window !== 'undefined') {
-    window.TIPS = TIPS;
+} else if (root) {
+    root.TIPS = TIPS;
 }
+})(typeof window !== 'undefined' ? window : null);
