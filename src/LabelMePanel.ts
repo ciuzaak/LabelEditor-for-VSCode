@@ -917,10 +917,10 @@ export class LabelMePanel {
                                             <button id="channelLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="channel.lock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <div class="onnx-radio-group segmented-group">
-                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="rgb" data-tip-id="channel.rgb" checked /> RGB</label>
-                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="r" data-tip-id="channel.r" /> R</label>
-                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="g" data-tip-id="channel.g" /> G</label>
-                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="b" data-tip-id="channel.b" /> B</label>
+                                            <label class="onnx-radio" data-tip-id="channel.rgb"><input type="radio" name="imageChannel" value="rgb" checked /> RGB</label>
+                                            <label class="onnx-radio" data-tip-id="channel.r"><input type="radio" name="imageChannel" value="r" /> R</label>
+                                            <label class="onnx-radio" data-tip-id="channel.g"><input type="radio" name="imageChannel" value="g" /> G</label>
+                                            <label class="onnx-radio" data-tip-id="channel.b"><input type="radio" name="imageChannel" value="b" /> B</label>
                                         </div>
                                     </div>
                                     <div class="zoom-control">

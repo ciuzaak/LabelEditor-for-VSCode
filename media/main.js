@@ -490,13 +490,16 @@ const zoomPercentageSpan = document.getElementById('zoomPercentage');
 const pixelGridOverlay = document.getElementById('pixelGridOverlay');
 
 // Update zoom UI state (lock button icon and reset button visibility)
+// Shared SVG snippets used by every lock-button updater (zoom, brightness,
+// contrast, channel, CLAHE). Static data-tip-id on each button supplies the
+// description; the icon conveys the on/off state.
+const LOCK_OPEN_SVG = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg>';
+const LOCK_CLOSED_SVG = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock"/></svg>';
+
 function updateZoomUI() {
-    // Update lock button icon and state. The static tooltip is described
-    // by data-tip-id="view.zoomLock"; the icon conveys the on/off state.
+    // Update lock button icon and state.
     if (zoomLockBtn) {
-        const lockOpen = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg>';
-        const lockClosed = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock"/></svg>';
-        zoomLockBtn.innerHTML = lockViewEnabled ? lockClosed : lockOpen;
+        zoomLockBtn.innerHTML = lockViewEnabled ? LOCK_CLOSED_SVG : LOCK_OPEN_SVG;
         zoomLockBtn.classList.toggle('locked', lockViewEnabled);
     }
 
@@ -5569,10 +5572,8 @@ function updateContrastResetBtn() {
 }
 
 // Lock-button updaters: swap the SVG icon and toggle the .locked class.
-// The static tooltip (`data-tip-id` in the HTML) describes the behavior;
-// we don't dynamically rewrite .title — the icon alone conveys the state.
-const LOCK_OPEN_SVG = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg>';
-const LOCK_CLOSED_SVG = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock"/></svg>';
+// LOCK_OPEN_SVG / LOCK_CLOSED_SVG are hoisted near updateZoomUI so all five
+// lock buttons share the same icon source.
 
 function updateBrightnessLockUI() {
     if (brightnessLockBtn) {

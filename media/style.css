@@ -1122,13 +1122,6 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     flex-shrink: 0;
 }
 
-.image-browser-header h3 {
-    margin: 0;
-    font-size: 14px;
-    text-transform: uppercase;
-    color: var(--color-text-secondary);
-}
-
 .image-browser-header #imageCount {
     font-size: 12px;
     color: var(--color-text-muted);
