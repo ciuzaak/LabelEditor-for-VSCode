@@ -482,11 +482,11 @@ function updateZoomUI() {
     // Update lock button icon and state
     if (zoomLockBtn) {
         if (lockViewEnabled) {
-            zoomLockBtn.textContent = '🔒';
+            zoomLockBtn.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock"/></svg>';
             zoomLockBtn.classList.add('locked');
             zoomLockBtn.title = 'Locked: Keeping zoom and position when switching images. Click to unlock.';
         } else {
-            zoomLockBtn.textContent = '🔓';
+            zoomLockBtn.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg>';
             zoomLockBtn.classList.remove('locked');
             zoomLockBtn.title = 'Unlocked: Fit to screen on each image. Click to lock current view.';
         }
@@ -774,7 +774,7 @@ function markDirty() {
     if (saveBtn) {
         saveBtn.disabled = false;
         saveBtn.classList.add('dirty');
-        saveBtn.textContent = '💾*';
+        saveBtn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg>';
     }
 }
 
@@ -788,7 +788,7 @@ function markClean() {
     if (saveBtn) {
         saveBtn.disabled = true;
         saveBtn.classList.remove('dirty');
-        saveBtn.textContent = '💾';
+        saveBtn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg>';
     }
 }
 
@@ -804,7 +804,7 @@ function markCleanAtIndex(index) {
         if (saveBtn) {
             saveBtn.disabled = true;
             saveBtn.classList.remove('dirty');
-            saveBtn.textContent = '💾';
+            saveBtn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg>';
         }
     }
     // If historyIndex !== savedHistoryIndex, the user has made new edits
@@ -5522,11 +5522,11 @@ function updateContrastResetBtn() {
 function updateBrightnessLockUI() {
     if (brightnessLockBtn) {
         if (brightnessLocked) {
-            brightnessLockBtn.textContent = '🔒';
+            brightnessLockBtn.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock"/></svg>';
             brightnessLockBtn.classList.add('locked');
             brightnessLockBtn.title = 'Locked: Keeping brightness when switching images. Click to unlock.';
         } else {
-            brightnessLockBtn.textContent = '🔓';
+            brightnessLockBtn.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg>';
             brightnessLockBtn.classList.remove('locked');
             brightnessLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
         }
@@ -5536,11 +5536,11 @@ function updateBrightnessLockUI() {
 function updateContrastLockUI() {
     if (contrastLockBtn) {
         if (contrastLocked) {
-            contrastLockBtn.textContent = '🔒';
+            contrastLockBtn.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock"/></svg>';
             contrastLockBtn.classList.add('locked');
             contrastLockBtn.title = 'Locked: Keeping contrast when switching images. Click to unlock.';
         } else {
-            contrastLockBtn.textContent = '🔓';
+            contrastLockBtn.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg>';
             contrastLockBtn.classList.remove('locked');
             contrastLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
         }
@@ -5550,11 +5550,11 @@ function updateContrastLockUI() {
 function updateChannelLockUI() {
     if (channelLockBtn) {
         if (channelLocked) {
-            channelLockBtn.textContent = '🔒';
+            channelLockBtn.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock"/></svg>';
             channelLockBtn.classList.add('locked');
             channelLockBtn.title = 'Locked: Keeping channel selection when switching images. Click to unlock.';
         } else {
-            channelLockBtn.textContent = '🔓';
+            channelLockBtn.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg>';
             channelLockBtn.classList.remove('locked');
             channelLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
         }
@@ -5564,11 +5564,11 @@ function updateChannelLockUI() {
 function updateClaheLockUI() {
     if (claheLockBtn) {
         if (claheLocked) {
-            claheLockBtn.textContent = '🔒';
+            claheLockBtn.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock"/></svg>';
             claheLockBtn.classList.add('locked');
             claheLockBtn.title = 'Locked: Keeping CLAHE settings when switching images. Click to unlock.';
         } else {
-            claheLockBtn.textContent = '🔓';
+            claheLockBtn.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg>';
             claheLockBtn.classList.remove('locked');
             claheLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
         }

@@ -770,24 +770,24 @@ export class LabelMePanel {
                         <div class="image-browser-header">
                             <h3>Images</h3>
                             <span id="imageCount">(${workspaceImages.length})</span>
-                            <button id="searchImagesBtn" class="header-btn" title="Search Images">🔍</button>
-                            <button id="refreshImagesBtn" class="header-btn" title="Refresh Image List">🔄</button>
+                            <button id="searchImagesBtn" class="header-btn" title="Search Images"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg></button>
+                            <button id="refreshImagesBtn" class="header-btn" title="Refresh Image List"><svg class="icon" aria-hidden="true"><use href="#icon-refresh-cw"/></svg></button>
                         </div>
                         <div id="searchInputContainer" class="search-input-container" style="display: none;">
                             <input type="text" id="searchInput" placeholder="Search images..." />
-                            <button id="searchCloseBtn" class="search-close-btn" title="Close Search">✕</button>
+                            <button id="searchCloseBtn" class="search-close-btn" title="Close Search"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         </div>
                         <ul id="imageBrowserList" class="image-browser-list"></ul>
                     </div>
                     <div id="imageBrowserResizer" class="image-browser-resizer"></div>
                     <div class="main-area">
                         <div class="toolbar">
-                            <button id="imageBrowserToggleBtn" class="nav-btn" title="Toggle Image Browser">☰</button>
-                            <button id="prevImageBtn" class="nav-btn" title="Previous Image (A)">◀</button>
-                            <button id="nextImageBtn" class="nav-btn" title="Next Image (D)">▶</button>
+                            <button id="imageBrowserToggleBtn" class="nav-btn" title="Toggle Image Browser"><svg class="icon" aria-hidden="true"><use href="#icon-panel-left"/></svg></button>
+                            <button id="prevImageBtn" class="nav-btn" title="Previous Image (A)"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"/></svg></button>
+                            <button id="nextImageBtn" class="nav-btn" title="Next Image (D)"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-right"/></svg></button>
                             <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" title="Left click: copy absolute path | Right click: copy filename">${isDummyImage ? '' : (currentImageRelativePath || path.basename(this._imageUri.fsPath))}</span>
                             <span id="status"></span>
-                            <span id="imageInfoBtn" class="image-info-btn" title="Image Info">ℹ</span>
+                            <span id="imageInfoBtn" class="image-info-btn" title="Image Info"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span>
                             <div id="imageInfoPopup" class="image-info-popup hidden"></div>
                         </div>
                         <div class="canvas-container">
@@ -810,47 +810,47 @@ export class LabelMePanel {
                         <div class="sidebar-config-section">
                             <div class="sidebar-toolbar">
                                 <div class="mode-toggle-group">
-                                    <button id="viewModeBtn" class="mode-btn active" title="View Mode (V)">👁️</button>
-                                    <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)">⬠</button>
-                                    <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)">▭</button>
-                                    <button id="lineModeBtn" class="mode-btn" title="Line Mode (L)">⟋</button>
-                                    <button id="pointModeBtn" class="mode-btn" title="Point Mode (O)">•</button>
-                                    <button id="samModeBtn" class="mode-btn" title="SAM AI Mode (I)">🧠</button>
+                                    <button id="viewModeBtn" class="mode-btn active" title="View Mode (V)"><svg class="icon" aria-hidden="true"><use href="#icon-eye"/></svg></button>
+                                    <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)"><svg class="icon" aria-hidden="true"><use href="#icon-pentagon"/></svg></button>
+                                    <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)"><svg class="icon" aria-hidden="true"><use href="#icon-square"/></svg></button>
+                                    <button id="lineModeBtn" class="mode-btn" title="Line Mode (L)"><svg class="icon" aria-hidden="true"><use href="#icon-slash"/></svg></button>
+                                    <button id="pointModeBtn" class="mode-btn" title="Point Mode (O)"><svg class="icon" aria-hidden="true"><use href="#icon-dot"/></svg></button>
+                                    <button id="samModeBtn" class="mode-btn" title="SAM AI Mode (I)"><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg></button>
                                 </div>
                                 <div class="sidebar-actions">
-                                    <button id="settingsMenuBtn" class="sidebar-icon-btn" title="Settings">⚙️</button>
-                                    <button id="toolsMenuBtn" class="sidebar-icon-btn" title="Tools">🛠️</button>
-                                    <button id="saveBtn" class="sidebar-icon-btn" title="Save (Ctrl+S)" disabled>💾</button>
+                                    <button id="settingsMenuBtn" class="sidebar-icon-btn" title="Settings"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg></button>
+                                    <button id="toolsMenuBtn" class="sidebar-icon-btn" title="Tools"><svg class="icon" aria-hidden="true"><use href="#icon-wrench"/></svg></button>
+                                    <button id="saveBtn" class="sidebar-icon-btn" title="Save (Ctrl+S)" disabled><svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg></button>
                                 </div>
                                 <div id="settingsMenuDropdown" class="sidebar-dropdown" style="display: none;">
                                     <div class="theme-control">
                                         <label>Theme</label>
                                         <div class="theme-toggle-group">
-                                            <button id="themeLightBtn" class="theme-btn" title="Light">☀️</button>
-                                            <button id="themeDarkBtn" class="theme-btn" title="Dark">🌙</button>
-                                            <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code">🔄</button>
+                                            <button id="themeLightBtn" class="theme-btn" title="Light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg></button>
+                                            <button id="themeDarkBtn" class="theme-btn" title="Dark"><svg class="icon" aria-hidden="true"><use href="#icon-moon"/></svg></button>
+                                            <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code"><svg class="icon" aria-hidden="true"><use href="#icon-circle-half"/></svg></button>
                                         </div>
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen">&#8634;</span></label>
-                                            <button id="zoomLockBtn" class="zoom-lock-btn" title="Lock: Keep zoom and position when switching images">🔓</button>
+                                            <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
+                                            <button id="zoomLockBtn" class="zoom-lock-btn" title="Lock: Keep zoom and position when switching images"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                     </div>
                                     <div class="settings-group-header">Annotation Style</div>
                                     <div class="slider-control">
-                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
                                         <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
                                     </div>
                                     <div class="slider-control">
-                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
+                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
                                         <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
                                     </div>
                                     <div class="settings-group-header">Image Adjustment</div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Channel:</label>
-                                            <button id="channelLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                            <button id="channelLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <div class="onnx-radio-group">
                                             <label class="onnx-radio"><input type="radio" name="imageChannel" value="rgb" checked /> RGB</label>
@@ -861,15 +861,15 @@ export class LabelMePanel {
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Brightness: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                            <button id="brightnessLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                            <label>Brightness: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" title="Reset to default"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
+                                            <button id="brightnessLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <input type="range" id="brightnessSlider" min="10" max="300" value="100" step="5">
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Contrast: <span id="contrastValue">100</span>% <span id="contrastResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                            <button id="contrastLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                            <label>Contrast: <span id="contrastValue">100</span>% <span id="contrastResetBtn" class="slider-reset-btn" title="Reset to default"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
+                                            <button id="contrastLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <input type="range" id="contrastSlider" min="10" max="300" value="100" step="5">
                                     </div>
@@ -877,8 +877,8 @@ export class LabelMePanel {
                                         <div class="zoom-header">
                                             <label>CLAHE:</label>
                                             <button id="claheToggleBtn" class="channel-btn" title="Click to enable">Off</button>
-                                            <span id="claheResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span>
-                                            <button id="claheLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                            <span id="claheResetBtn" class="slider-reset-btn" title="Reset to default"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span>
+                                            <button id="claheLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <div id="claheControls" style="display: none;">
                                             <div style="font-size: 0.8em; margin-top: 4px;">Clip Limit: <span id="claheClipLimitValue">2.0</span></div>
@@ -887,8 +887,8 @@ export class LabelMePanel {
                                     </div>
                                 </div>
                                 <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
-                                    <div class="sidebar-dropdown-item" id="exportSvgMenuItem">📐 Export SVG</div>
-                                    <div class="sidebar-dropdown-item" id="onnxBatchInferMenuItem">🤖 ONNX Batch Infer</div>
+                                    <div class="sidebar-dropdown-item" id="exportSvgMenuItem"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-download"/></svg> Export SVG</div>
+                                    <div class="sidebar-dropdown-item" id="onnxBatchInferMenuItem"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-cpu"/></svg> ONNX Batch Infer</div>
                                 </div>
                             </div>
                         </div>
@@ -939,20 +939,20 @@ export class LabelMePanel {
                 <!-- Modal for ONNX Batch Inference -->
                 <div id="onnxInferModal" class="modal">
                     <div class="modal-content onnx-infer-content">
-                        <h3>🤖 ONNX Batch Inference</h3>
+                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> ONNX Batch Inference</h3>
                         <div class="onnx-note">Output: polygon only</div>
                         <div class="onnx-form-group">
-                            <label>Model Directory <span class="onnx-hint" title='Requires .onnx model file and labels.json in the same directory.&#10;&#10;labels.json format:&#10;[&#10;  { &quot;value&quot;: 1, &quot;name&quot;: &quot;defect_A&quot; },&#10;  { &quot;value&quot;: 2, &quot;name&quot;: &quot;defect_B&quot; }&#10;]&#10;&#10;value: mask pixel value (skip 0 = background)&#10;name: label name for annotation'>ⓘ</span></label>
+                            <label>Model Directory <span class="onnx-hint" title='Requires .onnx model file and labels.json in the same directory.&#10;&#10;labels.json format:&#10;[&#10;  { &quot;value&quot;: 1, &quot;name&quot;: &quot;defect_A&quot; },&#10;  { &quot;value&quot;: 2, &quot;name&quot;: &quot;defect_B&quot; }&#10;]&#10;&#10;value: mask pixel value (skip 0 = background)&#10;name: label name for annotation'><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
                             <div class="onnx-path-input">
                                 <input type="text" id="onnxModelDir" placeholder="Path to directory with .onnx and labels.json" />
-                                <button id="onnxModelDirBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                                <button id="onnxModelDirBrowse" class="onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label>Python Interpreter</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="onnxPythonPath" placeholder="python" />
-                                <button id="onnxPythonPathBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                                <button id="onnxPythonPathBrowse" class="onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
@@ -999,20 +999,20 @@ export class LabelMePanel {
                 <!-- Modal for SAM AI Service Config -->
                 <div id="samConfigModal" class="modal">
                     <div class="modal-content onnx-infer-content">
-                        <h3>🤖 SAM AI Annotation</h3>
+                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> SAM AI Annotation</h3>
                         <div class="onnx-note">Configure SAM service for interactive annotation</div>
                         <div class="onnx-form-group">
-                            <label>Model Directory <span class="onnx-hint" title='Directory containing encoder and decoder ONNX model files.&#10;&#10;Expected files:&#10;- *encoder*.onnx&#10;- *decoder*.onnx&#10;&#10;Supports SAM1 and SAM2 models (auto-detected).'>ⓘ</span></label>
+                            <label>Model Directory <span class="onnx-hint" title='Directory containing encoder and decoder ONNX model files.&#10;&#10;Expected files:&#10;- *encoder*.onnx&#10;- *decoder*.onnx&#10;&#10;Supports SAM1 and SAM2 models (auto-detected).'><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
                             <div class="onnx-path-input">
                                 <input type="text" id="samModelDir" placeholder="Path to directory with encoder.onnx and decoder.onnx" />
-                                <button id="samModelDirBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                                <button id="samModelDirBrowse" class="onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label>Python Interpreter</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="samPythonPath" placeholder="python" />
-                                <button id="samPythonPathBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                                <button id="samPythonPathBrowse" class="onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
@@ -1027,7 +1027,7 @@ export class LabelMePanel {
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Encode Mode <span class="onnx-hint" title='Full Image: encode the entire image (default, works well for large targets).&#10;&#10;Local Crop: encode only the currently visible viewport region when zoomed in. Better accuracy for small targets in large images. Falls back to full image when not zoomed in.'>ⓘ</span></label>
+                            <label>Encode Mode <span class="onnx-hint" title='Full Image: encode the entire image (default, works well for large targets).&#10;&#10;Local Crop: encode only the currently visible viewport region when zoomed in. Better accuracy for small targets in large images. Falls back to full image when not zoomed in.'><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
                             <div class="onnx-radio-group">
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="full" checked /> Full Image</label>
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="local" /> Local Crop</label>
