@@ -913,6 +913,7 @@ export class LabelMePanel {
                 <!-- Modal for Label Input -->
                 <div id="labelModal" class="modal">
                     <div class="modal-content">
+                        <button class="modal-close" data-modal-close="labelModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3>Enter Label</h3>
                         <input type="text" id="labelInput" placeholder="Enter label name">
                         <textarea id="descriptionInput" placeholder="Add description (optional)" rows="2"></textarea>
@@ -927,6 +928,7 @@ export class LabelMePanel {
                 <!-- Modal for Color Picker -->
                 <div id="colorPickerModal" class="modal">
                     <div class="modal-content color-picker-content">
+                        <button class="modal-close" data-modal-close="colorPickerModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3>Choose Color</h3>
                         <div class="color-palette"></div>
                         <div class="custom-color-input">
@@ -943,6 +945,7 @@ export class LabelMePanel {
                 <!-- Modal for ONNX Batch Inference -->
                 <div id="onnxInferModal" class="modal">
                     <div class="modal-content onnx-infer-content">
+                        <button class="modal-close" data-modal-close="onnxInferModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> ONNX Batch Inference</h3>
                         <div class="onnx-note">Output: polygon only</div>
                         <div class="onnx-form-group">
@@ -1003,6 +1006,7 @@ export class LabelMePanel {
                 <!-- Modal for SAM AI Service Config -->
                 <div id="samConfigModal" class="modal">
                     <div class="modal-content onnx-infer-content">
+                        <button class="modal-close" data-modal-close="samConfigModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> SAM AI Annotation</h3>
                         <div class="onnx-note">Configure SAM service for interactive annotation</div>
                         <div class="onnx-form-group">

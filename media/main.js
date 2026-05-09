@@ -3916,6 +3916,21 @@ function cancelLabelInput() {
 
 modalCancelBtn.onclick = cancelLabelInput;
 
+// Wire all modal close (×) buttons — each routes to its modal's existing Cancel handler
+document.querySelectorAll('.modal-close').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        const modalId = btn.getAttribute('data-modal-close');
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        const cancelBtn = modal.querySelector('[id$="CancelBtn"]');
+        if (cancelBtn) {
+            cancelBtn.click();
+        } else {
+            modal.style.display = 'none';
+        }
+    });
+});
+
 // 在labelInput上监听Enter键
 labelInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
