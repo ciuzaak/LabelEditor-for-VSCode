@@ -25,7 +25,7 @@ const TIPS = {
     'mode.rectangle': { title: 'Rectangle Mode', desc: 'Drag to draw an axis-aligned rectangle.', shortcut: 'R' },
     'mode.line':      { title: 'Line Mode', desc: 'Click two points to draw a line.', shortcut: 'L' },
     'mode.point':     { title: 'Point Mode', desc: 'Click to place a single annotation point.', shortcut: 'O' },
-    'mode.sam':       { title: 'SAM AI Mode', desc: 'Use the SAM service to generate a mask from prompts. Left-click adds a positive point; right-click adds a negative point. Hold Shift to switch to the prompt eraser.', shortcut: 'I' },
+    'mode.sam':       { title: 'SAM AI Mode', desc: 'Use the SAM service to generate a mask. Click to add a positive point; Shift-click to add a negative point once a positive exists, or to switch to the prompt eraser before the first positive.', shortcut: 'I' },
 
     // Sidebar action buttons
     'actions.settings': { title: 'Settings', desc: 'Open theme, view, annotation style, and image adjustment controls.' },
