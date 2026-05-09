@@ -732,6 +732,17 @@ export class LabelMePanel {
             vscode.Uri.joinPath(this._extensionUri, 'media', 'notifyBus.js')
         );
 
+        // Rich tooltip (pure helpers + dictionary + DOM wrapper, must load before main.js)
+        const tipsDataUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'tipsData.js')
+        );
+        const tooltipHelpersUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'tooltipHelpers.js')
+        );
+        const tooltipUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'tooltip.js')
+        );
+
         // Read CSS file content and inline it to prevent race condition on Windows
         // where JS executes before CSS finishes loading via external <link>, causing
         // layout chaos (zero container dimensions, unstyled dropdowns visible, etc.)
@@ -1103,6 +1114,9 @@ export class LabelMePanel {
                 <script src="${mergeHelpersUri}"></script>
                 <script src="${notifyHelpersUri}"></script>
                 <script src="${notifyBusUri}"></script>
+                <script src="${tipsDataUri}"></script>
+                <script src="${tooltipHelpersUri}"></script>
+                <script src="${tooltipUri}"></script>
                 <script src="${scriptUri}"></script>
             </body>
             </html>`;

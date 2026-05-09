@@ -11,6 +11,13 @@ const statusSpan = document.getElementById('status');
 if (window.notifyBus) {
     window.notifyBus.attach({ statusEl: statusSpan });
 }
+
+// Attach the rich tooltip to every static [data-tip-id] element. attach is
+// idempotent (skips already-bound nodes), so it is safe to re-call after
+// dynamic renders.
+if (window.tooltip && window.TIPS) {
+    window.tooltip.attach(document, window.TIPS);
+}
 const shapeList = document.getElementById('shapeList');
 const labelModal = document.getElementById('labelModal');
 const labelInput = document.getElementById('labelInput');
