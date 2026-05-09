@@ -5216,11 +5216,15 @@ if (onnxInferModal) {
     });
 }
 
-// Close sidebar dropdowns when clicking outside
+// Close sidebar dropdowns when clicking outside (uses popoverDismiss helper —
+// .contains() correctly accounts for SVG icons nested inside the trigger button)
 document.addEventListener('click', (e) => {
+    const helpers = (typeof window !== 'undefined') ? window.LabelEditorHelpers : null;
+    const dismiss = helpers ? helpers.shouldDismissPopover : null;
+    if (!dismiss) return;
     // Settings dropdown
     if (settingsMenuDropdown && settingsMenuDropdown.style.display !== 'none') {
-        if (!settingsMenuDropdown.contains(e.target) && e.target !== settingsMenuBtn) {
+        if (dismiss(e.target, settingsMenuDropdown, settingsMenuBtn)) {
             settingsMenuDropdown.style.display = 'none';
             const state = vscode.getState() || {};
             state.settingsMenuExpanded = false;
@@ -5229,7 +5233,7 @@ document.addEventListener('click', (e) => {
     }
     // Tools dropdown
     if (toolsMenuDropdown && toolsMenuDropdown.style.display !== 'none') {
-        if (!toolsMenuDropdown.contains(e.target) && e.target !== toolsMenuBtn) {
+        if (dismiss(e.target, toolsMenuDropdown, toolsMenuBtn)) {
             toolsMenuDropdown.style.display = 'none';
         }
     }

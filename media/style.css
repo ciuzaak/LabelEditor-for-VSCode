@@ -811,12 +811,29 @@ textarea { resize: vertical; min-height: 36px; max-height: 120px; }
 .advanced-options-btn:hover { opacity: 1; }
 
 .sidebar-dropdown {
-    background-color: var(--color-bg-tertiary);
-    border: 1px solid var(--color-border-secondary);
-    border-radius: 4px;
-    padding: 4px 0;
-    margin-top: 4px;
-    box-shadow: 0 2px 8px var(--color-shadow);
+    position: absolute;
+    top: calc(100% + 6px);
+    right: 0;
+    min-width: 240px;
+    background: var(--color-bg-popover);
+    backdrop-filter: var(--blur-popover);
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    padding: var(--space-2);
+    z-index: 100;
+    animation: popover-in var(--dur-fast) var(--ease-standard);
+}
+.sidebar-dropdown::before {
+    content: "";
+    position: absolute;
+    top: -5px; right: 12px;
+    width: 10px; height: 10px;
+    background: inherit;
+    backdrop-filter: inherit;
+    border-left:  0.5px solid var(--color-border-secondary);
+    border-top:   0.5px solid var(--color-border-secondary);
+    transform: rotate(45deg);
 }
 
 .slider-control {
@@ -1019,14 +1036,18 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     text-align: right;
 }
 
-/* Sidebar Toolbar */
+/* Sidebar Toolbar — anchor for absolute popover */
 .sidebar-toolbar {
+    position: relative;
     padding: var(--space-2);
     border-bottom: 0.5px solid var(--color-border);
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
 }
+/* Allow popover to overflow without being clipped */
+.sidebar-config-section { overflow: visible; }
+.sidebar { overflow: visible; }
 
 /* Sidebar Dropdown Menu */
 .sidebar-dropdown .theme-control,
