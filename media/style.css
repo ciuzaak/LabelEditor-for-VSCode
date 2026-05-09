@@ -64,6 +64,9 @@
                 0 0 0 0.5px var(--color-border-secondary);
     --shadow-modal: 0 20px 60px rgba(0,0,0,0.45),
                     0 0 0 0.5px var(--color-border-secondary);
+    /* color-mix() needs Chrome 111+. Webviews on VS Code <1.85 fall back
+       to the static rgba — visually similar to the accent color at 35%. */
+    --shadow-focus: 0 0 0 3px rgba(0, 122, 204, 0.35);
     --shadow-focus: 0 0 0 3px color-mix(in srgb,
                                         var(--color-accent) 35%,
                                         transparent);
@@ -1179,6 +1182,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .image-browser-item:hover { background: var(--color-bg-hover); }
 
 .image-browser-item.active {
+    /* color-mix() needs Chrome 111+. Older webviews fall back to the
+       theme's existing active-row token. */
+    background: var(--color-bg-active);
     background: color-mix(in srgb, var(--color-accent) 14%, transparent);
     border-left-color: var(--color-accent);
 }
