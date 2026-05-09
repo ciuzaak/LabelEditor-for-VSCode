@@ -5969,6 +5969,10 @@ if (searchImagesBtn && searchInputContainer && searchInput) {
 let searchDebounceTimer = null;
 if (searchInput) {
     searchInput.oninput = () => {
+        // Toggle inline clear button visibility
+        if (searchCloseBtn) {
+            searchCloseBtn.classList.toggle('visible', searchInput.value.length > 0);
+        }
         // Debounce input to avoid excessive filtering
         if (searchDebounceTimer) {
             clearTimeout(searchDebounceTimer);
@@ -5984,17 +5988,19 @@ if (searchInput) {
             // Hide search on Escape
             searchInputContainer.style.display = 'none';
             searchInput.value = '';
+            if (searchCloseBtn) searchCloseBtn.classList.remove('visible');
             filterImages('');
         }
     };
 }
 
-// Search close button - hide search input and clear filter
+// Inline clear button — clears text but keeps the search field open (macOS pattern)
 if (searchCloseBtn && searchInputContainer && searchInput) {
     searchCloseBtn.onclick = () => {
-        searchInputContainer.style.display = 'none';
         searchInput.value = '';
+        searchCloseBtn.classList.remove('visible');
         filterImages('');
+        searchInput.focus();
     };
 }
 

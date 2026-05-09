@@ -1137,29 +1137,9 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .search-input-container {
     display: flex;
     align-items: center;
-    padding: 8px 10px;
-    border-bottom: 1px solid var(--color-border);
-    gap: 5px;
+    padding: var(--space-2) var(--space-3);
+    border-bottom: 0.5px solid var(--color-border);
     flex-shrink: 0;
-}
-
-.search-input-container input { flex: 1; padding: 4px 8px; font-size: var(--font-12); margin: 0; }
-
-.search-close-btn {
-    background: none;
-    border: none;
-    font-size: 12px;
-    cursor: pointer;
-    padding: 2px 6px;
-    margin: 0;
-    color: var(--color-text-secondary);
-    opacity: 0.7;
-    transition: opacity 0.2s;
-}
-
-.search-close-btn:hover {
-    opacity: 1;
-    color: var(--color-text-primary);
 }
 
 .image-browser-list {
@@ -1363,6 +1343,47 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     padding: 0 4px;
     border-bottom: 1px solid var(--color-border);
 }
+
+/* macOS-style search field — leading icon + inline clear when non-empty */
+.search-field {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1;
+}
+.search-field__icon {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--color-text-secondary);
+    pointer-events: none;
+}
+.search-field input[type="search"] {
+    flex: 1;
+    padding-left: 28px;
+    padding-right: 28px;
+    margin: 0;
+    width: 100%;
+}
+.search-field__clear {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px; height: 20px;
+    padding: 2px;
+    color: var(--color-text-secondary);
+    background: transparent;
+    border: none;
+    border-radius: var(--radius-xs);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+.search-field__clear.visible { display: inline-flex; }
+.search-field__clear:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
 
 /* Modal close (×) button — top-right of every modal */
 .modal-close {

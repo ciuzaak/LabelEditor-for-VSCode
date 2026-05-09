@@ -778,8 +778,11 @@ export class LabelMePanel {
                             <button id="refreshImagesBtn" class="btn btn-icon header-btn" title="Refresh Image List"><svg class="icon" aria-hidden="true"><use href="#icon-refresh-cw"/></svg></button>
                         </div>
                         <div id="searchInputContainer" class="search-input-container" style="display: none;">
-                            <input type="text" id="searchInput" placeholder="Search images..." />
-                            <button id="searchCloseBtn" class="btn btn-icon search-close-btn" title="Close Search"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                            <div class="search-field">
+                                <svg class="icon icon-sm search-field__icon" aria-hidden="true"><use href="#icon-search"/></svg>
+                                <input type="search" id="searchInput" placeholder="Search images…" />
+                                <button id="searchCloseBtn" class="search-field__clear" aria-label="Clear search"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                            </div>
                         </div>
                         <ul id="imageBrowserList" class="image-browser-list"></ul>
                     </div>
