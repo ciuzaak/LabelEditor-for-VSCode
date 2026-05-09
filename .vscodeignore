@@ -16,3 +16,5 @@ package-lock.json
 !README.md
 !CHANGELOG.md
 docs/**
+.claude/**
+*.log

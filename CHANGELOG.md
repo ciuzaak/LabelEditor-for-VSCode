@@ -2,6 +2,20 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.16.0] - 2026-05-09
+
+### Added
+- **In-Webview Notification Bus**: Non-actionable notifications (saves, refreshes, exports, ONNX/SAM startup, validation errors) now appear inline in the toolbar status area instead of as native VS Code popups, so they no longer pile up in the corner. Severity-aware (info / success / warn / error) with minimum residency so an error cannot be overwritten before the user sees it. Persistent state like `SAM Ready` survives transient interruptions and restores when the transient expires. Native dialogs are reserved for prompts that need a Save / Discard / Cancel decision.
+- **Rich Hover Tooltips on Every Control**: Every interactive control — toolbar buttons, mode toggles, sidebar actions, settings sliders, theme picker, image adjustment, label and instance row controls, image-browser rows, modal form fields, and the shape context menu — now shows a rich tooltip with title, description, and (where applicable) keyboard shortcut. 500 ms hover delay; clicking a control no longer surfaces the tip; keyboard Tab navigation still gets immediate tooltips for accessibility. Eraser gesture (Shift-click) is documented in every drawing-mode tip.
+
+### Changed
+- **macOS-Style UI Refresh**: Comprehensive visual refresh — emoji icons replaced with inline SVG icons, toolbar / sidebar / modals restyled with macOS design tokens (`--space-*`, `--font-*`, `--shadow-*`, `--radius-*`, `--dur-*`), unified `.btn`, `.btn-icon`, `.btn-primary`, and `.segmented-*` atoms across mode toggles, theme picker, channel selector, and radio groups. Modals gain a close (×) button, blur backdrop, and animation. Search field uses leading-icon / inline-clear macOS pattern. Settings and Tools dropdowns are now click-outside-dismissable popovers with arrows. Labels and Instances sidebar sections gain dedicated header rows with right-aligned counts.
+- **Status-Bar Severity Colors**: The `#status` element gains four explicit severity colors via existing theme tokens (`--color-text-secondary` / `--color-success` / `--color-warning` / `--color-danger`).
+
+### Fixed
+- **Color-Picker Listener Leak**: `showColorPicker` rebound the dblclick handler on every open without removing the previous one, so opening the picker N times left N anonymous listeners on the palette element.
+- **Older VS Code Webview Compatibility**: CSS `color-mix()` declarations (focus ring, active image-browser row) now fall back to a static color so older webview Chromium (VS Code <1.85) renders the focus ring and active-row background instead of dropping them.
+
 ## [0.15.0] - 2026-05-08
 
 ### Added

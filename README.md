@@ -146,6 +146,21 @@ A VS Code extension for annotating images with polygon, rectangle, line, and poi
 - **RGB Channel Selection**: Inspect a single color channel as grayscale (R / G / B) in the ⚙️ Image Adjustment group; lock to preserve across image switches
 - **CLAHE (Contrast Limited Adaptive Histogram Equalization)**: Brighten low-contrast images without color distortion (luminance-only YCbCr); explicit Off/On toggle, clip-limit slider, independent lock
 
+### macOS-Style UI Refresh (New in v0.16.0)
+- Toolbar, sidebar, modals, and dropdowns restyled with macOS design tokens — SVG icons replace emoji glyphs, blur-backdrop modals with close (×) button, click-outside-dismiss popovers for the Settings and Tools menus
+- Compact `.btn` / `.btn-icon` / `.btn-primary` / `.segmented-*` atoms across mode toggles, theme picker, channel selector, and radio groups
+- macOS-style search field with leading icon and inline clear button
+
+### In-Webview Notifications (New in v0.16.0)
+- Non-actionable messages (saves, refreshes, exports, ONNX/SAM startup, validation errors) appear inline in the toolbar status area instead of stacking as native VS Code popups; severity-aware colors (info / success / warn / error) with minimum residency so errors are not overwritten before you read them
+- Persistent state like `SAM Ready` survives transient interruptions and is restored automatically
+- Native dialogs are reserved for prompts that need a Save / Discard / Cancel decision
+
+### Discoverability: Rich Hover Tooltips (New in v0.16.0)
+- Every interactive control — buttons, sliders, radios, list-row actions, modal form fields — has a rich tooltip with title, description, and (where applicable) keyboard shortcut
+- 500 ms hover delay; clicking does not pop a tooltip; keyboard `Tab` still gets immediate tooltips for accessibility
+- Eraser gesture (Shift-click) is documented in every drawing-mode tip
+
 ## 📦 Installation
 
 ### From OpenVSX
