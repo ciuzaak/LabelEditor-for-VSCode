@@ -422,6 +422,47 @@ button:focus-visible { outline: none; }
 .btn.dirty, .sidebar-icon-btn.dirty { background: var(--color-accent); color: #fff;
                                        border-color: transparent; }
 
+/* ---------- segmented control (mode/theme/onnx-radio/sidebar-actions) ---------- */
+.segmented-group {
+    display: inline-flex;
+    background: var(--color-bg-tertiary);
+    border-radius: var(--radius-md);
+    padding: 2px;
+    gap: 2px;
+    box-shadow: inset 0 0 0 0.5px var(--color-border);
+}
+.segmented-item {
+    flex: 1;
+    appearance: none;
+    background: transparent;
+    border: none;
+    color: var(--color-text-primary);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    font: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    transition: background var(--dur-fast) var(--ease-standard),
+                color var(--dur-fast) var(--ease-standard);
+}
+.segmented-item:hover  { background: var(--color-bg-hover); }
+.segmented-item.active,
+.segmented-item.locked {
+    background: var(--color-bg-input);
+    box-shadow: var(--shadow-2);
+    color: var(--color-text-primary);
+}
+.segmented-group > label.onnx-radio:has(input:checked) {
+    background: var(--color-accent);
+    color: #fff;
+    box-shadow: var(--shadow-2);
+}
+.segmented-item:disabled { opacity: 0.4; cursor: default; background: transparent;
+                            box-shadow: none; }
+
 .canvas-container {
     flex: 1;
     position: relative;
@@ -867,38 +908,6 @@ canvas {
     margin-bottom: 4px;
 }
 
-.theme-toggle-group {
-    display: flex;
-    gap: 0;
-    border: 1px solid var(--color-border-input);
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-.theme-btn {
-    padding: 4px 8px;
-    font-size: 14px;
-    margin: 0;
-    background-color: var(--color-bg-tertiary);
-    border: none;
-    border-right: 1px solid var(--color-border-input);
-    cursor: pointer;
-    flex: 1;
-    text-align: center;
-}
-
-.theme-btn:last-child {
-    border-right: none;
-}
-
-.theme-btn:hover {
-    background-color: var(--color-bg-input);
-}
-
-.theme-btn.active {
-    background-color: var(--color-accent);
-    color: white;
-}
 
 /* Zoom Toggle Control */
 .zoom-control {
@@ -1064,109 +1073,13 @@ canvas {
     text-align: right;
 }
 
-/* Mode Toggle Buttons */
-.mode-toggle-group {
-    display: flex;
-    gap: 0;
-    border: 1px solid var(--color-border-input);
-    border-radius: 3px;
-    overflow: hidden;
-    flex: 1;
-}
-
-.mode-btn {
-    padding: 4px 8px;
-    font-size: 14px;
-    margin: 0;
-    background-color: var(--color-bg-tertiary);
-    border: none;
-    border-right: 1px solid var(--color-border-input);
-    cursor: pointer;
-    flex: 1;
-    text-align: center;
-}
-
-.mode-btn:last-child {
-    border-right: none;
-}
-
-.mode-btn:hover {
-    background-color: var(--color-bg-input);
-}
-
-.mode-btn.active {
-    background-color: var(--color-accent);
-    color: white;
-}
-
 /* Sidebar Toolbar */
 .sidebar-toolbar {
-    padding: 8px;
-    border-bottom: 1px solid var(--color-border);
+    padding: var(--space-2);
+    border-bottom: 0.5px solid var(--color-border);
     display: flex;
     flex-direction: column;
-    gap: 8px;
-}
-
-.sidebar-actions {
-    display: flex;
-    gap: 0;
-    border: 1px solid var(--color-border-input);
-    border-radius: 3px;
-    overflow: hidden;
-}
-
-.sidebar-icon-btn {
-    padding: 4px 8px;
-    font-size: 14px;
-    background-color: var(--color-bg-tertiary);
-    border: none;
-    border-right: 1px solid var(--color-border-input);
-    cursor: pointer;
-    flex: 1;
-    text-align: center;
-    margin: 0;
-    /* Override default button margin */
-    border-radius: 0;
-    /* Reset radius inside group */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.sidebar-icon-btn:last-child {
-    border-right: none;
-}
-
-.sidebar-icon-btn:hover {
-    background-color: var(--color-bg-input);
-}
-
-.sidebar-icon-btn:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    background-color: var(--color-bg-tertiary);
-    color: var(--color-text-muted);
-}
-
-.sidebar-icon-btn:disabled:hover {
-    background-color: var(--color-bg-tertiary);
-}
-
-/* Sidebar specific dirty state */
-.sidebar-icon-btn.dirty {
-    background-color: var(--color-accent);
-    color: white;
-}
-
-.sidebar-icon-btn.dirty:hover {
-    background-color: var(--color-accent);
-    opacity: 0.9;
-}
-
-.sidebar-icon-btn.locked {
-    background-color: var(--color-accent);
-    color: white;
+    gap: var(--space-2);
 }
 
 /* Sidebar Dropdown Menu */
@@ -1451,44 +1364,27 @@ canvas {
     background-color: var(--color-bg-input);
 }
 
-.onnx-radio-group {
-    display: flex;
-    gap: 0;
-    border: 1px solid var(--color-border-input);
-    border-radius: 3px;
-    overflow: hidden;
-}
-
+/* onnx-radio: input hidden, label is the segmented item */
 .onnx-radio {
     flex: 1;
     text-align: center;
-    padding: 5px 8px;
-    font-size: 12px;
+    padding: 4px 10px;
+    font-size: var(--font-12);
     cursor: pointer;
-    background-color: var(--color-bg-tertiary);
-    border-right: 1px solid var(--color-border-input);
     margin: 0;
+    border-radius: var(--radius-sm);
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: var(--space-1);
+    color: var(--color-text-primary);
+    transition: background var(--dur-fast), color var(--dur-fast);
 }
-
-.onnx-radio:last-child {
-    border-right: none;
-}
-
 .onnx-radio:hover {
-    background-color: var(--color-bg-input);
+    background: var(--color-bg-hover);
 }
-
 .onnx-radio input[type="radio"] {
     display: none;
-}
-
-.onnx-radio:has(input:checked) {
-    background-color: var(--color-accent);
-    color: white;
 }
 
 .onnx-image-count {

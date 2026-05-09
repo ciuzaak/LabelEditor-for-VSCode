@@ -809,26 +809,26 @@ export class LabelMePanel {
                     <div class="sidebar" id="sidebar">
                         <div class="sidebar-config-section">
                             <div class="sidebar-toolbar">
-                                <div class="mode-toggle-group">
-                                    <button id="viewModeBtn" class="mode-btn active" title="View Mode (V)"><svg class="icon" aria-hidden="true"><use href="#icon-eye"/></svg></button>
-                                    <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)"><svg class="icon" aria-hidden="true"><use href="#icon-pentagon"/></svg></button>
-                                    <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)"><svg class="icon" aria-hidden="true"><use href="#icon-square"/></svg></button>
-                                    <button id="lineModeBtn" class="mode-btn" title="Line Mode (L)"><svg class="icon" aria-hidden="true"><use href="#icon-slash"/></svg></button>
-                                    <button id="pointModeBtn" class="mode-btn" title="Point Mode (O)"><svg class="icon" aria-hidden="true"><use href="#icon-dot"/></svg></button>
-                                    <button id="samModeBtn" class="mode-btn" title="SAM AI Mode (I)"><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg></button>
+                                <div class="mode-toggle-group segmented-group">
+                                    <button id="viewModeBtn" class="mode-btn segmented-item active" title="View Mode (V)"><svg class="icon" aria-hidden="true"><use href="#icon-eye"/></svg></button>
+                                    <button id="polygonModeBtn" class="mode-btn segmented-item" title="Polygon Mode (P)"><svg class="icon" aria-hidden="true"><use href="#icon-pentagon"/></svg></button>
+                                    <button id="rectangleModeBtn" class="mode-btn segmented-item" title="Rectangle Mode (R)"><svg class="icon" aria-hidden="true"><use href="#icon-square"/></svg></button>
+                                    <button id="lineModeBtn" class="mode-btn segmented-item" title="Line Mode (L)"><svg class="icon" aria-hidden="true"><use href="#icon-slash"/></svg></button>
+                                    <button id="pointModeBtn" class="mode-btn segmented-item" title="Point Mode (O)"><svg class="icon" aria-hidden="true"><use href="#icon-dot"/></svg></button>
+                                    <button id="samModeBtn" class="mode-btn segmented-item" title="SAM AI Mode (I)"><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg></button>
                                 </div>
-                                <div class="sidebar-actions">
-                                    <button id="settingsMenuBtn" class="sidebar-icon-btn" title="Settings"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg></button>
-                                    <button id="toolsMenuBtn" class="sidebar-icon-btn" title="Tools"><svg class="icon" aria-hidden="true"><use href="#icon-wrench"/></svg></button>
-                                    <button id="saveBtn" class="sidebar-icon-btn" title="Save (Ctrl+S)" disabled><svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg></button>
+                                <div class="sidebar-actions segmented-group">
+                                    <button id="settingsMenuBtn" class="sidebar-icon-btn segmented-item" title="Settings"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg></button>
+                                    <button id="toolsMenuBtn" class="sidebar-icon-btn segmented-item" title="Tools"><svg class="icon" aria-hidden="true"><use href="#icon-wrench"/></svg></button>
+                                    <button id="saveBtn" class="sidebar-icon-btn segmented-item" title="Save (Ctrl+S)" disabled><svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg></button>
                                 </div>
                                 <div id="settingsMenuDropdown" class="sidebar-dropdown" style="display: none;">
                                     <div class="theme-control">
                                         <label>Theme</label>
-                                        <div class="theme-toggle-group">
-                                            <button id="themeLightBtn" class="theme-btn" title="Light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg></button>
-                                            <button id="themeDarkBtn" class="theme-btn" title="Dark"><svg class="icon" aria-hidden="true"><use href="#icon-moon"/></svg></button>
-                                            <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code"><svg class="icon" aria-hidden="true"><use href="#icon-circle-half"/></svg></button>
+                                        <div class="theme-toggle-group segmented-group">
+                                            <button id="themeLightBtn" class="theme-btn segmented-item" title="Light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg></button>
+                                            <button id="themeDarkBtn" class="theme-btn segmented-item" title="Dark"><svg class="icon" aria-hidden="true"><use href="#icon-moon"/></svg></button>
+                                            <button id="themeAutoBtn" class="theme-btn segmented-item" title="Follow VS Code"><svg class="icon" aria-hidden="true"><use href="#icon-circle-half"/></svg></button>
                                         </div>
                                     </div>
                                     <div class="zoom-control">
@@ -852,7 +852,7 @@ export class LabelMePanel {
                                             <label>Channel:</label>
                                             <button id="channelLockBtn" class="btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
-                                        <div class="onnx-radio-group">
+                                        <div class="onnx-radio-group segmented-group">
                                             <label class="onnx-radio"><input type="radio" name="imageChannel" value="rgb" checked /> RGB</label>
                                             <label class="onnx-radio"><input type="radio" name="imageChannel" value="r" /> R</label>
                                             <label class="onnx-radio"><input type="radio" name="imageChannel" value="g" /> G</label>
@@ -957,7 +957,7 @@ export class LabelMePanel {
                         </div>
                         <div class="onnx-form-group">
                             <label>Device</label>
-                            <div class="onnx-radio-group">
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxDevice" value="cpu" checked /> CPU</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxDevice" value="gpu" /> GPU</label>
                             </div>
@@ -968,21 +968,21 @@ export class LabelMePanel {
                         </div>
                         <div class="onnx-form-group">
                             <label>Color Format</label>
-                            <div class="onnx-radio-group">
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxColor" value="rgb" checked /> RGB</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxColor" value="bgr" /> BGR</label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label>Scope</label>
-                            <div class="onnx-radio-group">
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxScope" value="all" checked /> All Images</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxScope" value="current" /> Current Image</label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label>Existing Annotations</label>
-                            <div class="onnx-radio-group">
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxMode" value="skip" checked /> Skip</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxMode" value="merge" /> Merge</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxMode" value="overwrite" /> Overwrite</label>
@@ -1017,7 +1017,7 @@ export class LabelMePanel {
                         </div>
                         <div class="onnx-form-group">
                             <label>Device</label>
-                            <div class="onnx-radio-group">
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="samDevice" value="cpu" checked /> CPU</label>
                                 <label class="onnx-radio"><input type="radio" name="samDevice" value="gpu" /> GPU</label>
                             </div>
@@ -1028,7 +1028,7 @@ export class LabelMePanel {
                         </div>
                         <div class="onnx-form-group">
                             <label>Encode Mode <span class="onnx-hint" title='Full Image: encode the entire image (default, works well for large targets).&#10;&#10;Local Crop: encode only the currently visible viewport region when zoomed in. Better accuracy for small targets in large images. Falls back to full image when not zoomed in.'><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
-                            <div class="onnx-radio-group">
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="full" checked /> Full Image</label>
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="local" /> Local Crop</label>
                             </div>
