@@ -10,7 +10,7 @@
         return;
     }
 
-    const SHOW_DELAY_MS = 600;
+    const SHOW_DELAY_MS = 500;
     const PAD = 8;
 
     let tipsDict = null;
@@ -82,14 +82,24 @@
 
     function onLeave() { hide(); }
 
+    // Pointer-driven focus (clicking a button) should NOT surface a tooltip —
+    // the user already knows what they clicked. Only show on focus when the
+    // browser flags it as keyboard-driven via :focus-visible.
     function onFocus(e) {
         const el = e.currentTarget;
+        if (typeof el.matches === 'function' && !el.matches(':focus-visible')) return;
         const tip = tipFor(el);
         if (!tip) return;
         show(el, tip);
     }
 
     function onBlur() { hide(); }
+
+    // Cancel any pending show + hide the visible tip when the user starts a
+    // click. Fires on mousedown (capture is unnecessary here — bubbling on
+    // the element itself is enough) so the tip is gone before the click's
+    // focus lands.
+    function onMouseDown() { hide(); }
 
     function attach(rootEl, tips) {
         if (tips) tipsDict = tips;
@@ -102,6 +112,7 @@
             if (n.hasAttribute('title')) n.removeAttribute('title');
             n.addEventListener('mouseenter', onEnter);
             n.addEventListener('mouseleave', onLeave);
+            n.addEventListener('mousedown', onMouseDown);
             n.addEventListener('focus', onFocus);
             n.addEventListener('blur', onBlur);
         }
