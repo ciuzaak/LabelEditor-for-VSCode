@@ -17,7 +17,7 @@ const TIPS = {
     'nav.imageInfo':       { title: 'Image Info', desc: 'Show file size, dimensions, bit depth, and DPI.' },
     'browser.search':      { title: 'Search Images', desc: 'Filter the image list by filename.' },
     'browser.refresh':     { title: 'Refresh List', desc: 'Rescan the workspace for image files.' },
-    'browser.searchClose': { title: 'Close Search', desc: 'Clear the filter and close the search box.' },
+    'browser.searchClose': { title: 'Clear Search', desc: 'Clear the search filter and keep focus in the search field.' },
 
     // Drawing modes
     'mode.view':      { title: 'View Mode', desc: 'Pan and select shapes. Drag on empty space to box-select; hold Shift while dragging to add to the selection.', shortcut: 'V' },
