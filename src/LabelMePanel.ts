@@ -686,6 +686,14 @@ export class LabelMePanel {
         const mergeHelpersPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'mergeShapesHelpers.js');
         const mergeHelpersUri = webview.asWebviewUri(mergeHelpersPath);
 
+        // Notification bus (pure helpers + DOM wrapper, must load before main.js)
+        const notifyHelpersUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'notifyBusHelpers.js')
+        );
+        const notifyBusUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'notifyBus.js')
+        );
+
         // Read CSS file content and inline it to prevent race condition on Windows
         // where JS executes before CSS finishes loading via external <link>, causing
         // layout chaos (zero container dimensions, unstyled dropdowns visible, etc.)
@@ -1055,6 +1063,8 @@ export class LabelMePanel {
                 <script src="${polyClipUri}"></script>
                 <script src="${samHelpersUri}"></script>
                 <script src="${mergeHelpersUri}"></script>
+                <script src="${notifyHelpersUri}"></script>
+                <script src="${notifyBusUri}"></script>
                 <script src="${scriptUri}"></script>
             </body>
             </html>`;
