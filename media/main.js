@@ -6820,16 +6820,6 @@ async function samCheckAndEnterMode() {
     }
 }
 
-function samEnsureEncoded() {
-    if (!samServiceRunning) return;
-    const currentPath = currentAbsoluteImagePath || imagePath;
-    const crop = (samEncodeMode === 'local') ? samGetVisibleCrop() : null;
-    if (samCurrentImagePath !== currentPath ||
-        JSON.stringify(samCachedCrop) !== JSON.stringify(crop)) {
-        samEncode(currentPath, crop);
-    }
-}
-
 function updateShiftFeedback() {
     if (!shiftPressed || currentMode === 'view') {
         if (window.notifyBus) window.notifyBus.clearSticky('shift.feedback');
