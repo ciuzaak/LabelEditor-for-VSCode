@@ -841,7 +841,7 @@ export class LabelMePanel {
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
-                                            <button id="zoomLockBtn" class="btn-icon zoom-lock-btn" title="Lock: Keep zoom and position when switching images"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
+                                            <button id="zoomLockBtn" class="btn btn-icon zoom-lock-btn" title="Lock: Keep zoom and position when switching images"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                     </div>
                                     <div class="settings-group-header">Annotation Style</div>
@@ -857,7 +857,7 @@ export class LabelMePanel {
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Channel:</label>
-                                            <button id="channelLockBtn" class="btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
+                                            <button id="channelLockBtn" class="btn btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <div class="onnx-radio-group segmented-group">
                                             <label class="onnx-radio"><input type="radio" name="imageChannel" value="rgb" checked /> RGB</label>
@@ -869,14 +869,14 @@ export class LabelMePanel {
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Brightness: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" title="Reset to default"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
-                                            <button id="brightnessLockBtn" class="btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
+                                            <button id="brightnessLockBtn" class="btn btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <input type="range" id="brightnessSlider" min="10" max="300" value="100" step="5">
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Contrast: <span id="contrastValue">100</span>% <span id="contrastResetBtn" class="slider-reset-btn" title="Reset to default"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
-                                            <button id="contrastLockBtn" class="btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
+                                            <button id="contrastLockBtn" class="btn btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <input type="range" id="contrastSlider" min="10" max="300" value="100" step="5">
                                     </div>
@@ -885,7 +885,7 @@ export class LabelMePanel {
                                             <label>CLAHE:</label>
                                             <button id="claheToggleBtn" class="channel-btn" title="Click to enable">Off</button>
                                             <span id="claheResetBtn" class="slider-reset-btn" title="Reset to default"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span>
-                                            <button id="claheLockBtn" class="btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
+                                            <button id="claheLockBtn" class="btn btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <div id="claheControls" style="display: none;">
                                             <div style="font-size: 0.8em; margin-top: 4px;">Clip Limit: <span id="claheClipLimitValue">2.0</span></div>

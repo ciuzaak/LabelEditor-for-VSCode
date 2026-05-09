@@ -6087,6 +6087,10 @@ if (vscodeState && vscodeState.searchQuery) {
     if (searchInput && searchInputContainer) {
         searchInput.value = savedQuery;
         searchInputContainer.style.display = 'flex';
+        // Show inline clear (×) since the restored value is non-empty
+        if (searchCloseBtn && savedQuery.length > 0) {
+            searchCloseBtn.classList.add('visible');
+        }
         // Apply filter immediately (without saving state again initially)
         searchQuery = savedQuery.toLowerCase().trim();
         filteredImages = workspaceImages.filter(img =>
