@@ -4,6 +4,13 @@ const svgOverlay = document.getElementById('svgOverlay');
 const canvasWrapper = document.getElementById('canvasWrapper');
 const saveBtn = document.getElementById('saveBtn');
 const statusSpan = document.getElementById('status');
+
+// Attach the status bus to the same DOM node. notifyBus is the only writer of
+// #status from this point forward; direct statusSpan.textContent writes are
+// intentionally not used.
+if (window.notifyBus) {
+    window.notifyBus.attach({ statusEl: statusSpan });
+}
 const shapeList = document.getElementById('shapeList');
 const labelModal = document.getElementById('labelModal');
 const labelInput = document.getElementById('labelInput');
@@ -116,8 +123,6 @@ let samIsFreshSequence = true;    // True if we are starting a new prompt sequen
 
 // --- Shift feedback state ---
 let shiftPressed = false;
-let prevStatusText = null;       // Status before Shift took over
-let prevStatusColor = null;
 let lastFeedbackText = null;     // What we last wrote, for safe restore
 const ERASER_CURSOR_DATA_URI = 'url("data:image/svg+xml;utf8,' + encodeURIComponent(
     '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'>' +
@@ -715,9 +720,8 @@ if (zoomResetBtn) {
 
 // 图片加载处理函数
 function handleImageLoad() {
-    // Clear any previous error status
-    statusSpan.textContent = "";
-    statusSpan.style.color = "";
+    // Clear the persistent "image error" sticky if present.
+    if (window.notifyBus) window.notifyBus.clearSticky('image.error');
 
     // Apply locked view state if enabled, otherwise fit to screen
     if (lockViewEnabled && lockedViewState) {
@@ -732,8 +736,7 @@ function handleImageLoad() {
 }
 
 function handleImageError() {
-    statusSpan.textContent = "Error loading image";
-    statusSpan.style.color = "red";
+    if (window.notifyBus) window.notifyBus.show('error', 'Error loading image', { sticky: true, key: 'image.error' });
 }
 
 // Initial image load with stale callback protection
@@ -1226,8 +1229,7 @@ function handleImageUpdate(message) {
         isDrawing = false;
         clearSelection();
         editingShapeIndex = -1;
-        statusSpan.textContent = "No images found";
-        statusSpan.style.color = "orange";
+        if (window.notifyBus) window.notifyBus.show('warn', 'No images found');
         draw();
         renderShapeList();
         renderLabelsList();
@@ -1240,9 +1242,8 @@ function handleImageUpdate(message) {
         // Check if this callback is for the current load request
         if (thisLoadId !== currentImageLoadId) return;
 
-        // Clear any previous error status
-        statusSpan.textContent = "";
-        statusSpan.style.color = "";
+        // Clear the persistent "image error" sticky if a previous load failed.
+        if (window.notifyBus) window.notifyBus.clearSticky('image.error');
 
         // Apply locked view state if enabled, otherwise fit to screen
         if (lockViewEnabled && lockedViewState) {
@@ -2461,9 +2462,11 @@ let pendingMergeOutputs = null;  // Array<{ allRect: bool, points: ... }>
 let pendingMergeLabels = null;   // Array<string|null>; null = use modal input
 
 function setMergeStatus(text, color) {
-    if (!statusSpan) return;
-    statusSpan.textContent = text;
-    statusSpan.style.color = color || '';
+    if (!window.notifyBus || !text) return;
+    // Map the legacy (text, color) calls to severity. 'red' / 'orange' map to
+    // error / warn, anything else (including missing color) is info.
+    const level = color === 'red' ? 'error' : (color === 'orange' ? 'warn' : 'info');
+    window.notifyBus.show(level, text);
 }
 
 // Look up the pure merge helpers either as hoisted globals (webview) or via
@@ -4365,7 +4368,7 @@ function confirmColorPicker() {
 
     // 验证颜色格式 - 只接受#XXXXXX格式
     if (!color.startsWith('#') || !/^#[0-9A-Fa-f]{6}$/.test(color)) {
-        vscode.postMessage({ command: 'alert', text: 'Invalid color format. Please use #RRGGBB format (e.g., #FF5733).' });
+        if (window.notifyBus) window.notifyBus.show('error', 'Invalid color format. Please use #RRGGBB format (e.g., #FF5733).');
         return;
     }
 
@@ -5000,7 +5003,7 @@ function exportSvg() {
 
     // Guard: image must be fully loaded so dimensions are available
     if (!img.width || !img.height) {
-        vscode.postMessage({ command: 'alert', text: 'Cannot export SVG: image has not finished loading yet. Please wait and try again.' });
+        if (window.notifyBus) window.notifyBus.show('warn', 'Cannot export SVG: image has not finished loading yet. Please wait and try again.');
         return;
     }
 
@@ -6580,8 +6583,7 @@ async function samEncode(imagePath, crop) {
 
     const doEncode = async () => {
         samIsEncoding = true;
-        statusSpan.textContent = 'SAM Encoding...';
-        statusSpan.style.color = 'orange';
+        window.notifyBus.show('info', 'SAM Encoding…', { sticky: true, key: 'sam.status' });
         try {
             const payload = { image_path: imagePath };
             if (crop) payload.crop = crop;
@@ -6596,15 +6598,14 @@ async function samEncode(imagePath, crop) {
                 samCurrentImagePath = imagePath;
                 samCachedCrop = crop || null;
                 const modeLabel = crop ? 'Local' : 'Full';
-                statusSpan.textContent = `SAM Ready [${modeLabel}] (${data.time_ms || 0}ms)`;
-                statusSpan.style.color = 'limegreen';
+                window.notifyBus.show('success', `SAM Ready [${modeLabel}] (${data.time_ms || 0}ms)`, { sticky: true, key: 'sam.status' });
             } else {
-                statusSpan.textContent = 'SAM Encode Error';
-                statusSpan.style.color = 'red';
+                window.notifyBus.show('error', 'SAM Encode Error');
+                window.notifyBus.clearSticky('sam.status');
             }
         } catch (err) {
-            statusSpan.textContent = 'SAM Service Error';
-            statusSpan.style.color = 'red';
+            window.notifyBus.show('error', 'SAM Service Error');
+            window.notifyBus.clearSticky('sam.status');
         } finally {
             samIsEncoding = false;
             samEncodePromise = null;
@@ -6718,8 +6719,7 @@ async function samDecode() {
                 samMaskContour = data.contour;
             }
             const modeLabel = samCachedCrop ? 'Local' : 'Full';
-            statusSpan.textContent = `SAM Decoded [${modeLabel}] (${data.time_ms || 0}ms)`;
-            statusSpan.style.color = 'limegreen';
+            window.notifyBus.show('success', `SAM Decoded [${modeLabel}] (${data.time_ms || 0}ms)`, { sticky: true, key: 'sam.status' });
             draw();
             // Note: don't call updateShiftFeedback here — samDecode doesn't
             // mutate samPrompts, so feedback content is unchanged. Calling it
@@ -6727,8 +6727,7 @@ async function samDecode() {
         }
     } catch (err) {
         if (requestVersion !== samDecodeVersion) return;
-        statusSpan.textContent = 'SAM Decode Error';
-        statusSpan.style.color = 'red';
+        window.notifyBus.show('error', 'SAM Decode Error');
     } finally {
         samIsDecoding = false;
     }
@@ -6748,8 +6747,7 @@ function samClearState() {
     samCachedCrop = null;
     samCurrentImagePath = null;
     samIsFreshSequence = true;
-    statusSpan.textContent = '';
-    statusSpan.style.color = '';
+    if (window.notifyBus) window.notifyBus.clearSticky('sam.status');
     draw();
     updateShiftFeedback();
 }
@@ -6786,18 +6784,8 @@ function samEnsureEncoded() {
 }
 
 function updateShiftFeedback() {
-    if (shouldRefreshShiftSnapshot(statusSpan.textContent, lastFeedbackText)) {
-        prevStatusText = statusSpan.textContent;
-        prevStatusColor = statusSpan.style.color;
-    }
-
     if (!shiftPressed || currentMode === 'view') {
-        if (shouldRestoreShiftStatus(lastFeedbackText, statusSpan.textContent)) {
-            statusSpan.textContent = prevStatusText ?? '';
-            statusSpan.style.color = prevStatusColor ?? '';
-        }
-        prevStatusText = null;
-        prevStatusColor = null;
+        if (window.notifyBus) window.notifyBus.clearSticky('shift.feedback');
         lastFeedbackText = null;
         // Cursor reset: clear inline style and let the existing mousemove logic re-derive
         currentCursor = null;
@@ -6805,13 +6793,18 @@ function updateShiftFeedback() {
         return;
     }
 
+    // Positional signature: computeShiftFeedback(currentMode, prompts, eraserCursor) → { text, color, cursor }
     const { text, color, cursor } = computeShiftFeedback(currentMode, samPrompts, ERASER_CURSOR_DATA_URI);
 
-    statusSpan.textContent = text;
-    statusSpan.style.color = color;
     canvasWrapper.style.cursor = cursor;
     currentCursor = cursor;
     lastFeedbackText = text;
+
+    // Map the legacy hex colors to severity. #ff4444 is the negative-point hint
+    // (treat as warn — informational caution, not an error), #ff8800 the eraser
+    // hint. Anything else falls back to info.
+    const level = color === '#ff4444' ? 'warn' : (color === '#ff8800' ? 'warn' : 'info');
+    if (window.notifyBus) window.notifyBus.show(level, text, { sticky: true, key: 'shift.feedback' });
 }
 
 function samUndoLastPrompt() {
