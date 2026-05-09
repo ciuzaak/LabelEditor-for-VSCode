@@ -4,6 +4,20 @@ const svgOverlay = document.getElementById('svgOverlay');
 const canvasWrapper = document.getElementById('canvasWrapper');
 const saveBtn = document.getElementById('saveBtn');
 const statusSpan = document.getElementById('status');
+
+// Attach the status bus to the same DOM node. notifyBus is the only writer of
+// #status from this point forward; direct statusSpan.textContent writes are
+// intentionally not used.
+if (window.notifyBus) {
+    window.notifyBus.attach({ statusEl: statusSpan });
+}
+
+// Attach the rich tooltip to every static [data-tip-id] element. attach is
+// idempotent (skips already-bound nodes), so it is safe to re-call after
+// dynamic renders.
+if (window.tooltip && window.TIPS) {
+    window.tooltip.attach(document, window.TIPS);
+}
 const shapeList = document.getElementById('shapeList');
 const labelModal = document.getElementById('labelModal');
 const labelInput = document.getElementById('labelInput');
@@ -116,8 +130,6 @@ let samIsFreshSequence = true;    // True if we are starting a new prompt sequen
 
 // --- Shift feedback state ---
 let shiftPressed = false;
-let prevStatusText = null;       // Status before Shift took over
-let prevStatusColor = null;
 let lastFeedbackText = null;     // What we last wrote, for safe restore
 const ERASER_CURSOR_DATA_URI = 'url("data:image/svg+xml;utf8,' + encodeURIComponent(
     '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'>' +
@@ -484,11 +496,9 @@ function updateZoomUI() {
         if (lockViewEnabled) {
             zoomLockBtn.textContent = '🔒';
             zoomLockBtn.classList.add('locked');
-            zoomLockBtn.title = 'Locked: Keeping zoom and position when switching images. Click to unlock.';
         } else {
             zoomLockBtn.textContent = '🔓';
             zoomLockBtn.classList.remove('locked');
-            zoomLockBtn.title = 'Unlocked: Fit to screen on each image. Click to lock current view.';
         }
     }
 
@@ -715,9 +725,8 @@ if (zoomResetBtn) {
 
 // 图片加载处理函数
 function handleImageLoad() {
-    // Clear any previous error status
-    statusSpan.textContent = "";
-    statusSpan.style.color = "";
+    // Clear the persistent "image error" sticky if present.
+    if (window.notifyBus) window.notifyBus.clearSticky('image.error');
 
     // Apply locked view state if enabled, otherwise fit to screen
     if (lockViewEnabled && lockedViewState) {
@@ -732,8 +741,7 @@ function handleImageLoad() {
 }
 
 function handleImageError() {
-    statusSpan.textContent = "Error loading image";
-    statusSpan.style.color = "red";
+    if (window.notifyBus) window.notifyBus.show('error', 'Error loading image', { sticky: true, key: 'image.error' });
 }
 
 // Initial image load with stale callback protection
@@ -1010,6 +1018,15 @@ canvasContainerObserver.observe(canvasContainer);
 window.addEventListener('message', event => {
     const message = event.data;
     switch (message.command) {
+        case 'notify': {
+            if (!window.notifyBus) break;
+            const level = message.level || 'info';
+            const opts = {};
+            if (message.key) opts.key = message.key;
+            if (message.sticky) opts.sticky = true;
+            window.notifyBus.show(level, message.text || '', opts);
+            break;
+        }
         case 'requestSave':
             saveTriggeredByNavigation = true;
             save();
@@ -1181,11 +1198,10 @@ function handleImageUpdate(message) {
     // Store image metadata for info popup
     currentImageMetadata = message.imageMetadata || null;
 
-    // Update filename display
+    // Update filename display. The tip is supplied by data-tip-id="nav.fileName".
     const fileNameSpan = document.getElementById('fileName');
     if (fileNameSpan) {
         fileNameSpan.textContent = newCurrentImageRelativePath || newImageName;
-        fileNameSpan.title = 'Left click: copy absolute path | Right click: copy filename';
     }
 
     // Update mutable absolute path for copy feature
@@ -1226,8 +1242,7 @@ function handleImageUpdate(message) {
         isDrawing = false;
         clearSelection();
         editingShapeIndex = -1;
-        statusSpan.textContent = "No images found";
-        statusSpan.style.color = "orange";
+        if (window.notifyBus) window.notifyBus.show('warn', 'No images found');
         draw();
         renderShapeList();
         renderLabelsList();
@@ -1240,9 +1255,8 @@ function handleImageUpdate(message) {
         // Check if this callback is for the current load request
         if (thisLoadId !== currentImageLoadId) return;
 
-        // Clear any previous error status
-        statusSpan.textContent = "";
-        statusSpan.style.color = "";
+        // Clear the persistent "image error" sticky if a previous load failed.
+        if (window.notifyBus) window.notifyBus.clearSticky('image.error');
 
         // Apply locked view state if enabled, otherwise fit to screen
         if (lockViewEnabled && lockedViewState) {
@@ -2461,9 +2475,11 @@ let pendingMergeOutputs = null;  // Array<{ allRect: bool, points: ... }>
 let pendingMergeLabels = null;   // Array<string|null>; null = use modal input
 
 function setMergeStatus(text, color) {
-    if (!statusSpan) return;
-    statusSpan.textContent = text;
-    statusSpan.style.color = color || '';
+    if (!window.notifyBus || !text) return;
+    // Map the legacy (text, color) calls to severity. 'red' / 'orange' map to
+    // error / warn, anything else (including missing color) is info.
+    const level = color === 'red' ? 'error' : (color === 'orange' ? 'warn' : 'info');
+    window.notifyBus.show(level, text);
 }
 
 // Look up the pure merge helpers either as hoisted globals (webview) or via
@@ -4003,7 +4019,9 @@ function renderShapeList() {
             const descSpan = document.createElement('span');
             descSpan.className = 'shape-description';
             descSpan.textContent = shape.description;
-            descSpan.title = shape.description;
+            // Runtime data — use data-tip-text so the rich tooltip can show
+            // the full description on hover when the row truncates.
+            descSpan.setAttribute('data-tip-text', shape.description);
             li.appendChild(descSpan);
         }
 
@@ -4031,6 +4049,7 @@ function renderShapeList() {
         const visibleBtn = document.createElement('span');
         visibleBtn.className = 'visible-btn';
         visibleBtn.innerHTML = shape.visible === false ? '&#128065;' : '&#128065;'; // Eye icon
+        visibleBtn.setAttribute('data-tip-id', 'shape.toggleVisible');
         if (shape.visible === false) {
             visibleBtn.classList.add('hidden-shape');
             visibleBtn.style.opacity = '0.5';
@@ -4056,6 +4075,7 @@ function renderShapeList() {
         const editBtn = document.createElement('span');
         editBtn.className = 'edit-btn';
         editBtn.innerHTML = '&#9998;'; // Pencil icon
+        editBtn.setAttribute('data-tip-id', 'shape.editVertices');
         editBtn.onclick = (e) => {
             e.stopPropagation();
             hideShapeContextMenu();
@@ -4070,6 +4090,7 @@ function renderShapeList() {
         const delBtn = document.createElement('span');
         delBtn.className = 'delete-btn';
         delBtn.textContent = '×';
+        delBtn.setAttribute('data-tip-id', 'shape.delete');
         delBtn.onclick = (e) => {
             e.stopPropagation();
             hideShapeContextMenu();
@@ -4090,6 +4111,10 @@ function renderShapeList() {
     // 一次性更新 DOM
     shapeList.innerHTML = '';
     shapeList.appendChild(fragment);
+
+    // Bind rich tooltips to the freshly-rendered per-row controls. attach()
+    // is idempotent (skips already-bound nodes via WeakSet).
+    if (window.tooltip && window.TIPS) window.tooltip.attach(shapeList, window.TIPS);
 
     // 更新 Instances 计数
     const instancesCountEl = document.getElementById('instancesCount');
@@ -4169,7 +4194,7 @@ function renderLabelsList() {
         colorIndicator.className = 'label-color-indicator';
         const colors = getColorsForLabel(label);
         colorIndicator.style.backgroundColor = colors.stroke;
-        colorIndicator.title = 'Click to change color';
+        colorIndicator.setAttribute('data-tip-id', 'label.color');
         colorIndicator.onclick = (e) => {
             e.stopPropagation();
             showColorPicker(label);
@@ -4189,10 +4214,10 @@ function renderLabelsList() {
         const visibilityBtn = document.createElement('span');
         visibilityBtn.className = 'label-visibility-btn';
         visibilityBtn.innerHTML = '&#128065;'; // Eye icon
+        visibilityBtn.setAttribute('data-tip-id', 'label.toggleVisible');
         if (stat.allHidden) {
             visibilityBtn.classList.add('all-hidden');
         }
-        visibilityBtn.title = stat.allHidden ? 'Show all' : 'Hide all';
         visibilityBtn.onclick = (e) => {
             e.stopPropagation();
             toggleLabelVisibility(label);
@@ -4202,7 +4227,7 @@ function renderLabelsList() {
         const resetBtn = document.createElement('span');
         resetBtn.className = 'label-reset-btn';
         resetBtn.innerHTML = '&#8634;'; // Circular arrow icon
-        resetBtn.title = 'Reset color';
+        resetBtn.setAttribute('data-tip-id', 'label.colorReset');
         if (customColors.has(label)) {
             resetBtn.classList.add('visible');
         }
@@ -4221,6 +4246,9 @@ function renderLabelsList() {
 
     labelsList.innerHTML = '';
     labelsList.appendChild(fragment);
+
+    // Bind rich tooltips to the freshly-rendered per-row controls.
+    if (window.tooltip && window.TIPS) window.tooltip.attach(labelsList, window.TIPS);
 
     // 更新 Labels 计数
     const labelsCountEl = document.getElementById('labelsCount');
@@ -4365,7 +4393,7 @@ function confirmColorPicker() {
 
     // 验证颜色格式 - 只接受#XXXXXX格式
     if (!color.startsWith('#') || !/^#[0-9A-Fa-f]{6}$/.test(color)) {
-        vscode.postMessage({ command: 'alert', text: 'Invalid color format. Please use #RRGGBB format (e.g., #FF5733).' });
+        if (window.notifyBus) window.notifyBus.show('error', 'Invalid color format. Please use #RRGGBB format (e.g., #FF5733).');
         return;
     }
 
@@ -5000,7 +5028,7 @@ function exportSvg() {
 
     // Guard: image must be fully loaded so dimensions are available
     if (!img.width || !img.height) {
-        vscode.postMessage({ command: 'alert', text: 'Cannot export SVG: image has not finished loading yet. Please wait and try again.' });
+        if (window.notifyBus) window.notifyBus.show('warn', 'Cannot export SVG: image has not finished loading yet. Please wait and try again.');
         return;
     }
 
@@ -5521,57 +5549,29 @@ function updateContrastResetBtn() {
 
 function updateBrightnessLockUI() {
     if (brightnessLockBtn) {
-        if (brightnessLocked) {
-            brightnessLockBtn.textContent = '🔒';
-            brightnessLockBtn.classList.add('locked');
-            brightnessLockBtn.title = 'Locked: Keeping brightness when switching images. Click to unlock.';
-        } else {
-            brightnessLockBtn.textContent = '🔓';
-            brightnessLockBtn.classList.remove('locked');
-            brightnessLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
-        }
+        brightnessLockBtn.textContent = brightnessLocked ? '🔒' : '🔓';
+        brightnessLockBtn.classList.toggle('locked', brightnessLocked);
     }
 }
 
 function updateContrastLockUI() {
     if (contrastLockBtn) {
-        if (contrastLocked) {
-            contrastLockBtn.textContent = '🔒';
-            contrastLockBtn.classList.add('locked');
-            contrastLockBtn.title = 'Locked: Keeping contrast when switching images. Click to unlock.';
-        } else {
-            contrastLockBtn.textContent = '🔓';
-            contrastLockBtn.classList.remove('locked');
-            contrastLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
-        }
+        contrastLockBtn.textContent = contrastLocked ? '🔒' : '🔓';
+        contrastLockBtn.classList.toggle('locked', contrastLocked);
     }
 }
 
 function updateChannelLockUI() {
     if (channelLockBtn) {
-        if (channelLocked) {
-            channelLockBtn.textContent = '🔒';
-            channelLockBtn.classList.add('locked');
-            channelLockBtn.title = 'Locked: Keeping channel selection when switching images. Click to unlock.';
-        } else {
-            channelLockBtn.textContent = '🔓';
-            channelLockBtn.classList.remove('locked');
-            channelLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
-        }
+        channelLockBtn.textContent = channelLocked ? '🔒' : '🔓';
+        channelLockBtn.classList.toggle('locked', channelLocked);
     }
 }
 
 function updateClaheLockUI() {
     if (claheLockBtn) {
-        if (claheLocked) {
-            claheLockBtn.textContent = '🔒';
-            claheLockBtn.classList.add('locked');
-            claheLockBtn.title = 'Locked: Keeping CLAHE settings when switching images. Click to unlock.';
-        } else {
-            claheLockBtn.textContent = '🔓';
-            claheLockBtn.classList.remove('locked');
-            claheLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
-        }
+        claheLockBtn.textContent = claheLocked ? '🔒' : '🔓';
+        claheLockBtn.classList.toggle('locked', claheLocked);
     }
 }
 
@@ -6145,6 +6145,11 @@ function updateVirtualScroll() {
     virtualScrollState.endIndex = endIndex;
     virtualScrollState.scrollTop = scrollTop;
 
+    // Hide any pending tooltip first: we're about to detach the row that
+    // owns the queued hover timer, and show() on a detached node measures
+    // a zero-rect and lands the tip at viewport (0, 0).
+    if (window.tooltip) window.tooltip.hide();
+
     // Clear existing items (but keep spacer)
     const existingItems = spacer.querySelectorAll('.image-browser-item');
     existingItems.forEach(item => item.remove());
@@ -6168,9 +6173,11 @@ function updateVirtualScroll() {
             li.classList.add('active');
         }
 
-        // Use relative path as display name
+        // Use relative path as display name. Path itself is the most useful
+        // hover content when the row truncates, so route through the rich
+        // tooltip via data-tip-text rather than a native title bubble.
         li.textContent = imagePath;
-        li.title = imagePath;
+        li.setAttribute('data-tip-text', imagePath);
 
         // Store data attribute for click handling
         li.dataset.imagePath = imagePath;
@@ -6193,6 +6200,10 @@ function updateVirtualScroll() {
     }
 
     spacer.appendChild(fragment);
+
+    // Bind rich tooltips to the freshly-rendered virtual rows. attach() is
+    // idempotent so it tolerates being called every scroll tick.
+    if (window.tooltip && window.TIPS) window.tooltip.attach(spacer, window.TIPS);
 }
 
 // Scroll handler for virtual scrolling (throttled)
@@ -6580,8 +6591,7 @@ async function samEncode(imagePath, crop) {
 
     const doEncode = async () => {
         samIsEncoding = true;
-        statusSpan.textContent = 'SAM Encoding...';
-        statusSpan.style.color = 'orange';
+        window.notifyBus.show('info', 'SAM Encoding…', { sticky: true, key: 'sam.status' });
         try {
             const payload = { image_path: imagePath };
             if (crop) payload.crop = crop;
@@ -6596,15 +6606,14 @@ async function samEncode(imagePath, crop) {
                 samCurrentImagePath = imagePath;
                 samCachedCrop = crop || null;
                 const modeLabel = crop ? 'Local' : 'Full';
-                statusSpan.textContent = `SAM Ready [${modeLabel}] (${data.time_ms || 0}ms)`;
-                statusSpan.style.color = 'limegreen';
+                window.notifyBus.show('success', `SAM Ready [${modeLabel}] (${data.time_ms || 0}ms)`, { sticky: true, key: 'sam.status' });
             } else {
-                statusSpan.textContent = 'SAM Encode Error';
-                statusSpan.style.color = 'red';
+                window.notifyBus.show('error', 'SAM Encode Error');
+                window.notifyBus.clearSticky('sam.status');
             }
         } catch (err) {
-            statusSpan.textContent = 'SAM Service Error';
-            statusSpan.style.color = 'red';
+            window.notifyBus.show('error', 'SAM Service Error');
+            window.notifyBus.clearSticky('sam.status');
         } finally {
             samIsEncoding = false;
             samEncodePromise = null;
@@ -6718,8 +6727,7 @@ async function samDecode() {
                 samMaskContour = data.contour;
             }
             const modeLabel = samCachedCrop ? 'Local' : 'Full';
-            statusSpan.textContent = `SAM Decoded [${modeLabel}] (${data.time_ms || 0}ms)`;
-            statusSpan.style.color = 'limegreen';
+            window.notifyBus.show('success', `SAM Decoded [${modeLabel}] (${data.time_ms || 0}ms)`, { sticky: true, key: 'sam.status' });
             draw();
             // Note: don't call updateShiftFeedback here — samDecode doesn't
             // mutate samPrompts, so feedback content is unchanged. Calling it
@@ -6727,8 +6735,7 @@ async function samDecode() {
         }
     } catch (err) {
         if (requestVersion !== samDecodeVersion) return;
-        statusSpan.textContent = 'SAM Decode Error';
-        statusSpan.style.color = 'red';
+        window.notifyBus.show('error', 'SAM Decode Error');
     } finally {
         samIsDecoding = false;
     }
@@ -6748,8 +6755,7 @@ function samClearState() {
     samCachedCrop = null;
     samCurrentImagePath = null;
     samIsFreshSequence = true;
-    statusSpan.textContent = '';
-    statusSpan.style.color = '';
+    if (window.notifyBus) window.notifyBus.clearSticky('sam.status');
     draw();
     updateShiftFeedback();
 }
@@ -6786,18 +6792,8 @@ function samEnsureEncoded() {
 }
 
 function updateShiftFeedback() {
-    if (shouldRefreshShiftSnapshot(statusSpan.textContent, lastFeedbackText)) {
-        prevStatusText = statusSpan.textContent;
-        prevStatusColor = statusSpan.style.color;
-    }
-
     if (!shiftPressed || currentMode === 'view') {
-        if (shouldRestoreShiftStatus(lastFeedbackText, statusSpan.textContent)) {
-            statusSpan.textContent = prevStatusText ?? '';
-            statusSpan.style.color = prevStatusColor ?? '';
-        }
-        prevStatusText = null;
-        prevStatusColor = null;
+        if (window.notifyBus) window.notifyBus.clearSticky('shift.feedback');
         lastFeedbackText = null;
         // Cursor reset: clear inline style and let the existing mousemove logic re-derive
         currentCursor = null;
@@ -6805,13 +6801,18 @@ function updateShiftFeedback() {
         return;
     }
 
+    // Positional signature: computeShiftFeedback(currentMode, prompts, eraserCursor) → { text, color, cursor }
     const { text, color, cursor } = computeShiftFeedback(currentMode, samPrompts, ERASER_CURSOR_DATA_URI);
 
-    statusSpan.textContent = text;
-    statusSpan.style.color = color;
     canvasWrapper.style.cursor = cursor;
     currentCursor = cursor;
     lastFeedbackText = text;
+
+    // Map the legacy hex colors to severity. #ff4444 is the negative-point hint
+    // (treat as warn — informational caution, not an error), #ff8800 the eraser
+    // hint. Anything else falls back to info.
+    const level = color === '#ff4444' ? 'warn' : (color === '#ff8800' ? 'warn' : 'info');
+    if (window.notifyBus) window.notifyBus.show(level, text, { sticky: true, key: 'shift.feedback' });
 }
 
 function samUndoLastPrompt() {

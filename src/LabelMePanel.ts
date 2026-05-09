@@ -28,6 +28,13 @@ export class LabelMePanel {
     private _scanGeneration = 0; // Incremented on each scan start to detect stale results
     private _isScanFinished = false; // Tracks if the initial background scan has completed
     private _disposed = false; // Guards async callbacks from posting to a disposed webview
+    private _webviewReady = false; // Set when the webview signals 'webviewReady'
+    private _pendingNotifications: Array<{
+        level: 'info' | 'success' | 'warn' | 'error';
+        text: string;
+        key?: string;
+        sticky?: boolean;
+    }> = [];
 
     // Tracks SAM-service ports already launched in this extension-host session,
     // so a second panel doesn't try to start a conflicting server on the same port.
@@ -46,6 +53,36 @@ export class LabelMePanel {
         // Call the raw webview API directly — do NOT route through _safePost.
         const webview = this._panel.webview;
         webview.postMessage(message);
+    }
+
+    /**
+     * Send a non-actionable notification to the webview status bus. If the
+     * webview has not signalled 'webviewReady' yet, queue the message and
+     * flush it on ready. Native VS Code dialogs are reserved for prompts that
+     * need a user-button decision (Save / Discard / Cancel).
+     */
+    private _notify(
+        level: 'info' | 'success' | 'warn' | 'error',
+        text: string,
+        opts?: { key?: string; sticky?: boolean }
+    ): void {
+        if (!this._webviewReady) {
+            if (this._pendingNotifications.length >= 50) {
+                // Bound the queue; the oldest entry is the safest to drop.
+                this._pendingNotifications.shift();
+            }
+            this._pendingNotifications.push({ level, text, ...(opts || {}) });
+            return;
+        }
+        this._safePost({ command: 'notify', level, text, ...(opts || {}) });
+    }
+
+    private _flushPendingNotifications(): void {
+        const queue = this._pendingNotifications;
+        this._pendingNotifications = [];
+        for (const n of queue) {
+            this._safePost({ command: 'notify', ...n });
+        }
     }
 
     /**
@@ -250,9 +287,6 @@ export class LabelMePanel {
                     case 'dirty':
                         this._isDirty = message.value;
                         return;
-                    case 'alert':
-                        vscode.window.showErrorMessage(message.text);
-                        return;
                     case 'next':
                         await this.navigateImage(1);
                         return;
@@ -260,6 +294,8 @@ export class LabelMePanel {
                         await this.navigateImage(-1);
                         return;
                     case 'webviewReady':
+                        this._webviewReady = true;
+                        this._flushPendingNotifications();
                         // The webview's JavaScript is now fully loaded and listening.
                         // Re-send the image list ONLY IF the scan has finished.
                         // This prevents the UI from incorrectly showing "(0)" for large folders
@@ -553,7 +589,7 @@ export class LabelMePanel {
 
         this._sendImageListUpdate();
 
-        vscode.window.showInformationMessage(`Refreshed: Found ${this._workspaceImages.length} images`);
+        this._notify('success', `Refreshed: Found ${this._workspaceImages.length} images`);
     }
 
     public updateWebviewOptions() {
@@ -628,7 +664,7 @@ export class LabelMePanel {
                 existingData = JSON.parse(jsonContent);
             } catch (e) {
                 console.error("Failed to load existing JSON", e);
-                vscode.window.showWarningMessage(`Failed to load annotation file: ${(e as Error).message}`);
+                this._notify('warn', `Failed to load annotation file: ${(e as Error).message}`);
             }
         }
 
@@ -646,6 +682,8 @@ export class LabelMePanel {
 
     public dispose() {
         this._disposed = true;
+        this._webviewReady = false;
+        this._pendingNotifications = [];
         LabelMePanel.panels.delete(this);
         // Bump scan generation so any in-flight scan discards its results.
         this._scanGeneration++;
@@ -686,6 +724,25 @@ export class LabelMePanel {
         const mergeHelpersPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'mergeShapesHelpers.js');
         const mergeHelpersUri = webview.asWebviewUri(mergeHelpersPath);
 
+        // Notification bus (pure helpers + DOM wrapper, must load before main.js)
+        const notifyHelpersUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'notifyBusHelpers.js')
+        );
+        const notifyBusUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'notifyBus.js')
+        );
+
+        // Rich tooltip (pure helpers + dictionary + DOM wrapper, must load before main.js)
+        const tipsDataUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'tipsData.js')
+        );
+        const tooltipHelpersUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'tooltipHelpers.js')
+        );
+        const tooltipUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'tooltip.js')
+        );
+
         // Read CSS file content and inline it to prevent race condition on Windows
         // where JS executes before CSS finishes loading via external <link>, causing
         // layout chaos (zero container dimensions, unstyled dropdowns visible, etc.)
@@ -717,7 +774,7 @@ export class LabelMePanel {
                     existingData = JSON.parse(jsonContent);
                 } catch (e) {
                     console.error("Failed to load existing JSON", e);
-                    vscode.window.showWarningMessage(`Failed to load annotation file: ${(e as Error).message}`);
+                    this._notify('warn', `Failed to load annotation file: ${(e as Error).message}`);
                 }
             }
         }
@@ -736,24 +793,24 @@ export class LabelMePanel {
                         <div class="image-browser-header">
                             <h3>Images</h3>
                             <span id="imageCount">(${workspaceImages.length})</span>
-                            <button id="searchImagesBtn" class="header-btn" title="Search Images">🔍</button>
-                            <button id="refreshImagesBtn" class="header-btn" title="Refresh Image List">🔄</button>
+                            <button id="searchImagesBtn" class="header-btn" data-tip-id="browser.search">🔍</button>
+                            <button id="refreshImagesBtn" class="header-btn" data-tip-id="browser.refresh">🔄</button>
                         </div>
                         <div id="searchInputContainer" class="search-input-container" style="display: none;">
                             <input type="text" id="searchInput" placeholder="Search images..." />
-                            <button id="searchCloseBtn" class="search-close-btn" title="Close Search">✕</button>
+                            <button id="searchCloseBtn" class="search-close-btn" data-tip-id="browser.searchClose">✕</button>
                         </div>
                         <ul id="imageBrowserList" class="image-browser-list"></ul>
                     </div>
                     <div id="imageBrowserResizer" class="image-browser-resizer"></div>
                     <div class="main-area">
                         <div class="toolbar">
-                            <button id="imageBrowserToggleBtn" class="nav-btn" title="Toggle Image Browser">☰</button>
-                            <button id="prevImageBtn" class="nav-btn" title="Previous Image (A)">◀</button>
-                            <button id="nextImageBtn" class="nav-btn" title="Next Image (D)">▶</button>
-                            <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" title="Left click: copy absolute path | Right click: copy filename">${isDummyImage ? '' : (currentImageRelativePath || path.basename(this._imageUri.fsPath))}</span>
+                            <button id="imageBrowserToggleBtn" class="nav-btn" data-tip-id="nav.toggleBrowser">☰</button>
+                            <button id="prevImageBtn" class="nav-btn" data-tip-id="nav.prev">◀</button>
+                            <button id="nextImageBtn" class="nav-btn" data-tip-id="nav.next">▶</button>
+                            <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" data-tip-id="nav.fileName">${isDummyImage ? '' : (currentImageRelativePath || path.basename(this._imageUri.fsPath))}</span>
                             <span id="status"></span>
-                            <span id="imageInfoBtn" class="image-info-btn" title="Image Info">ℹ</span>
+                            <span id="imageInfoBtn" class="image-info-btn" data-tip-id="nav.imageInfo">ℹ</span>
                             <div id="imageInfoPopup" class="image-info-popup hidden"></div>
                         </div>
                         <div class="canvas-container">
@@ -762,11 +819,11 @@ export class LabelMePanel {
                                 <svg id="svgOverlay" class="svg-overlay"></svg>
                                 <div id="pixelGridOverlay" class="pixel-grid-overlay"></div>
                                 <div id="shapeContextMenu" class="shape-context-menu" style="display: none;">
-                                    <div class="context-menu-item" id="contextMenuEdit">Edit</div>
-                                    <div class="context-menu-item" id="contextMenuRename">Rename</div>
-                                    <div class="context-menu-item" id="contextMenuMerge" style="display: none;">Merge</div>
-                                    <div class="context-menu-item" id="contextMenuToggleVisible">Hide</div>
-                                    <div class="context-menu-item context-menu-danger" id="contextMenuDelete">Delete</div>
+                                    <div class="context-menu-item" id="contextMenuEdit"          data-tip-id="context.edit">Edit</div>
+                                    <div class="context-menu-item" id="contextMenuRename"        data-tip-id="context.rename">Rename</div>
+                                    <div class="context-menu-item" id="contextMenuMerge"         data-tip-id="context.merge" style="display: none;">Merge</div>
+                                    <div class="context-menu-item" id="contextMenuToggleVisible" data-tip-id="context.toggleVisible">Hide</div>
+                                    <div class="context-menu-item context-menu-danger" id="contextMenuDelete" data-tip-id="context.delete">Delete</div>
                                 </div>
                             </div>
                         </div>
@@ -776,85 +833,85 @@ export class LabelMePanel {
                         <div class="sidebar-config-section">
                             <div class="sidebar-toolbar">
                                 <div class="mode-toggle-group">
-                                    <button id="viewModeBtn" class="mode-btn active" title="View Mode (V)">👁️</button>
-                                    <button id="polygonModeBtn" class="mode-btn" title="Polygon Mode (P)">⬠</button>
-                                    <button id="rectangleModeBtn" class="mode-btn" title="Rectangle Mode (R)">▭</button>
-                                    <button id="lineModeBtn" class="mode-btn" title="Line Mode (L)">⟋</button>
-                                    <button id="pointModeBtn" class="mode-btn" title="Point Mode (O)">•</button>
-                                    <button id="samModeBtn" class="mode-btn" title="SAM AI Mode (I)">🧠</button>
+                                    <button id="viewModeBtn" class="mode-btn active" data-tip-id="mode.view">👁️</button>
+                                    <button id="polygonModeBtn" class="mode-btn" data-tip-id="mode.polygon">⬠</button>
+                                    <button id="rectangleModeBtn" class="mode-btn" data-tip-id="mode.rectangle">▭</button>
+                                    <button id="lineModeBtn" class="mode-btn" data-tip-id="mode.line">⟋</button>
+                                    <button id="pointModeBtn" class="mode-btn" data-tip-id="mode.point">•</button>
+                                    <button id="samModeBtn" class="mode-btn" data-tip-id="mode.sam">🧠</button>
                                 </div>
                                 <div class="sidebar-actions">
-                                    <button id="settingsMenuBtn" class="sidebar-icon-btn" title="Settings">⚙️</button>
-                                    <button id="toolsMenuBtn" class="sidebar-icon-btn" title="Tools">🛠️</button>
-                                    <button id="saveBtn" class="sidebar-icon-btn" title="Save (Ctrl+S)" disabled>💾</button>
+                                    <button id="settingsMenuBtn" class="sidebar-icon-btn" data-tip-id="actions.settings">⚙️</button>
+                                    <button id="toolsMenuBtn" class="sidebar-icon-btn" data-tip-id="actions.tools">🛠️</button>
+                                    <button id="saveBtn" class="sidebar-icon-btn" data-tip-id="actions.save" disabled>💾</button>
                                 </div>
                                 <div id="settingsMenuDropdown" class="sidebar-dropdown" style="display: none;">
                                     <div class="theme-control">
                                         <label>Theme</label>
                                         <div class="theme-toggle-group">
-                                            <button id="themeLightBtn" class="theme-btn" title="Light">☀️</button>
-                                            <button id="themeDarkBtn" class="theme-btn" title="Dark">🌙</button>
-                                            <button id="themeAutoBtn" class="theme-btn" title="Follow VS Code">🔄</button>
+                                            <button id="themeLightBtn" class="theme-btn" data-tip-id="theme.light">☀️</button>
+                                            <button id="themeDarkBtn" class="theme-btn" data-tip-id="theme.dark">🌙</button>
+                                            <button id="themeAutoBtn" class="theme-btn" data-tip-id="theme.auto">🔄</button>
                                         </div>
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen">&#8634;</span></label>
-                                            <button id="zoomLockBtn" class="zoom-lock-btn" title="Lock: Keep zoom and position when switching images">🔓</button>
+                                            <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" data-tip-id="view.zoomReset">&#8634;</span></label>
+                                            <button id="zoomLockBtn" class="zoom-lock-btn" data-tip-id="view.zoomLock">🔓</button>
                                         </div>
                                     </div>
                                     <div class="settings-group-header">Annotation Style</div>
                                     <div class="slider-control">
-                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                        <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5">
+                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" data-tip-id="style.borderWidthReset">&#8634;</span></label>
+                                        <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5" data-tip-id="style.borderWidth">
                                     </div>
                                     <div class="slider-control">
-                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                        <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5">
+                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" data-tip-id="style.fillOpacityReset">&#8634;</span></label>
+                                        <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5" data-tip-id="style.fillOpacity">
                                     </div>
                                     <div class="settings-group-header">Image Adjustment</div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Channel:</label>
-                                            <button id="channelLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                            <button id="channelLockBtn" class="zoom-lock-btn" data-tip-id="channel.lock">🔓</button>
                                         </div>
                                         <div class="onnx-radio-group">
-                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="rgb" checked /> RGB</label>
-                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="r" /> R</label>
-                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="g" /> G</label>
-                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="b" /> B</label>
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="rgb" data-tip-id="channel.rgb" checked /> RGB</label>
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="r" data-tip-id="channel.r" /> R</label>
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="g" data-tip-id="channel.g" /> G</label>
+                                            <label class="onnx-radio"><input type="radio" name="imageChannel" value="b" data-tip-id="channel.b" /> B</label>
                                         </div>
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Brightness: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                            <button id="brightnessLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                            <label>Brightness: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" data-tip-id="image.brightnessReset">&#8634;</span></label>
+                                            <button id="brightnessLockBtn" class="zoom-lock-btn" data-tip-id="image.brightnessLock">🔓</button>
                                         </div>
-                                        <input type="range" id="brightnessSlider" min="10" max="300" value="100" step="5">
+                                        <input type="range" id="brightnessSlider" min="10" max="300" value="100" step="5" data-tip-id="image.brightness">
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Contrast: <span id="contrastValue">100</span>% <span id="contrastResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span></label>
-                                            <button id="contrastLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                            <label>Contrast: <span id="contrastValue">100</span>% <span id="contrastResetBtn" class="slider-reset-btn" data-tip-id="image.contrastReset">&#8634;</span></label>
+                                            <button id="contrastLockBtn" class="zoom-lock-btn" data-tip-id="image.contrastLock">🔓</button>
                                         </div>
-                                        <input type="range" id="contrastSlider" min="10" max="300" value="100" step="5">
+                                        <input type="range" id="contrastSlider" min="10" max="300" value="100" step="5" data-tip-id="image.contrast">
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>CLAHE:</label>
-                                            <button id="claheToggleBtn" class="channel-btn" title="Click to enable">Off</button>
-                                            <span id="claheResetBtn" class="slider-reset-btn" title="Reset to default">&#8634;</span>
-                                            <button id="claheLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock.">🔓</button>
+                                            <button id="claheToggleBtn" class="channel-btn" data-tip-id="image.claheToggle">Off</button>
+                                            <span id="claheResetBtn" class="slider-reset-btn" data-tip-id="image.claheReset">&#8634;</span>
+                                            <button id="claheLockBtn" class="zoom-lock-btn" data-tip-id="image.claheLock">🔓</button>
                                         </div>
                                         <div id="claheControls" style="display: none;">
                                             <div style="font-size: 0.8em; margin-top: 4px;">Clip Limit: <span id="claheClipLimitValue">2.0</span></div>
-                                            <input type="range" id="claheClipLimitSlider" min="1" max="10" value="2" step="0.5" title="Clip Limit">
+                                            <input type="range" id="claheClipLimitSlider" min="1" max="10" value="2" step="0.5" data-tip-id="image.claheClipLimit">
                                         </div>
                                     </div>
                                 </div>
                                 <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
-                                    <div class="sidebar-dropdown-item" id="exportSvgMenuItem">📐 Export SVG</div>
-                                    <div class="sidebar-dropdown-item" id="onnxBatchInferMenuItem">🤖 ONNX Batch Infer</div>
+                                    <div class="sidebar-dropdown-item" id="exportSvgMenuItem" data-tip-id="tools.exportSvg">📐 Export SVG</div>
+                                    <div class="sidebar-dropdown-item" id="onnxBatchInferMenuItem" data-tip-id="tools.onnxBatchInfer">🤖 ONNX Batch Infer</div>
                                 </div>
                             </div>
                         </div>
@@ -908,46 +965,46 @@ export class LabelMePanel {
                         <h3>🤖 ONNX Batch Inference</h3>
                         <div class="onnx-note">Output: polygon only</div>
                         <div class="onnx-form-group">
-                            <label>Model Directory <span class="onnx-hint" title='Requires .onnx model file and labels.json in the same directory.&#10;&#10;labels.json format:&#10;[&#10;  { &quot;value&quot;: 1, &quot;name&quot;: &quot;defect_A&quot; },&#10;  { &quot;value&quot;: 2, &quot;name&quot;: &quot;defect_B&quot; }&#10;]&#10;&#10;value: mask pixel value (skip 0 = background)&#10;name: label name for annotation'>ⓘ</span></label>
+                            <label>Model Directory <span class="onnx-hint" data-tip-id="onnx.modelDir">ⓘ</span></label>
                             <div class="onnx-path-input">
                                 <input type="text" id="onnxModelDir" placeholder="Path to directory with .onnx and labels.json" />
-                                <button id="onnxModelDirBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                                <button id="onnxModelDirBrowse" class="onnx-browse-btn" data-tip-id="onnx.modelDirBrowse">📂</button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Python Interpreter</label>
+                            <label data-tip-id="onnx.pythonPath">Python Interpreter</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="onnxPythonPath" placeholder="python" />
-                                <button id="onnxPythonPathBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                                <button id="onnxPythonPathBrowse" class="onnx-browse-btn" data-tip-id="onnx.pythonBrowse">📂</button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Device</label>
+                            <label data-tip-id="onnx.device">Device</label>
                             <div class="onnx-radio-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxDevice" value="cpu" checked /> CPU</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxDevice" value="gpu" /> GPU</label>
                             </div>
                             <div id="onnxGpuIndexGroup" style="display:none; margin-top:6px">
-                                <label style="font-size:0.9em">GPU</label>
+                                <label style="font-size:0.9em" data-tip-id="onnx.gpuIndex">GPU</label>
                                 <select id="onnxGpuIndex" style="margin-left:6px; min-width:180px"></select>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Color Format</label>
+                            <label data-tip-id="onnx.colorFormat">Color Format</label>
                             <div class="onnx-radio-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxColor" value="rgb" checked /> RGB</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxColor" value="bgr" /> BGR</label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Scope</label>
+                            <label data-tip-id="onnx.scope">Scope</label>
                             <div class="onnx-radio-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxScope" value="all" checked /> All Images</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxScope" value="current" /> Current Image</label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Existing Annotations</label>
+                            <label data-tip-id="onnx.mode">Existing Annotations</label>
                             <div class="onnx-radio-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxMode" value="skip" checked /> Skip</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxMode" value="merge" /> Merge</label>
@@ -968,39 +1025,39 @@ export class LabelMePanel {
                         <h3>🤖 SAM AI Annotation</h3>
                         <div class="onnx-note">Configure SAM service for interactive annotation</div>
                         <div class="onnx-form-group">
-                            <label>Model Directory <span class="onnx-hint" title='Directory containing encoder and decoder ONNX model files.&#10;&#10;Expected files:&#10;- *encoder*.onnx&#10;- *decoder*.onnx&#10;&#10;Supports SAM1 and SAM2 models (auto-detected).'>ⓘ</span></label>
+                            <label>Model Directory <span class="onnx-hint" data-tip-id="sam.modelDir">ⓘ</span></label>
                             <div class="onnx-path-input">
                                 <input type="text" id="samModelDir" placeholder="Path to directory with encoder.onnx and decoder.onnx" />
-                                <button id="samModelDirBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                                <button id="samModelDirBrowse" class="onnx-browse-btn" data-tip-id="sam.modelDirBrowse">📂</button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Python Interpreter</label>
+                            <label data-tip-id="sam.pythonPath">Python Interpreter</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="samPythonPath" placeholder="python" />
-                                <button id="samPythonPathBrowse" class="onnx-browse-btn" title="Browse">📂</button>
+                                <button id="samPythonPathBrowse" class="onnx-browse-btn" data-tip-id="sam.pythonBrowse">📂</button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Device</label>
+                            <label data-tip-id="sam.device">Device</label>
                             <div class="onnx-radio-group">
                                 <label class="onnx-radio"><input type="radio" name="samDevice" value="cpu" checked /> CPU</label>
                                 <label class="onnx-radio"><input type="radio" name="samDevice" value="gpu" /> GPU</label>
                             </div>
                             <div id="samGpuIndexGroup" style="display:none; margin-top:6px">
-                                <label style="font-size:0.9em">GPU</label>
+                                <label style="font-size:0.9em" data-tip-id="sam.gpuIndex">GPU</label>
                                 <select id="samGpuIndex" style="margin-left:6px; min-width:180px"></select>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Encode Mode <span class="onnx-hint" title='Full Image: encode the entire image (default, works well for large targets).&#10;&#10;Local Crop: encode only the currently visible viewport region when zoomed in. Better accuracy for small targets in large images. Falls back to full image when not zoomed in.'>ⓘ</span></label>
+                            <label>Encode Mode <span class="onnx-hint" data-tip-id="sam.encodeMode">ⓘ</span></label>
                             <div class="onnx-radio-group">
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="full" checked /> Full Image</label>
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="local" /> Local Crop</label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Port</label>
+                            <label data-tip-id="sam.port">Port</label>
                             <input type="number" id="samPort" value="8765" min="1024" max="65535" style="width:80px" />
                         </div>
                         <div class="modal-buttons">
@@ -1055,6 +1112,11 @@ export class LabelMePanel {
                 <script src="${polyClipUri}"></script>
                 <script src="${samHelpersUri}"></script>
                 <script src="${mergeHelpersUri}"></script>
+                <script src="${notifyHelpersUri}"></script>
+                <script src="${notifyBusUri}"></script>
+                <script src="${tipsDataUri}"></script>
+                <script src="${tooltipHelpersUri}"></script>
+                <script src="${tooltipUri}"></script>
                 <script src="${scriptUri}"></script>
             </body>
             </html>`;
@@ -1068,7 +1130,7 @@ export class LabelMePanel {
         this._isSaving = true;
         try {
             await fs.writeFile(jsonPath, JSON.stringify(labelMeData, null, 2), 'utf8');
-            vscode.window.showInformationMessage('Annotation saved to ' + path.basename(jsonPath));
+            this._notify('success', 'Annotation saved to ' + path.basename(jsonPath));
 
             // Notify webview that save completed.
             // The webview will check if the confirmed save matches the current snapshot.
@@ -1076,7 +1138,7 @@ export class LabelMePanel {
             // If dirty (user edited during save), it stays dirty and does NOT post navigate.
             this._safePost({ command: 'saveComplete' });
         } catch (err) {
-            vscode.window.showErrorMessage('Failed to save annotation: ' + (err as Error).message);
+            this._notify('error', 'Failed to save annotation: ' + (err as Error).message);
             // Clear pending navigation so a later unrelated save doesn't trigger it
             this._pendingNavigation = undefined;
             this._pendingNavigationPath = undefined;
@@ -1098,9 +1160,9 @@ export class LabelMePanel {
 
         try {
             await fs.writeFile(svgPath, svg, 'utf8');
-            vscode.window.showInformationMessage('SVG exported to ' + path.basename(svgPath));
+            this._notify('success', 'SVG exported to ' + path.basename(svgPath));
         } catch (err) {
-            vscode.window.showErrorMessage('Failed to export SVG: ' + (err as Error).message);
+            this._notify('error', 'Failed to export SVG: ' + (err as Error).message);
         }
     }
 
@@ -1135,7 +1197,7 @@ export class LabelMePanel {
     }) {
         // Validate model directory
         if (!config.modelDir || !existsSync(config.modelDir)) {
-            vscode.window.showErrorMessage('ONNX Batch Infer: Model directory does not exist.');
+            this._notify('error', 'ONNX Batch Infer: Model directory does not exist.');
             return;
         }
 
@@ -1143,13 +1205,13 @@ export class LabelMePanel {
         const dirEntries = await fs.readdir(config.modelDir);
         const hasOnnx = dirEntries.some(f => f.endsWith('.onnx'));
         if (!hasOnnx) {
-            vscode.window.showErrorMessage('ONNX Batch Infer: No .onnx file found in model directory.');
+            this._notify('error', 'ONNX Batch Infer: No .onnx file found in model directory.');
             return;
         }
 
         // Check for labels.json
         if (!existsSync(path.join(config.modelDir, 'labels.json'))) {
-            vscode.window.showErrorMessage('ONNX Batch Infer: labels.json not found in model directory.');
+            this._notify('error', 'ONNX Batch Infer: labels.json not found in model directory.');
             return;
         }
 
@@ -1163,7 +1225,7 @@ export class LabelMePanel {
                 await this._scanWorkspaceImages();
             }
             if (this._workspaceImages.length === 0) {
-                vscode.window.showWarningMessage('ONNX Batch Infer: No images found in workspace.');
+                this._notify('warn', 'ONNX Batch Infer: No images found in workspace.');
                 return;
             }
             absoluteImagePaths = this._workspaceImages.map(rel => path.join(this._rootPath, rel));
@@ -1182,7 +1244,7 @@ export class LabelMePanel {
         // Locate the bundled Python script
         const scriptPath = path.join(this._extensionUri.fsPath, 'scripts', 'onnx_batch_infer.py');
         if (!existsSync(scriptPath)) {
-            vscode.window.showErrorMessage('ONNX Batch Infer: Inference script not found at ' + scriptPath);
+            this._notify('error', 'ONNX Batch Infer: Inference script not found at ' + scriptPath);
             return;
         }
 
@@ -1220,9 +1282,7 @@ export class LabelMePanel {
         terminal.show();
         terminal.sendText(command);
 
-        vscode.window.showInformationMessage(
-            `ONNX Batch Infer started: ${absoluteImagePaths.length} images. Check the terminal for progress.`
-        );
+        this._notify('info', `ONNX Batch Infer started: ${absoluteImagePaths.length} images. Check the terminal for progress.`);
     }
 
     /**
@@ -1237,7 +1297,7 @@ export class LabelMePanel {
     }) {
         // Validate model directory
         if (!config.modelDir || !existsSync(config.modelDir)) {
-            vscode.window.showErrorMessage('SAM Service: Model directory does not exist.');
+            this._notify('error', 'SAM Service: Model directory does not exist.');
             return;
         }
 
@@ -1245,23 +1305,21 @@ export class LabelMePanel {
         const dirEntries = await fs.readdir(config.modelDir);
         const onnxFiles = dirEntries.filter(f => f.toLowerCase().endsWith('.onnx'));
         if (onnxFiles.length < 2) {
-            vscode.window.showErrorMessage('SAM Service: Need at least 2 ONNX files (encoder + decoder) in model directory.');
+            this._notify('error', 'SAM Service: Need at least 2 ONNX files (encoder + decoder) in model directory.');
             return;
         }
 
         // Avoid launching a second SAM service on a port we already started one on
         // in this extension-host session (e.g. from another panel).
         if (LabelMePanel._samServicePorts.has(config.port)) {
-            vscode.window.showWarningMessage(
-                `SAM Service already running on port ${config.port} from another panel. Reusing it; change the port in settings if you want a separate instance.`
-            );
+            this._notify('warn', `SAM Service already running on port ${config.port} from another panel. Reusing it; change the port in settings if you want a separate instance.`);
             return;
         }
 
         // Locate the bundled Python script
         const scriptPath = path.join(this._extensionUri.fsPath, 'scripts', 'sam_service.py');
         if (!existsSync(scriptPath)) {
-            vscode.window.showErrorMessage('SAM Service: Service script not found at ' + scriptPath);
+            this._notify('error', 'SAM Service: Service script not found at ' + scriptPath);
             return;
         }
 
@@ -1307,8 +1365,6 @@ export class LabelMePanel {
         terminal.show();
         terminal.sendText(command);
 
-        vscode.window.showInformationMessage(
-            `SAM Service starting on port ${config.port}. Check the terminal for status.`
-        );
+        this._notify('info', `SAM Service starting on port ${config.port}. Check the terminal for status.`);
     }
 }
