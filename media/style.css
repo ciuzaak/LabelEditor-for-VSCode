@@ -1,55 +1,116 @@
-/* CSS Custom Properties for Theming */
+/* macOS-style design tokens (dark theme = default) */
 :root {
-    /* Dark theme (default) */
-    --color-bg-primary: #1e1e1e;
-    --color-bg-secondary: #252526;
-    --color-bg-tertiary: #2d2d30;
-    --color-bg-input: #3c3c3c;
-    --color-bg-hover: #2a2d2e;
-    --color-bg-active: #37373d;
-    --color-bg-hover-input: #505050;
-    --color-border: #333;
-    --color-border-secondary: #454545;
-    --color-border-input: #555;
-    --color-text-primary: #cccccc;
-    --color-text-secondary: #888;
-    --color-text-muted: #666;
-    --color-text-disabled: #555;
-    --color-accent: #007acc;
-    --color-danger: #ff5555;
-    --color-success: #4ec9b0;
-    --color-warning: #ff9800;
-    --color-shadow: rgba(0, 0, 0, 0.5);
-    --color-modal-overlay: rgba(0, 0, 0, 0.5);
-    --color-scrollbar-track: #1e1e1e;
-    --color-scrollbar-thumb: #424242;
-    --color-scrollbar-thumb-hover: #555555;
+    /* ---------- color: dark (default, matches VS Code default) ---------- */
+    --color-bg-primary:    #1e1e1e;
+    --color-bg-secondary:  #252527;
+    --color-bg-tertiary:   #2d2d30;
+    --color-bg-input:      #3a3a3c;
+    --color-bg-hover:      rgba(255,255,255,0.06);
+    --color-bg-active:     rgba(255,255,255,0.10);
+    --color-bg-hover-input: #48484a;
+    --color-bg-popover:    rgba(44,44,46,0.85);
+    --color-border:        rgba(255,255,255,0.08);
+    --color-border-secondary: rgba(255,255,255,0.12);
+    --color-border-input:  rgba(255,255,255,0.14);
+    --color-text-primary:  #f5f5f7;
+    --color-text-secondary: #98989d;
+    --color-text-muted:    #6e6e73;
+    --color-text-disabled: #48484a;
+    --color-accent:        #0a84ff;
+    --color-accent-hover:  #409cff;
+    --color-accent-active: #0064d4;
+    --color-danger:        #ff453a;
+    --color-success:       #30d158;
+    --color-warning:       #ff9f0a;
+    --color-shadow:        rgba(0,0,0,0.5);
+    --color-modal-overlay: rgba(0,0,0,0.45);
+    --color-scrollbar-track: transparent;
+    --color-scrollbar-thumb: rgba(255,255,255,0.18);
+    --color-scrollbar-thumb-hover: rgba(255,255,255,0.30);
+
+    /* ---------- radii ---------- */
+    --radius-xs:   4px;
+    --radius-sm:   6px;
+    --radius-md:   8px;
+    --radius-lg:   10px;
+    --radius-pill: 999px;
+
+    /* ---------- spacing ---------- */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 20px;
+    --space-6: 24px;
+
+    /* ---------- typography ---------- */
+    --font-system: -apple-system, BlinkMacSystemFont, "SF Pro Text",
+                   "Segoe UI Variable Text", "Segoe UI", system-ui,
+                   "PingFang SC", "Microsoft YaHei", sans-serif;
+    --font-mono:   ui-monospace, SFMono-Regular, "SF Mono",
+                   "JetBrains Mono", Menlo, Consolas, monospace;
+    --font-12: 12px;
+    --font-13: 13px;
+    --font-14: 14px;
+    --font-17: 17px;
+    --line-tight:  1.2;
+    --line-normal: 1.45;
+
+    /* ---------- elevation / shadow ---------- */
+    --shadow-1: 0 0 0 0.5px var(--color-border);
+    --shadow-2: 0 1px 2px rgba(0,0,0,0.18),
+                0 0 0 0.5px var(--color-border);
+    --shadow-3: 0 8px 24px rgba(0,0,0,0.32),
+                0 0 0 0.5px var(--color-border-secondary);
+    --shadow-modal: 0 20px 60px rgba(0,0,0,0.45),
+                    0 0 0 0.5px var(--color-border-secondary);
+    --shadow-focus: 0 0 0 3px color-mix(in srgb,
+                                        var(--color-accent) 35%,
+                                        transparent);
+
+    /* ---------- motion ---------- */
+    --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --ease-emphasized: cubic-bezier(0.2, 0, 0, 1);
+    --dur-fast: 120ms;
+    --dur-base: 180ms;
+    --dur-slow: 240ms;
+
+    /* ---------- backdrop ---------- */
+    --blur-popover: saturate(180%) blur(28px);
 }
 
 body.theme-light {
-    --color-bg-primary: #ffffff;
-    --color-bg-secondary: #f3f3f3;
-    --color-bg-tertiary: #e8e8e8;
-    --color-bg-input: #ffffff;
-    --color-bg-hover: #e8e8e8;
-    --color-bg-active: #d4d4d4;
-    --color-bg-hover-input: #f0f0f0;
-    --color-border: #d4d4d4;
-    --color-border-secondary: #c8c8c8;
-    --color-border-input: #c8c8c8;
-    --color-text-primary: #1e1e1e;
-    --color-text-secondary: #666666;
-    --color-text-muted: #999999;
-    --color-text-disabled: #aaaaaa;
-    --color-accent: #0066b8;
-    --color-danger: #d32f2f;
-    --color-success: #388e3c;
-    --color-warning: #f57c00;
-    --color-shadow: rgba(0, 0, 0, 0.15);
-    --color-modal-overlay: rgba(0, 0, 0, 0.3);
-    --color-scrollbar-track: #f3f3f3;
-    --color-scrollbar-thumb: #c1c1c1;
-    --color-scrollbar-thumb-hover: #a8a8a8;
+    --color-bg-primary:    #ffffff;
+    --color-bg-secondary:  #f5f5f7;
+    --color-bg-tertiary:   #ececef;
+    --color-bg-input:      #ffffff;
+    --color-bg-hover:      rgba(0,0,0,0.04);
+    --color-bg-active:     rgba(0,0,0,0.08);
+    --color-bg-hover-input: #f0f0f3;
+    --color-bg-popover:    rgba(246,246,248,0.85);
+    --color-border:        rgba(0,0,0,0.08);
+    --color-border-secondary: rgba(0,0,0,0.12);
+    --color-border-input:  rgba(0,0,0,0.14);
+    --color-text-primary:  #1d1d1f;
+    --color-text-secondary: #6e6e73;
+    --color-text-muted:    #8e8e93;
+    --color-text-disabled: #c7c7cc;
+    --color-accent:        #007aff;
+    --color-accent-hover:  #338cff;
+    --color-accent-active: #0064d4;
+    --color-danger:        #ff3b30;
+    --color-success:       #34c759;
+    --color-warning:       #ff9500;
+    --color-shadow:        rgba(0,0,0,0.15);
+    --color-modal-overlay: rgba(0,0,0,0.25);
+    --color-scrollbar-thumb: rgba(0,0,0,0.22);
+    --color-scrollbar-thumb-hover: rgba(0,0,0,0.36);
+    --shadow-2: 0 1px 2px rgba(0,0,0,0.06),
+                0 0 0 0.5px var(--color-border);
+    --shadow-3: 0 8px 24px rgba(0,0,0,0.10),
+                0 0 0 0.5px var(--color-border-secondary);
+    --shadow-modal: 0 20px 60px rgba(0,0,0,0.20),
+                    0 0 0 0.5px var(--color-border-secondary);
 }
 
 body {
@@ -57,13 +118,15 @@ body {
     padding: 0;
     background-color: var(--color-bg-primary);
     color: var(--color-text-primary);
-    font-family: sans-serif;
+    font-family: var(--font-system);
+    font-size: var(--font-13);
+    line-height: var(--line-normal);
+    -webkit-font-smoothing: antialiased;
     overflow: hidden;
     height: 100vh;
     display: flex;
     flex-direction: column;
     user-select: none;
-    /* 禁用文字选择 */
     -webkit-user-select: none;
 }
 
