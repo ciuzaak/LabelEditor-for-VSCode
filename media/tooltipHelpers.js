@@ -1,6 +1,10 @@
 // Pure logic for tooltip placement. Deterministic in/out: given a target rect,
 // tip rect, viewport rect, and padding, produce { left, top, placement }.
+//
+// Wrapped in a function so top-level `const` declarations don't collide with
+// other helper modules in the shared classic-script lexical scope.
 
+(function (root) {
 function computeTooltipPosition({ target, tip, viewport, pad }) {
     const safePad = (typeof pad === 'number') ? pad : 8;
 
@@ -32,6 +36,7 @@ function computeTooltipPosition({ target, tip, viewport, pad }) {
 const api = { computeTooltipPosition };
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
-} else if (typeof window !== 'undefined') {
-    window.tooltipHelpers = api;
+} else if (root) {
+    root.tooltipHelpers = api;
 }
+})(typeof window !== 'undefined' ? window : null);

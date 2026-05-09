@@ -1,7 +1,12 @@
 // Pure helpers for the webview status bus. No DOM, no timers — just
 // the rules deciding when one notification can replace another.
 // Loaded as a <script> in the webview AND require()'d from Node tests.
+//
+// The body is wrapped in a function to keep top-level `const` declarations
+// out of the shared classic-script lexical scope (otherwise two helper
+// modules that both declare `const api = ...` collide with a SyntaxError).
 
+(function (root) {
 const LEVEL_RANK = { info: 0, success: 1, warn: 2, error: 3 };
 
 const DEFAULT_DURATIONS = {
@@ -55,6 +60,7 @@ const api = { LEVEL_RANK, DEFAULT_DURATIONS, canPreempt, selectStickyToRestore, 
 
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
-} else if (typeof window !== 'undefined') {
-    window.notifyBusHelpers = api;
+} else if (root) {
+    root.notifyBusHelpers = api;
 }
+})(typeof window !== 'undefined' ? window : null);
