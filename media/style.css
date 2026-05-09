@@ -553,30 +553,26 @@ canvas {
     margin-top: 0;
 }
 
-.modal-content input {
-    width: 100%;
-    padding: 8px;
-    margin: 10px 0;
-    background-color: var(--color-bg-input);
-    border: 1px solid var(--color-border-input);
+/* Unified input/textarea styling (macOS-style) */
+input[type="text"], input[type="number"], input[type="search"], textarea {
+    background: var(--color-bg-input);
+    border: 0.5px solid var(--color-border-input);
+    border-radius: var(--radius-sm);
     color: var(--color-text-primary);
+    font: inherit;
+    padding: 6px 10px;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,0.04);
+    transition: border-color var(--dur-fast), box-shadow var(--dur-fast);
     box-sizing: border-box;
+    outline: none;
 }
-
-.modal-content textarea {
-    width: 100%;
-    padding: 8px;
-    margin: 0 0 5px 0;
-    background-color: var(--color-bg-input);
-    border: 1px solid var(--color-border-input);
-    color: var(--color-text-primary);
-    box-sizing: border-box;
-    font-family: inherit;
-    font-size: inherit;
-    resize: vertical;
-    min-height: 36px;
-    max-height: 120px;
+input:focus-visible, textarea:focus-visible {
+    border-color: var(--color-accent);
+    box-shadow: var(--shadow-focus);
 }
+textarea { resize: vertical; min-height: 36px; max-height: 120px; }
+.modal-content input, .modal-content textarea { width: 100%; margin: 10px 0; }
+.modal-content textarea { margin: 0 0 5px 0; }
 
 .modal-buttons {
     display: flex;
@@ -611,36 +607,38 @@ canvas {
 }
 
 .label-chip {
-    position: relative;                          /* anchor for shortcut badge */
-    background-color: var(--color-bg-input);
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 12px;
+    position: relative;
+    background: var(--color-bg-input);
+    border: 0.5px solid var(--color-border-input);
+    border-radius: var(--radius-pill);
+    padding: 3px 10px;
+    font-size: var(--font-12);
     cursor: pointer;
-    border: 1px solid var(--color-border-input);
+    transition: background var(--dur-fast), color var(--dur-fast);
 }
 
 .label-chip:hover {
-    background-color: var(--color-bg-hover-input);
+    background: var(--color-bg-hover-input);
 }
 
 .label-chip.selected {
-    border-color: var(--color-accent);
-    background-color: var(--color-accent);
-    color: white;
+    background: var(--color-accent);
+    color: #fff;
+    border-color: transparent;
 }
 
 .chip-shortcut-badge {
     position: absolute;
     top: -6px;
     left: -6px;
-    width: 16px;
-    height: 16px;
-    border-radius: 4px;
-    background: var(--color-accent);
-    color: white;
+    background: rgba(0,0,0,0.6);
+    color: #fff;
+    font-family: var(--font-mono);
     font-size: 10px;
-    line-height: 16px;
+    line-height: 14px;
+    border-radius: 3px;
+    min-width: 14px;
+    padding: 0 3px;
     text-align: center;
     pointer-events: none;
     display: none;
@@ -747,15 +745,7 @@ canvas {
     color: var(--color-text-secondary);
 }
 
-.custom-color-input input {
-    width: 100%;
-    padding: 8px;
-    background-color: var(--color-bg-input);
-    border: 1px solid var(--color-border-input);
-    color: var(--color-text-primary);
-    box-sizing: border-box;
-    font-family: monospace;
-}
+.custom-color-input input { width: 100%; font-family: var(--font-mono); }
 
 .label-reset-btn:hover {
     color: var(--color-warning);
@@ -852,31 +842,55 @@ canvas {
     margin-bottom: 4px;
 }
 
-.slider-control input[type="range"] {
-    width: 100%;
-    height: 4px;
-    background: var(--color-bg-input);
-    outline: none;
-    border-radius: 2px;
-}
-
-.slider-control input[type="range"]::-webkit-slider-thumb {
+/* macOS-style range slider (white thumb, hover scale, focus ring) */
+input[type="range"] {
     -webkit-appearance: none;
     appearance: none;
-    width: 14px;
-    height: 14px;
-    background: var(--color-accent);
-    cursor: pointer;
-    border-radius: 50%;
+    background: transparent;
+    width: 100%;
+    height: 18px;
+    margin: 0;
+    outline: none;
 }
-
-.slider-control input[type="range"]::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    background: var(--color-accent);
-    cursor: pointer;
+input[type="range"]::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-bg-tertiary);
+    box-shadow: inset 0 0 0 0.5px var(--color-border);
+}
+input[type="range"]::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--color-bg-tertiary);
+    box-shadow: inset 0 0 0 0.5px var(--color-border);
+}
+input[type="range"]::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    margin-top: -6px;
+    width: 16px;
+    height: 16px;
     border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.25), 0 0 0 0.5px rgba(0,0,0,0.2);
+    cursor: pointer;
+    transition: transform var(--dur-fast) var(--ease-standard);
+}
+input[type="range"]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #fff;
     border: none;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.25), 0 0 0 0.5px rgba(0,0,0,0.2);
+    cursor: pointer;
+    transition: transform var(--dur-fast) var(--ease-standard);
+}
+input[type="range"]:hover::-webkit-slider-thumb,
+input[type="range"]:hover::-moz-range-thumb { transform: scale(1.08); }
+input[type="range"]:focus-visible::-webkit-slider-thumb,
+input[type="range"]:focus-visible::-moz-range-thumb {
+    box-shadow: 0 1px 2px rgba(0,0,0,0.25), var(--shadow-focus);
 }
 
 /* Slider Reset Button */
@@ -920,33 +934,7 @@ canvas {
     align-items: center;
 }
 
-.zoom-control input[type="range"] {
-    width: 100%;
-    height: 4px;
-    margin-top: 4px;
-    background: var(--color-bg-input);
-    outline: none;
-    border-radius: 2px;
-}
-
-.zoom-control input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 14px;
-    height: 14px;
-    background: var(--color-accent);
-    cursor: pointer;
-    border-radius: 50%;
-}
-
-.zoom-control input[type="range"]::-moz-range-thumb {
-    width: 14px;
-    height: 14px;
-    background: var(--color-accent);
-    cursor: pointer;
-    border-radius: 50%;
-    border: none;
-}
+.zoom-control input[type="range"] { margin-top: 4px; }
 
 .zoom-header label {
     display: flex;
@@ -1176,21 +1164,7 @@ canvas {
     flex-shrink: 0;
 }
 
-.search-input-container input {
-    flex: 1;
-    padding: 4px 8px;
-    font-size: 12px;
-    background-color: var(--color-bg-input);
-    border: 1px solid var(--color-border-input);
-    color: var(--color-text-primary);
-    border-radius: 3px;
-    margin: 0;
-}
-
-.search-input-container input:focus {
-    outline: none;
-    border-color: var(--color-accent);
-}
+.search-input-container input { flex: 1; padding: 4px 8px; font-size: var(--font-12); margin: 0; }
 
 .search-close-btn {
     background: none;
@@ -1337,16 +1311,7 @@ canvas {
     gap: 4px;
 }
 
-.onnx-path-input input {
-    flex: 1;
-    padding: 6px 8px;
-    background-color: var(--color-bg-input);
-    border: 1px solid var(--color-border-input);
-    color: var(--color-text-primary);
-    box-sizing: border-box;
-    font-size: 12px;
-    margin: 0;
-}
+.onnx-path-input input { flex: 1; font-size: var(--font-12); margin: 0; }
 
 .onnx-browse-btn {
     padding: 4px 8px;
