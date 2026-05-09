@@ -491,15 +491,13 @@ const pixelGridOverlay = document.getElementById('pixelGridOverlay');
 
 // Update zoom UI state (lock button icon and reset button visibility)
 function updateZoomUI() {
-    // Update lock button icon and state
+    // Update lock button icon and state. The static tooltip is described
+    // by data-tip-id="view.zoomLock"; the icon conveys the on/off state.
     if (zoomLockBtn) {
-        if (lockViewEnabled) {
-            zoomLockBtn.textContent = '🔒';
-            zoomLockBtn.classList.add('locked');
-        } else {
-            zoomLockBtn.textContent = '🔓';
-            zoomLockBtn.classList.remove('locked');
-        }
+        const lockOpen = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg>';
+        const lockClosed = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock"/></svg>';
+        zoomLockBtn.innerHTML = lockViewEnabled ? lockClosed : lockOpen;
+        zoomLockBtn.classList.toggle('locked', lockViewEnabled);
     }
 
     // Update zoom percentage display
@@ -782,7 +780,7 @@ function markDirty() {
     if (saveBtn) {
         saveBtn.disabled = false;
         saveBtn.classList.add('dirty');
-        saveBtn.textContent = '💾*';
+        saveBtn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg>';
     }
 }
 
@@ -796,7 +794,7 @@ function markClean() {
     if (saveBtn) {
         saveBtn.disabled = true;
         saveBtn.classList.remove('dirty');
-        saveBtn.textContent = '💾';
+        saveBtn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg>';
     }
 }
 
@@ -812,7 +810,7 @@ function markCleanAtIndex(index) {
         if (saveBtn) {
             saveBtn.disabled = true;
             saveBtn.classList.remove('dirty');
-            saveBtn.textContent = '💾';
+            saveBtn.innerHTML = '<svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg>';
         }
     }
     // If historyIndex !== savedHistoryIndex, the user has made new edits
@@ -3932,6 +3930,21 @@ function cancelLabelInput() {
 
 modalCancelBtn.onclick = cancelLabelInput;
 
+// Wire all modal close (×) buttons — each routes to its modal's existing Cancel handler
+document.querySelectorAll('.modal-close').forEach((btn) => {
+    btn.addEventListener('click', () => {
+        const modalId = btn.getAttribute('data-modal-close');
+        const modal = document.getElementById(modalId);
+        if (!modal) return;
+        const cancelBtn = modal.querySelector('[id$="CancelBtn"]');
+        if (cancelBtn) {
+            cancelBtn.click();
+        } else {
+            modal.style.display = 'none';
+        }
+    });
+});
+
 // 在labelInput上监听Enter键
 labelInput.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') {
@@ -5244,11 +5257,19 @@ if (onnxInferModal) {
     });
 }
 
-// Close sidebar dropdowns when clicking outside
-document.addEventListener('click', (e) => {
+// Close sidebar dropdowns when clicking outside.
+// Listens on `mousedown` (fires before any inner click handlers can mutate the DOM
+// — e.g., a lock toggle re-rendering its <svg> would otherwise detach e.target,
+// making contains() falsely return "outside"). composedPath() is also passed as a
+// belt-and-braces fallback in case the path is required.
+document.addEventListener('mousedown', (e) => {
+    const helpers = (typeof window !== 'undefined') ? window.LabelEditorHelpers : null;
+    const dismiss = helpers ? helpers.shouldDismissPopover : null;
+    if (!dismiss) return;
+    const path = (typeof e.composedPath === 'function') ? e.composedPath() : null;
     // Settings dropdown
     if (settingsMenuDropdown && settingsMenuDropdown.style.display !== 'none') {
-        if (!settingsMenuDropdown.contains(e.target) && e.target !== settingsMenuBtn) {
+        if (dismiss(e.target, settingsMenuDropdown, settingsMenuBtn, path)) {
             settingsMenuDropdown.style.display = 'none';
             const state = vscode.getState() || {};
             state.settingsMenuExpanded = false;
@@ -5257,7 +5278,7 @@ document.addEventListener('click', (e) => {
     }
     // Tools dropdown
     if (toolsMenuDropdown && toolsMenuDropdown.style.display !== 'none') {
-        if (!toolsMenuDropdown.contains(e.target) && e.target !== toolsMenuBtn) {
+        if (dismiss(e.target, toolsMenuDropdown, toolsMenuBtn, path)) {
             toolsMenuDropdown.style.display = 'none';
         }
     }
@@ -5547,30 +5568,36 @@ function updateContrastResetBtn() {
     }
 }
 
+// Lock-button updaters: swap the SVG icon and toggle the .locked class.
+// The static tooltip (`data-tip-id` in the HTML) describes the behavior;
+// we don't dynamically rewrite .title — the icon alone conveys the state.
+const LOCK_OPEN_SVG = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg>';
+const LOCK_CLOSED_SVG = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock"/></svg>';
+
 function updateBrightnessLockUI() {
     if (brightnessLockBtn) {
-        brightnessLockBtn.textContent = brightnessLocked ? '🔒' : '🔓';
+        brightnessLockBtn.innerHTML = brightnessLocked ? LOCK_CLOSED_SVG : LOCK_OPEN_SVG;
         brightnessLockBtn.classList.toggle('locked', brightnessLocked);
     }
 }
 
 function updateContrastLockUI() {
     if (contrastLockBtn) {
-        contrastLockBtn.textContent = contrastLocked ? '🔒' : '🔓';
+        contrastLockBtn.innerHTML = contrastLocked ? LOCK_CLOSED_SVG : LOCK_OPEN_SVG;
         contrastLockBtn.classList.toggle('locked', contrastLocked);
     }
 }
 
 function updateChannelLockUI() {
     if (channelLockBtn) {
-        channelLockBtn.textContent = channelLocked ? '🔒' : '🔓';
+        channelLockBtn.innerHTML = channelLocked ? LOCK_CLOSED_SVG : LOCK_OPEN_SVG;
         channelLockBtn.classList.toggle('locked', channelLocked);
     }
 }
 
 function updateClaheLockUI() {
     if (claheLockBtn) {
-        claheLockBtn.textContent = claheLocked ? '🔒' : '🔓';
+        claheLockBtn.innerHTML = claheLocked ? LOCK_CLOSED_SVG : LOCK_OPEN_SVG;
         claheLockBtn.classList.toggle('locked', claheLocked);
     }
 }
@@ -5941,6 +5968,7 @@ if (searchImagesBtn && searchInputContainer && searchInput) {
             // Hide and clear search
             searchInputContainer.style.display = 'none';
             searchInput.value = '';
+            if (searchCloseBtn) searchCloseBtn.classList.remove('visible');
             filterImages('');
         }
     };
@@ -5950,6 +5978,10 @@ if (searchImagesBtn && searchInputContainer && searchInput) {
 let searchDebounceTimer = null;
 if (searchInput) {
     searchInput.oninput = () => {
+        // Toggle inline clear button visibility
+        if (searchCloseBtn) {
+            searchCloseBtn.classList.toggle('visible', searchInput.value.length > 0);
+        }
         // Debounce input to avoid excessive filtering
         if (searchDebounceTimer) {
             clearTimeout(searchDebounceTimer);
@@ -5965,17 +5997,19 @@ if (searchInput) {
             // Hide search on Escape
             searchInputContainer.style.display = 'none';
             searchInput.value = '';
+            if (searchCloseBtn) searchCloseBtn.classList.remove('visible');
             filterImages('');
         }
     };
 }
 
-// Search close button - hide search input and clear filter
+// Inline clear button — clears text but keeps the search field open (macOS pattern)
 if (searchCloseBtn && searchInputContainer && searchInput) {
     searchCloseBtn.onclick = () => {
-        searchInputContainer.style.display = 'none';
         searchInput.value = '';
+        searchCloseBtn.classList.remove('visible');
         filterImages('');
+        searchInput.focus();
     };
 }
 
@@ -6058,6 +6092,10 @@ if (vscodeState && vscodeState.searchQuery) {
     if (searchInput && searchInputContainer) {
         searchInput.value = savedQuery;
         searchInputContainer.style.display = 'flex';
+        // Show inline clear (×) since the restored value is non-empty
+        if (searchCloseBtn && savedQuery.length > 0) {
+            searchCloseBtn.classList.add('visible');
+        }
         // Apply filter immediately (without saving state again initially)
         searchQuery = savedQuery.toLowerCase().trim();
         filteredImages = workspaceImages.filter(img =>

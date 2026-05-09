@@ -707,6 +707,39 @@ export class LabelMePanel {
         this._panel.webview.html = html;
     }
 
+    private _getIconSprite(): string {
+        const SW = 'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"';
+        return `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+            <symbol id="icon-search" viewBox="0 0 24 24" ${SW}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+            <symbol id="icon-refresh-cw" viewBox="0 0 24 24" ${SW}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></symbol>
+            <symbol id="icon-x" viewBox="0 0 24 24" ${SW}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+            <symbol id="icon-panel-left" viewBox="0 0 24 24" ${SW}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></symbol>
+            <symbol id="icon-chevron-left" viewBox="0 0 24 24" ${SW}><polyline points="15 18 9 12 15 6"/></symbol>
+            <symbol id="icon-chevron-right" viewBox="0 0 24 24" ${SW}><polyline points="9 18 15 12 9 6"/></symbol>
+            <symbol id="icon-info" viewBox="0 0 24 24" ${SW}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+            <symbol id="icon-eye" viewBox="0 0 24 24" ${SW}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
+            <symbol id="icon-eye-off" viewBox="0 0 24 24" ${SW}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.51 18.51 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></symbol>
+            <symbol id="icon-pentagon" viewBox="0 0 24 24" ${SW}><polygon points="12,2 22,9.5 18,21.5 6,21.5 2,9.5"/></symbol>
+            <symbol id="icon-square" viewBox="0 0 24 24" ${SW}><rect x="3" y="3" width="18" height="18" rx="1"/></symbol>
+            <symbol id="icon-slash" viewBox="0 0 24 24" ${SW}><line x1="5" y1="19" x2="19" y2="5"/></symbol>
+            <symbol id="icon-dot" viewBox="0 0 24 24" fill="currentColor" stroke="none"><circle cx="12" cy="12" r="4"/></symbol>
+            <symbol id="icon-sparkles" viewBox="0 0 24 24" ${SW}><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/><circle cx="12" cy="12" r="3"/></symbol>
+            <symbol id="icon-settings" viewBox="0 0 24 24" ${SW}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+            <symbol id="icon-wrench" viewBox="0 0 24 24" ${SW}><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></symbol>
+            <symbol id="icon-save" viewBox="0 0 24 24" ${SW}><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></symbol>
+            <symbol id="icon-sun" viewBox="0 0 24 24" ${SW}><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></symbol>
+            <symbol id="icon-moon" viewBox="0 0 24 24" ${SW}><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></symbol>
+            <symbol id="icon-circle-half" viewBox="0 0 24 24" ${SW}><circle cx="12" cy="12" r="9"/><path d="M12 3a9 9 0 0 1 0 18z" fill="currentColor" stroke="none"/></symbol>
+            <symbol id="icon-lock" viewBox="0 0 24 24" ${SW}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+            <symbol id="icon-lock-open" viewBox="0 0 24 24" ${SW}><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></symbol>
+            <symbol id="icon-folder-open" viewBox="0 0 24 24" ${SW}><path d="M6 14l-2 6h17l2-6H6z"/><path d="M22 13V6a2 2 0 0 0-2-2h-7l-2-2H4a2 2 0 0 0-2 2v14"/></symbol>
+            <symbol id="icon-cpu" viewBox="0 0 24 24" ${SW}><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></symbol>
+            <symbol id="icon-download" viewBox="0 0 24 24" ${SW}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+            <symbol id="icon-rotate-ccw" viewBox="0 0 24 24" ${SW}><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></symbol>
+            <symbol id="icon-check" viewBox="0 0 24 24" ${SW}><polyline points="20 6 9 17 4 12"/></symbol>
+        </defs></svg>`;
+    }
+
     private async _getHtmlForWebview(webview: vscode.Webview): Promise<string> {
         // Local path to main script run in the webview
         const scriptPathOnDisk = vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js');
@@ -742,6 +775,10 @@ export class LabelMePanel {
         const tooltipUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'tooltip.js')
         );
+
+        // Popover dismiss helper (pure function, must load before main.js)
+        const popoverDismissPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'popoverDismiss.js');
+        const popoverDismissUri = webview.asWebviewUri(popoverDismissPath);
 
         // Read CSS file content and inline it to prevent race condition on Windows
         // where JS executes before CSS finishes loading via external <link>, causing
@@ -788,29 +825,33 @@ export class LabelMePanel {
                 <title>LabelMe</title>
             </head>
             <body>
+                ${this._getIconSprite()}
                 <div class="app-container">
                     <div id="imageBrowserSidebar" class="image-browser-sidebar collapsed">
                         <div class="image-browser-header">
                             <h3>Images</h3>
                             <span id="imageCount">(${workspaceImages.length})</span>
-                            <button id="searchImagesBtn" class="header-btn" data-tip-id="browser.search">🔍</button>
-                            <button id="refreshImagesBtn" class="header-btn" data-tip-id="browser.refresh">🔄</button>
+                            <button id="searchImagesBtn" class="btn btn-icon header-btn" data-tip-id="browser.search"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg></button>
+                            <button id="refreshImagesBtn" class="btn btn-icon header-btn" data-tip-id="browser.refresh"><svg class="icon" aria-hidden="true"><use href="#icon-refresh-cw"/></svg></button>
                         </div>
                         <div id="searchInputContainer" class="search-input-container" style="display: none;">
-                            <input type="text" id="searchInput" placeholder="Search images..." />
-                            <button id="searchCloseBtn" class="search-close-btn" data-tip-id="browser.searchClose">✕</button>
+                            <div class="search-field">
+                                <svg class="icon icon-sm search-field__icon" aria-hidden="true"><use href="#icon-search"/></svg>
+                                <input type="search" id="searchInput" placeholder="Search images…" />
+                                <button id="searchCloseBtn" class="search-field__clear" data-tip-id="browser.searchClose" aria-label="Clear search"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                            </div>
                         </div>
                         <ul id="imageBrowserList" class="image-browser-list"></ul>
                     </div>
                     <div id="imageBrowserResizer" class="image-browser-resizer"></div>
                     <div class="main-area">
                         <div class="toolbar">
-                            <button id="imageBrowserToggleBtn" class="nav-btn" data-tip-id="nav.toggleBrowser">☰</button>
-                            <button id="prevImageBtn" class="nav-btn" data-tip-id="nav.prev">◀</button>
-                            <button id="nextImageBtn" class="nav-btn" data-tip-id="nav.next">▶</button>
+                            <button id="imageBrowserToggleBtn" class="btn btn-icon nav-btn" data-tip-id="nav.toggleBrowser"><svg class="icon" aria-hidden="true"><use href="#icon-panel-left"/></svg></button>
+                            <button id="prevImageBtn" class="btn btn-icon nav-btn" data-tip-id="nav.prev"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"/></svg></button>
+                            <button id="nextImageBtn" class="btn btn-icon nav-btn" data-tip-id="nav.next"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-right"/></svg></button>
                             <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" data-tip-id="nav.fileName">${isDummyImage ? '' : (currentImageRelativePath || path.basename(this._imageUri.fsPath))}</span>
                             <span id="status"></span>
-                            <span id="imageInfoBtn" class="image-info-btn" data-tip-id="nav.imageInfo">ℹ</span>
+                            <span id="imageInfoBtn" class="image-info-btn" data-tip-id="nav.imageInfo"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span>
                             <div id="imageInfoPopup" class="image-info-popup hidden"></div>
                         </div>
                         <div class="canvas-container">
@@ -832,50 +873,50 @@ export class LabelMePanel {
                     <div class="sidebar" id="sidebar">
                         <div class="sidebar-config-section">
                             <div class="sidebar-toolbar">
-                                <div class="mode-toggle-group">
-                                    <button id="viewModeBtn" class="mode-btn active" data-tip-id="mode.view">👁️</button>
-                                    <button id="polygonModeBtn" class="mode-btn" data-tip-id="mode.polygon">⬠</button>
-                                    <button id="rectangleModeBtn" class="mode-btn" data-tip-id="mode.rectangle">▭</button>
-                                    <button id="lineModeBtn" class="mode-btn" data-tip-id="mode.line">⟋</button>
-                                    <button id="pointModeBtn" class="mode-btn" data-tip-id="mode.point">•</button>
-                                    <button id="samModeBtn" class="mode-btn" data-tip-id="mode.sam">🧠</button>
+                                <div class="mode-toggle-group segmented-group">
+                                    <button id="viewModeBtn" class="mode-btn segmented-item active" data-tip-id="mode.view"><svg class="icon" aria-hidden="true"><use href="#icon-eye"/></svg></button>
+                                    <button id="polygonModeBtn" class="mode-btn segmented-item" data-tip-id="mode.polygon"><svg class="icon" aria-hidden="true"><use href="#icon-pentagon"/></svg></button>
+                                    <button id="rectangleModeBtn" class="mode-btn segmented-item" data-tip-id="mode.rectangle"><svg class="icon" aria-hidden="true"><use href="#icon-square"/></svg></button>
+                                    <button id="lineModeBtn" class="mode-btn segmented-item" data-tip-id="mode.line"><svg class="icon" aria-hidden="true"><use href="#icon-slash"/></svg></button>
+                                    <button id="pointModeBtn" class="mode-btn segmented-item" data-tip-id="mode.point"><svg class="icon" aria-hidden="true"><use href="#icon-dot"/></svg></button>
+                                    <button id="samModeBtn" class="mode-btn segmented-item" data-tip-id="mode.sam"><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg></button>
                                 </div>
-                                <div class="sidebar-actions">
-                                    <button id="settingsMenuBtn" class="sidebar-icon-btn" data-tip-id="actions.settings">⚙️</button>
-                                    <button id="toolsMenuBtn" class="sidebar-icon-btn" data-tip-id="actions.tools">🛠️</button>
-                                    <button id="saveBtn" class="sidebar-icon-btn" data-tip-id="actions.save" disabled>💾</button>
+                                <div class="sidebar-actions segmented-group">
+                                    <button id="settingsMenuBtn" class="sidebar-icon-btn segmented-item" data-tip-id="actions.settings"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg></button>
+                                    <button id="toolsMenuBtn" class="sidebar-icon-btn segmented-item" data-tip-id="actions.tools"><svg class="icon" aria-hidden="true"><use href="#icon-wrench"/></svg></button>
+                                    <button id="saveBtn" class="sidebar-icon-btn segmented-item" data-tip-id="actions.save" disabled><svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg></button>
                                 </div>
                                 <div id="settingsMenuDropdown" class="sidebar-dropdown" style="display: none;">
                                     <div class="theme-control">
                                         <label>Theme</label>
-                                        <div class="theme-toggle-group">
-                                            <button id="themeLightBtn" class="theme-btn" data-tip-id="theme.light">☀️</button>
-                                            <button id="themeDarkBtn" class="theme-btn" data-tip-id="theme.dark">🌙</button>
-                                            <button id="themeAutoBtn" class="theme-btn" data-tip-id="theme.auto">🔄</button>
+                                        <div class="theme-toggle-group segmented-group">
+                                            <button id="themeLightBtn" class="theme-btn segmented-item" data-tip-id="theme.light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg></button>
+                                            <button id="themeDarkBtn" class="theme-btn segmented-item" data-tip-id="theme.dark"><svg class="icon" aria-hidden="true"><use href="#icon-moon"/></svg></button>
+                                            <button id="themeAutoBtn" class="theme-btn segmented-item" data-tip-id="theme.auto"><svg class="icon" aria-hidden="true"><use href="#icon-circle-half"/></svg></button>
                                         </div>
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" data-tip-id="view.zoomReset">&#8634;</span></label>
-                                            <button id="zoomLockBtn" class="zoom-lock-btn" data-tip-id="view.zoomLock">🔓</button>
+                                            <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" data-tip-id="view.zoomReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
+                                            <button id="zoomLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="view.zoomLock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                     </div>
                                     <div class="settings-group-header">Annotation Style</div>
                                     <div class="slider-control">
-                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" data-tip-id="style.borderWidthReset">&#8634;</span></label>
+                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" data-tip-id="style.borderWidthReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
                                         <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5" data-tip-id="style.borderWidth">
                                     </div>
                                     <div class="slider-control">
-                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" data-tip-id="style.fillOpacityReset">&#8634;</span></label>
+                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" data-tip-id="style.fillOpacityReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
                                         <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5" data-tip-id="style.fillOpacity">
                                     </div>
                                     <div class="settings-group-header">Image Adjustment</div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Channel:</label>
-                                            <button id="channelLockBtn" class="zoom-lock-btn" data-tip-id="channel.lock">🔓</button>
+                                            <button id="channelLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="channel.lock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
-                                        <div class="onnx-radio-group">
+                                        <div class="onnx-radio-group segmented-group">
                                             <label class="onnx-radio"><input type="radio" name="imageChannel" value="rgb" data-tip-id="channel.rgb" checked /> RGB</label>
                                             <label class="onnx-radio"><input type="radio" name="imageChannel" value="r" data-tip-id="channel.r" /> R</label>
                                             <label class="onnx-radio"><input type="radio" name="imageChannel" value="g" data-tip-id="channel.g" /> G</label>
@@ -884,15 +925,15 @@ export class LabelMePanel {
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Brightness: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" data-tip-id="image.brightnessReset">&#8634;</span></label>
-                                            <button id="brightnessLockBtn" class="zoom-lock-btn" data-tip-id="image.brightnessLock">🔓</button>
+                                            <label>Brightness: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" data-tip-id="image.brightnessReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
+                                            <button id="brightnessLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="image.brightnessLock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <input type="range" id="brightnessSlider" min="10" max="300" value="100" step="5" data-tip-id="image.brightness">
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Contrast: <span id="contrastValue">100</span>% <span id="contrastResetBtn" class="slider-reset-btn" data-tip-id="image.contrastReset">&#8634;</span></label>
-                                            <button id="contrastLockBtn" class="zoom-lock-btn" data-tip-id="image.contrastLock">🔓</button>
+                                            <label>Contrast: <span id="contrastValue">100</span>% <span id="contrastResetBtn" class="slider-reset-btn" data-tip-id="image.contrastReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
+                                            <button id="contrastLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="image.contrastLock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <input type="range" id="contrastSlider" min="10" max="300" value="100" step="5" data-tip-id="image.contrast">
                                     </div>
@@ -900,8 +941,8 @@ export class LabelMePanel {
                                         <div class="zoom-header">
                                             <label>CLAHE:</label>
                                             <button id="claheToggleBtn" class="channel-btn" data-tip-id="image.claheToggle">Off</button>
-                                            <span id="claheResetBtn" class="slider-reset-btn" data-tip-id="image.claheReset">&#8634;</span>
-                                            <button id="claheLockBtn" class="zoom-lock-btn" data-tip-id="image.claheLock">🔓</button>
+                                            <span id="claheResetBtn" class="slider-reset-btn" data-tip-id="image.claheReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span>
+                                            <button id="claheLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="image.claheLock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <div id="claheControls" style="display: none;">
                                             <div style="font-size: 0.8em; margin-top: 4px;">Clip Limit: <span id="claheClipLimitValue">2.0</span></div>
@@ -910,19 +951,25 @@ export class LabelMePanel {
                                     </div>
                                 </div>
                                 <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
-                                    <div class="sidebar-dropdown-item" id="exportSvgMenuItem" data-tip-id="tools.exportSvg">📐 Export SVG</div>
-                                    <div class="sidebar-dropdown-item" id="onnxBatchInferMenuItem" data-tip-id="tools.onnxBatchInfer">🤖 ONNX Batch Infer</div>
+                                    <div class="sidebar-dropdown-item" id="exportSvgMenuItem" data-tip-id="tools.exportSvg"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-download"/></svg> Export SVG</div>
+                                    <div class="sidebar-dropdown-item" id="onnxBatchInferMenuItem" data-tip-id="tools.onnxBatchInfer"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-cpu"/></svg> ONNX Batch Infer</div>
                                 </div>
                             </div>
                         </div>
                         <div class="sidebar-content">
                             <div class="sidebar-labels-section" id="sidebarLabelsSection">
-                                <h3>Labels <span id="labelsCount" class="section-count"></span></h3>
+                                <div class="sidebar-section-header">
+                                    <h3>Labels</h3>
+                                    <span id="labelsCount" class="section-count"></span>
+                                </div>
                                 <ul id="labelsList"></ul>
                             </div>
                             <div id="sidebarSectionResizer" class="sidebar-section-resizer"></div>
                             <div class="sidebar-instances-section" id="sidebarInstancesSection">
-                                <h3>Instances <span id="instancesCount" class="section-count"></span></h3>
+                                <div class="sidebar-section-header">
+                                    <h3>Instances</h3>
+                                    <span id="instancesCount" class="section-count"></span>
+                                </div>
                                 <ul id="shapeList"></ul>
                             </div>
                         </div>
@@ -932,13 +979,14 @@ export class LabelMePanel {
                 <!-- Modal for Label Input -->
                 <div id="labelModal" class="modal">
                     <div class="modal-content">
+                        <button class="modal-close" data-modal-close="labelModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3>Enter Label</h3>
                         <input type="text" id="labelInput" placeholder="Enter label name">
                         <textarea id="descriptionInput" placeholder="Add description (optional)" rows="2"></textarea>
                         <div id="recentLabels"></div>
                         <div class="modal-buttons">
-                            <button id="modalOkBtn">OK</button>
-                            <button id="modalCancelBtn">Cancel</button>
+                            <button id="modalOkBtn" class="btn btn-primary">OK</button>
+                            <button id="modalCancelBtn" class="btn">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -946,6 +994,7 @@ export class LabelMePanel {
                 <!-- Modal for Color Picker -->
                 <div id="colorPickerModal" class="modal">
                     <div class="modal-content color-picker-content">
+                        <button class="modal-close" data-modal-close="colorPickerModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3>Choose Color</h3>
                         <div class="color-palette"></div>
                         <div class="custom-color-input">
@@ -953,8 +1002,8 @@ export class LabelMePanel {
                             <input type="text" id="customColorInput" placeholder="#xxxxxx" maxlength="7">
                         </div>
                         <div class="modal-buttons">
-                            <button id="colorOkBtn">OK</button>
-                            <button id="colorCancelBtn">Cancel</button>
+                            <button id="colorOkBtn" class="btn btn-primary">OK</button>
+                            <button id="colorCancelBtn" class="btn">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -962,25 +1011,26 @@ export class LabelMePanel {
                 <!-- Modal for ONNX Batch Inference -->
                 <div id="onnxInferModal" class="modal">
                     <div class="modal-content onnx-infer-content">
-                        <h3>🤖 ONNX Batch Inference</h3>
+                        <button class="modal-close" data-modal-close="onnxInferModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> ONNX Batch Inference</h3>
                         <div class="onnx-note">Output: polygon only</div>
                         <div class="onnx-form-group">
-                            <label>Model Directory <span class="onnx-hint" data-tip-id="onnx.modelDir">ⓘ</span></label>
+                            <label>Model Directory <span class="onnx-hint" data-tip-id="onnx.modelDir"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
                             <div class="onnx-path-input">
                                 <input type="text" id="onnxModelDir" placeholder="Path to directory with .onnx and labels.json" />
-                                <button id="onnxModelDirBrowse" class="onnx-browse-btn" data-tip-id="onnx.modelDirBrowse">📂</button>
+                                <button id="onnxModelDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="onnx.modelDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="onnx.pythonPath">Python Interpreter</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="onnxPythonPath" placeholder="python" />
-                                <button id="onnxPythonPathBrowse" class="onnx-browse-btn" data-tip-id="onnx.pythonBrowse">📂</button>
+                                <button id="onnxPythonPathBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="onnx.pythonBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="onnx.device">Device</label>
-                            <div class="onnx-radio-group">
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxDevice" value="cpu" checked /> CPU</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxDevice" value="gpu" /> GPU</label>
                             </div>
@@ -991,21 +1041,21 @@ export class LabelMePanel {
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="onnx.colorFormat">Color Format</label>
-                            <div class="onnx-radio-group">
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxColor" value="rgb" checked /> RGB</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxColor" value="bgr" /> BGR</label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="onnx.scope">Scope</label>
-                            <div class="onnx-radio-group">
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxScope" value="all" checked /> All Images</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxScope" value="current" /> Current Image</label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="onnx.mode">Existing Annotations</label>
-                            <div class="onnx-radio-group">
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxMode" value="skip" checked /> Skip</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxMode" value="merge" /> Merge</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxMode" value="overwrite" /> Overwrite</label>
@@ -1013,8 +1063,8 @@ export class LabelMePanel {
                         </div>
                         <div class="onnx-image-count">Images to process: <strong id="onnxImageCount">0</strong></div>
                         <div class="modal-buttons">
-                            <button id="onnxInferOkBtn">Run</button>
-                            <button id="onnxInferCancelBtn">Cancel</button>
+                            <button id="onnxInferOkBtn" class="btn btn-primary">Run</button>
+                            <button id="onnxInferCancelBtn" class="btn">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -1022,25 +1072,26 @@ export class LabelMePanel {
                 <!-- Modal for SAM AI Service Config -->
                 <div id="samConfigModal" class="modal">
                     <div class="modal-content onnx-infer-content">
-                        <h3>🤖 SAM AI Annotation</h3>
+                        <button class="modal-close" data-modal-close="samConfigModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> SAM AI Annotation</h3>
                         <div class="onnx-note">Configure SAM service for interactive annotation</div>
                         <div class="onnx-form-group">
-                            <label>Model Directory <span class="onnx-hint" data-tip-id="sam.modelDir">ⓘ</span></label>
+                            <label>Model Directory <span class="onnx-hint" data-tip-id="sam.modelDir"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
                             <div class="onnx-path-input">
                                 <input type="text" id="samModelDir" placeholder="Path to directory with encoder.onnx and decoder.onnx" />
-                                <button id="samModelDirBrowse" class="onnx-browse-btn" data-tip-id="sam.modelDirBrowse">📂</button>
+                                <button id="samModelDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="sam.modelDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="sam.pythonPath">Python Interpreter</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="samPythonPath" placeholder="python" />
-                                <button id="samPythonPathBrowse" class="onnx-browse-btn" data-tip-id="sam.pythonBrowse">📂</button>
+                                <button id="samPythonPathBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="sam.pythonBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="sam.device">Device</label>
-                            <div class="onnx-radio-group">
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="samDevice" value="cpu" checked /> CPU</label>
                                 <label class="onnx-radio"><input type="radio" name="samDevice" value="gpu" /> GPU</label>
                             </div>
@@ -1050,8 +1101,8 @@ export class LabelMePanel {
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Encode Mode <span class="onnx-hint" data-tip-id="sam.encodeMode">ⓘ</span></label>
-                            <div class="onnx-radio-group">
+                            <label>Encode Mode <span class="onnx-hint" data-tip-id="sam.encodeMode"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
+                            <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="full" checked /> Full Image</label>
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="local" /> Local Crop</label>
                             </div>
@@ -1061,8 +1112,8 @@ export class LabelMePanel {
                             <input type="number" id="samPort" value="8765" min="1024" max="65535" style="width:80px" />
                         </div>
                         <div class="modal-buttons">
-                            <button id="samConfigOkBtn">Start Service</button>
-                            <button id="samConfigCancelBtn">Cancel</button>
+                            <button id="samConfigOkBtn" class="btn btn-primary">Start Service</button>
+                            <button id="samConfigCancelBtn" class="btn">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -1117,6 +1168,7 @@ export class LabelMePanel {
                 <script src="${tipsDataUri}"></script>
                 <script src="${tooltipHelpersUri}"></script>
                 <script src="${tooltipUri}"></script>
+                <script src="${popoverDismissUri}"></script>
                 <script src="${scriptUri}"></script>
             </body>
             </html>`;
