@@ -48,14 +48,9 @@
         applyToDom(payload);
     }
 
-    function clearTransient() {
-        if (transient && transient.timerId) clearTimeout(transient.timerId);
-        transient = null;
-        rerender();
-    }
-
     // Called by a scheduled timeout. Only takes effect if the transient hasn't
-    // been replaced or cleared since this timer was set.
+    // been replaced or cleared since this timer was set — so a stale callback
+    // from a preempted transient cannot wipe a newer message.
     function expireTransientIfCurrent(token) {
         if (!transient || transient.token !== token) return;
         transient = null;

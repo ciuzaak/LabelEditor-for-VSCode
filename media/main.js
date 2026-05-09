@@ -130,7 +130,6 @@ let samIsFreshSequence = true;    // True if we are starting a new prompt sequen
 
 // --- Shift feedback state ---
 let shiftPressed = false;
-let lastFeedbackText = null;     // What we last wrote, for safe restore
 const ERASER_CURSOR_DATA_URI = 'url("data:image/svg+xml;utf8,' + encodeURIComponent(
     '<svg xmlns=\'http://www.w3.org/2000/svg\' width=\'24\' height=\'24\' viewBox=\'0 0 24 24\'>' +
     '<path d=\'M3 17l6-6 5 5 7-7v3l-7 7-5-5-6 6z\' fill=\'%23ff6b35\' stroke=\'white\' stroke-width=\'1.5\'/>' +
@@ -6829,7 +6828,6 @@ async function samCheckAndEnterMode() {
 function updateShiftFeedback() {
     if (!shiftPressed || currentMode === 'view') {
         if (window.notifyBus) window.notifyBus.clearSticky('shift.feedback');
-        lastFeedbackText = null;
         // Cursor reset: clear inline style and let the existing mousemove logic re-derive
         currentCursor = null;
         canvasWrapper.style.cursor = '';
@@ -6841,7 +6839,6 @@ function updateShiftFeedback() {
 
     canvasWrapper.style.cursor = cursor;
     currentCursor = cursor;
-    lastFeedbackText = text;
 
     // Map the legacy hex colors to severity. #ff4444 is the negative-point hint
     // (treat as warn — informational caution, not an error), #ff8800 the eraser
