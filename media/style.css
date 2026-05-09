@@ -1518,3 +1518,8 @@ canvas {
     border-bottom: 1px solid var(--color-border);
 }
 
+/* Inline SVG icons (Lucide-style 1.6px stroke, currentColor) */
+.icon { width: 16px; height: 16px; vertical-align: -3px; flex-shrink: 0; }
+.icon-sm { width: 14px; height: 14px; }
+.icon-lg { width: 18px; height: 18px; }
+
