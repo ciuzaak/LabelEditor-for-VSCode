@@ -28,6 +28,13 @@ export class LabelMePanel {
     private _scanGeneration = 0; // Incremented on each scan start to detect stale results
     private _isScanFinished = false; // Tracks if the initial background scan has completed
     private _disposed = false; // Guards async callbacks from posting to a disposed webview
+    private _webviewReady = false; // Set when the webview signals 'webviewReady'
+    private _pendingNotifications: Array<{
+        level: 'info' | 'success' | 'warn' | 'error';
+        text: string;
+        key?: string;
+        sticky?: boolean;
+    }> = [];
 
     // Tracks SAM-service ports already launched in this extension-host session,
     // so a second panel doesn't try to start a conflicting server on the same port.
@@ -46,6 +53,36 @@ export class LabelMePanel {
         // Call the raw webview API directly — do NOT route through _safePost.
         const webview = this._panel.webview;
         webview.postMessage(message);
+    }
+
+    /**
+     * Send a non-actionable notification to the webview status bus. If the
+     * webview has not signalled 'webviewReady' yet, queue the message and
+     * flush it on ready. Native VS Code dialogs are reserved for prompts that
+     * need a user-button decision (Save / Discard / Cancel).
+     */
+    private _notify(
+        level: 'info' | 'success' | 'warn' | 'error',
+        text: string,
+        opts?: { key?: string; sticky?: boolean }
+    ): void {
+        if (!this._webviewReady) {
+            if (this._pendingNotifications.length >= 50) {
+                // Bound the queue; the oldest entry is the safest to drop.
+                this._pendingNotifications.shift();
+            }
+            this._pendingNotifications.push({ level, text, ...(opts || {}) });
+            return;
+        }
+        this._safePost({ command: 'notify', level, text, ...(opts || {}) });
+    }
+
+    private _flushPendingNotifications(): void {
+        const queue = this._pendingNotifications;
+        this._pendingNotifications = [];
+        for (const n of queue) {
+            this._safePost({ command: 'notify', ...n });
+        }
     }
 
     /**
@@ -250,9 +287,6 @@ export class LabelMePanel {
                     case 'dirty':
                         this._isDirty = message.value;
                         return;
-                    case 'alert':
-                        vscode.window.showErrorMessage(message.text);
-                        return;
                     case 'next':
                         await this.navigateImage(1);
                         return;
@@ -260,6 +294,8 @@ export class LabelMePanel {
                         await this.navigateImage(-1);
                         return;
                     case 'webviewReady':
+                        this._webviewReady = true;
+                        this._flushPendingNotifications();
                         // The webview's JavaScript is now fully loaded and listening.
                         // Re-send the image list ONLY IF the scan has finished.
                         // This prevents the UI from incorrectly showing "(0)" for large folders
@@ -553,7 +589,7 @@ export class LabelMePanel {
 
         this._sendImageListUpdate();
 
-        vscode.window.showInformationMessage(`Refreshed: Found ${this._workspaceImages.length} images`);
+        this._notify('success', `Refreshed: Found ${this._workspaceImages.length} images`);
     }
 
     public updateWebviewOptions() {
@@ -628,7 +664,7 @@ export class LabelMePanel {
                 existingData = JSON.parse(jsonContent);
             } catch (e) {
                 console.error("Failed to load existing JSON", e);
-                vscode.window.showWarningMessage(`Failed to load annotation file: ${(e as Error).message}`);
+                this._notify('warn', `Failed to load annotation file: ${(e as Error).message}`);
             }
         }
 
@@ -646,6 +682,8 @@ export class LabelMePanel {
 
     public dispose() {
         this._disposed = true;
+        this._webviewReady = false;
+        this._pendingNotifications = [];
         LabelMePanel.panels.delete(this);
         // Bump scan generation so any in-flight scan discards its results.
         this._scanGeneration++;
@@ -725,7 +763,7 @@ export class LabelMePanel {
                     existingData = JSON.parse(jsonContent);
                 } catch (e) {
                     console.error("Failed to load existing JSON", e);
-                    vscode.window.showWarningMessage(`Failed to load annotation file: ${(e as Error).message}`);
+                    this._notify('warn', `Failed to load annotation file: ${(e as Error).message}`);
                 }
             }
         }
@@ -1078,7 +1116,7 @@ export class LabelMePanel {
         this._isSaving = true;
         try {
             await fs.writeFile(jsonPath, JSON.stringify(labelMeData, null, 2), 'utf8');
-            vscode.window.showInformationMessage('Annotation saved to ' + path.basename(jsonPath));
+            this._notify('success', 'Annotation saved to ' + path.basename(jsonPath));
 
             // Notify webview that save completed.
             // The webview will check if the confirmed save matches the current snapshot.
@@ -1086,7 +1124,7 @@ export class LabelMePanel {
             // If dirty (user edited during save), it stays dirty and does NOT post navigate.
             this._safePost({ command: 'saveComplete' });
         } catch (err) {
-            vscode.window.showErrorMessage('Failed to save annotation: ' + (err as Error).message);
+            this._notify('error', 'Failed to save annotation: ' + (err as Error).message);
             // Clear pending navigation so a later unrelated save doesn't trigger it
             this._pendingNavigation = undefined;
             this._pendingNavigationPath = undefined;
@@ -1108,9 +1146,9 @@ export class LabelMePanel {
 
         try {
             await fs.writeFile(svgPath, svg, 'utf8');
-            vscode.window.showInformationMessage('SVG exported to ' + path.basename(svgPath));
+            this._notify('success', 'SVG exported to ' + path.basename(svgPath));
         } catch (err) {
-            vscode.window.showErrorMessage('Failed to export SVG: ' + (err as Error).message);
+            this._notify('error', 'Failed to export SVG: ' + (err as Error).message);
         }
     }
 
@@ -1145,7 +1183,7 @@ export class LabelMePanel {
     }) {
         // Validate model directory
         if (!config.modelDir || !existsSync(config.modelDir)) {
-            vscode.window.showErrorMessage('ONNX Batch Infer: Model directory does not exist.');
+            this._notify('error', 'ONNX Batch Infer: Model directory does not exist.');
             return;
         }
 
@@ -1153,13 +1191,13 @@ export class LabelMePanel {
         const dirEntries = await fs.readdir(config.modelDir);
         const hasOnnx = dirEntries.some(f => f.endsWith('.onnx'));
         if (!hasOnnx) {
-            vscode.window.showErrorMessage('ONNX Batch Infer: No .onnx file found in model directory.');
+            this._notify('error', 'ONNX Batch Infer: No .onnx file found in model directory.');
             return;
         }
 
         // Check for labels.json
         if (!existsSync(path.join(config.modelDir, 'labels.json'))) {
-            vscode.window.showErrorMessage('ONNX Batch Infer: labels.json not found in model directory.');
+            this._notify('error', 'ONNX Batch Infer: labels.json not found in model directory.');
             return;
         }
 
@@ -1173,7 +1211,7 @@ export class LabelMePanel {
                 await this._scanWorkspaceImages();
             }
             if (this._workspaceImages.length === 0) {
-                vscode.window.showWarningMessage('ONNX Batch Infer: No images found in workspace.');
+                this._notify('warn', 'ONNX Batch Infer: No images found in workspace.');
                 return;
             }
             absoluteImagePaths = this._workspaceImages.map(rel => path.join(this._rootPath, rel));
@@ -1192,7 +1230,7 @@ export class LabelMePanel {
         // Locate the bundled Python script
         const scriptPath = path.join(this._extensionUri.fsPath, 'scripts', 'onnx_batch_infer.py');
         if (!existsSync(scriptPath)) {
-            vscode.window.showErrorMessage('ONNX Batch Infer: Inference script not found at ' + scriptPath);
+            this._notify('error', 'ONNX Batch Infer: Inference script not found at ' + scriptPath);
             return;
         }
 
@@ -1230,9 +1268,7 @@ export class LabelMePanel {
         terminal.show();
         terminal.sendText(command);
 
-        vscode.window.showInformationMessage(
-            `ONNX Batch Infer started: ${absoluteImagePaths.length} images. Check the terminal for progress.`
-        );
+        this._notify('info', `ONNX Batch Infer started: ${absoluteImagePaths.length} images. Check the terminal for progress.`);
     }
 
     /**
@@ -1247,7 +1283,7 @@ export class LabelMePanel {
     }) {
         // Validate model directory
         if (!config.modelDir || !existsSync(config.modelDir)) {
-            vscode.window.showErrorMessage('SAM Service: Model directory does not exist.');
+            this._notify('error', 'SAM Service: Model directory does not exist.');
             return;
         }
 
@@ -1255,23 +1291,21 @@ export class LabelMePanel {
         const dirEntries = await fs.readdir(config.modelDir);
         const onnxFiles = dirEntries.filter(f => f.toLowerCase().endsWith('.onnx'));
         if (onnxFiles.length < 2) {
-            vscode.window.showErrorMessage('SAM Service: Need at least 2 ONNX files (encoder + decoder) in model directory.');
+            this._notify('error', 'SAM Service: Need at least 2 ONNX files (encoder + decoder) in model directory.');
             return;
         }
 
         // Avoid launching a second SAM service on a port we already started one on
         // in this extension-host session (e.g. from another panel).
         if (LabelMePanel._samServicePorts.has(config.port)) {
-            vscode.window.showWarningMessage(
-                `SAM Service already running on port ${config.port} from another panel. Reusing it; change the port in settings if you want a separate instance.`
-            );
+            this._notify('warn', `SAM Service already running on port ${config.port} from another panel. Reusing it; change the port in settings if you want a separate instance.`);
             return;
         }
 
         // Locate the bundled Python script
         const scriptPath = path.join(this._extensionUri.fsPath, 'scripts', 'sam_service.py');
         if (!existsSync(scriptPath)) {
-            vscode.window.showErrorMessage('SAM Service: Service script not found at ' + scriptPath);
+            this._notify('error', 'SAM Service: Service script not found at ' + scriptPath);
             return;
         }
 
@@ -1317,8 +1351,6 @@ export class LabelMePanel {
         terminal.show();
         terminal.sendText(command);
 
-        vscode.window.showInformationMessage(
-            `SAM Service starting on port ${config.port}. Check the terminal for status.`
-        );
+        this._notify('info', `SAM Service starting on port ${config.port}. Check the terminal for status.`);
     }
 }

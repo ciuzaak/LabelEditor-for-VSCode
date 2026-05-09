@@ -1013,6 +1013,15 @@ canvasContainerObserver.observe(canvasContainer);
 window.addEventListener('message', event => {
     const message = event.data;
     switch (message.command) {
+        case 'notify': {
+            if (!window.notifyBus) break;
+            const level = message.level || 'info';
+            const opts = {};
+            if (message.key) opts.key = message.key;
+            if (message.sticky) opts.sticky = true;
+            window.notifyBus.show(level, message.text || '', opts);
+            break;
+        }
         case 'requestSave':
             saveTriggeredByNavigation = true;
             save();
