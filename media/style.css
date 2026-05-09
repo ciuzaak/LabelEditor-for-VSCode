@@ -383,30 +383,44 @@ body {
     position: relative;
 }
 
-button {
-    background-color: var(--color-bg-input);
+/* Reset native button styling so explicit classes win */
+button { all: unset; cursor: pointer; box-sizing: border-box; }
+button:focus-visible { outline: none; }
+
+/* ---------- .btn (default secondary) ---------- */
+.btn {
+    appearance: none;
+    background: var(--color-bg-input);
     color: var(--color-text-primary);
-    border: none;
-    padding: 5px 10px;
-    margin-right: 10px;
-    cursor: pointer;
-    border-radius: 2px;
+    border: 0.5px solid var(--color-border-input);
+    border-radius: var(--radius-sm);
+    font: inherit;
+    line-height: 1;
+    padding: 5px 12px;
+    box-shadow: var(--shadow-2);
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    transition: background-color var(--dur-fast) var(--ease-standard),
+                box-shadow var(--dur-fast) var(--ease-standard);
 }
+.btn:hover    { background: var(--color-bg-hover-input); }
+.btn:active   { background: var(--color-bg-active); transform: translateY(0.5px); }
+.btn:disabled { background: var(--color-bg-tertiary); color: var(--color-text-disabled);
+                box-shadow: none; cursor: default; }
+.btn:focus-visible { box-shadow: var(--shadow-2), var(--shadow-focus); }
 
-button:hover {
-    background-color: var(--color-bg-hover-input);
-}
+.btn-primary { background: var(--color-accent); color: #fff; border-color: transparent; }
+.btn-primary:hover  { background: var(--color-accent-hover); }
+.btn-primary:active { background: var(--color-accent-active); }
+.btn-primary:focus-visible { box-shadow: var(--shadow-focus); }
 
-button:disabled {
-    background-color: var(--color-bg-tertiary);
-    color: var(--color-text-muted);
-    cursor: default;
-}
+.btn-icon { padding: 5px; min-width: 28px; min-height: 28px; justify-content: center; }
+.btn-danger { background: var(--color-danger); color: #fff; border-color: transparent; }
 
-button.dirty {
-    background-color: var(--color-accent);
-    color: white;
-}
+/* dirty state preserved for save button */
+.btn.dirty, .sidebar-icon-btn.dirty { background: var(--color-accent); color: #fff;
+                                       border-color: transparent; }
 
 .canvas-container {
     flex: 1;

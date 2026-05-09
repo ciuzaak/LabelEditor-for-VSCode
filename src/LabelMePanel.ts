@@ -770,21 +770,21 @@ export class LabelMePanel {
                         <div class="image-browser-header">
                             <h3>Images</h3>
                             <span id="imageCount">(${workspaceImages.length})</span>
-                            <button id="searchImagesBtn" class="header-btn" title="Search Images"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg></button>
-                            <button id="refreshImagesBtn" class="header-btn" title="Refresh Image List"><svg class="icon" aria-hidden="true"><use href="#icon-refresh-cw"/></svg></button>
+                            <button id="searchImagesBtn" class="btn btn-icon header-btn" title="Search Images"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg></button>
+                            <button id="refreshImagesBtn" class="btn btn-icon header-btn" title="Refresh Image List"><svg class="icon" aria-hidden="true"><use href="#icon-refresh-cw"/></svg></button>
                         </div>
                         <div id="searchInputContainer" class="search-input-container" style="display: none;">
                             <input type="text" id="searchInput" placeholder="Search images..." />
-                            <button id="searchCloseBtn" class="search-close-btn" title="Close Search"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                            <button id="searchCloseBtn" class="btn btn-icon search-close-btn" title="Close Search"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         </div>
                         <ul id="imageBrowserList" class="image-browser-list"></ul>
                     </div>
                     <div id="imageBrowserResizer" class="image-browser-resizer"></div>
                     <div class="main-area">
                         <div class="toolbar">
-                            <button id="imageBrowserToggleBtn" class="nav-btn" title="Toggle Image Browser"><svg class="icon" aria-hidden="true"><use href="#icon-panel-left"/></svg></button>
-                            <button id="prevImageBtn" class="nav-btn" title="Previous Image (A)"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"/></svg></button>
-                            <button id="nextImageBtn" class="nav-btn" title="Next Image (D)"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-right"/></svg></button>
+                            <button id="imageBrowserToggleBtn" class="btn btn-icon nav-btn" title="Toggle Image Browser"><svg class="icon" aria-hidden="true"><use href="#icon-panel-left"/></svg></button>
+                            <button id="prevImageBtn" class="btn btn-icon nav-btn" title="Previous Image (A)"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"/></svg></button>
+                            <button id="nextImageBtn" class="btn btn-icon nav-btn" title="Next Image (D)"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-right"/></svg></button>
                             <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" title="Left click: copy absolute path | Right click: copy filename">${isDummyImage ? '' : (currentImageRelativePath || path.basename(this._imageUri.fsPath))}</span>
                             <span id="status"></span>
                             <span id="imageInfoBtn" class="image-info-btn" title="Image Info"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span>
@@ -834,7 +834,7 @@ export class LabelMePanel {
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" title="Reset zoom to fit screen"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
-                                            <button id="zoomLockBtn" class="zoom-lock-btn" title="Lock: Keep zoom and position when switching images"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
+                                            <button id="zoomLockBtn" class="btn-icon zoom-lock-btn" title="Lock: Keep zoom and position when switching images"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                     </div>
                                     <div class="settings-group-header">Annotation Style</div>
@@ -850,7 +850,7 @@ export class LabelMePanel {
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Channel:</label>
-                                            <button id="channelLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
+                                            <button id="channelLockBtn" class="btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <div class="onnx-radio-group">
                                             <label class="onnx-radio"><input type="radio" name="imageChannel" value="rgb" checked /> RGB</label>
@@ -862,14 +862,14 @@ export class LabelMePanel {
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Brightness: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" title="Reset to default"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
-                                            <button id="brightnessLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
+                                            <button id="brightnessLockBtn" class="btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <input type="range" id="brightnessSlider" min="10" max="300" value="100" step="5">
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Contrast: <span id="contrastValue">100</span>% <span id="contrastResetBtn" class="slider-reset-btn" title="Reset to default"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
-                                            <button id="contrastLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
+                                            <button id="contrastLockBtn" class="btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <input type="range" id="contrastSlider" min="10" max="300" value="100" step="5">
                                     </div>
@@ -878,7 +878,7 @@ export class LabelMePanel {
                                             <label>CLAHE:</label>
                                             <button id="claheToggleBtn" class="channel-btn" title="Click to enable">Off</button>
                                             <span id="claheResetBtn" class="slider-reset-btn" title="Reset to default"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span>
-                                            <button id="claheLockBtn" class="zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
+                                            <button id="claheLockBtn" class="btn-icon zoom-lock-btn" title="Unlock: Reset on each image. Click to lock."><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <div id="claheControls" style="display: none;">
                                             <div style="font-size: 0.8em; margin-top: 4px;">Clip Limit: <span id="claheClipLimitValue">2.0</span></div>
@@ -914,8 +914,8 @@ export class LabelMePanel {
                         <textarea id="descriptionInput" placeholder="Add description (optional)" rows="2"></textarea>
                         <div id="recentLabels"></div>
                         <div class="modal-buttons">
-                            <button id="modalOkBtn">OK</button>
-                            <button id="modalCancelBtn">Cancel</button>
+                            <button id="modalOkBtn" class="btn btn-primary">OK</button>
+                            <button id="modalCancelBtn" class="btn">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -930,8 +930,8 @@ export class LabelMePanel {
                             <input type="text" id="customColorInput" placeholder="#xxxxxx" maxlength="7">
                         </div>
                         <div class="modal-buttons">
-                            <button id="colorOkBtn">OK</button>
-                            <button id="colorCancelBtn">Cancel</button>
+                            <button id="colorOkBtn" class="btn btn-primary">OK</button>
+                            <button id="colorCancelBtn" class="btn">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -945,14 +945,14 @@ export class LabelMePanel {
                             <label>Model Directory <span class="onnx-hint" title='Requires .onnx model file and labels.json in the same directory.&#10;&#10;labels.json format:&#10;[&#10;  { &quot;value&quot;: 1, &quot;name&quot;: &quot;defect_A&quot; },&#10;  { &quot;value&quot;: 2, &quot;name&quot;: &quot;defect_B&quot; }&#10;]&#10;&#10;value: mask pixel value (skip 0 = background)&#10;name: label name for annotation'><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
                             <div class="onnx-path-input">
                                 <input type="text" id="onnxModelDir" placeholder="Path to directory with .onnx and labels.json" />
-                                <button id="onnxModelDirBrowse" class="onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
+                                <button id="onnxModelDirBrowse" class="btn btn-icon onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label>Python Interpreter</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="onnxPythonPath" placeholder="python" />
-                                <button id="onnxPythonPathBrowse" class="onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
+                                <button id="onnxPythonPathBrowse" class="btn btn-icon onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
@@ -990,8 +990,8 @@ export class LabelMePanel {
                         </div>
                         <div class="onnx-image-count">Images to process: <strong id="onnxImageCount">0</strong></div>
                         <div class="modal-buttons">
-                            <button id="onnxInferOkBtn">Run</button>
-                            <button id="onnxInferCancelBtn">Cancel</button>
+                            <button id="onnxInferOkBtn" class="btn btn-primary">Run</button>
+                            <button id="onnxInferCancelBtn" class="btn">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -1005,14 +1005,14 @@ export class LabelMePanel {
                             <label>Model Directory <span class="onnx-hint" title='Directory containing encoder and decoder ONNX model files.&#10;&#10;Expected files:&#10;- *encoder*.onnx&#10;- *decoder*.onnx&#10;&#10;Supports SAM1 and SAM2 models (auto-detected).'><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
                             <div class="onnx-path-input">
                                 <input type="text" id="samModelDir" placeholder="Path to directory with encoder.onnx and decoder.onnx" />
-                                <button id="samModelDirBrowse" class="onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
+                                <button id="samModelDirBrowse" class="btn btn-icon onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label>Python Interpreter</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="samPythonPath" placeholder="python" />
-                                <button id="samPythonPathBrowse" class="onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
+                                <button id="samPythonPathBrowse" class="btn btn-icon onnx-browse-btn" title="Browse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
@@ -1038,8 +1038,8 @@ export class LabelMePanel {
                             <input type="number" id="samPort" value="8765" min="1024" max="65535" style="width:80px" />
                         </div>
                         <div class="modal-buttons">
-                            <button id="samConfigOkBtn">Start Service</button>
-                            <button id="samConfigCancelBtn">Cancel</button>
+                            <button id="samConfigOkBtn" class="btn btn-primary">Start Service</button>
+                            <button id="samConfigCancelBtn" class="btn">Cancel</button>
                         </div>
                     </div>
                 </div>
