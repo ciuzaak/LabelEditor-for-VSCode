@@ -213,6 +213,7 @@ let currentCursor = 'default';
 let customColors = new Map(); // 存储用户自定义的标签颜色
 let currentEditingLabel = null; // 当前正在编辑颜色的标签
 let paletteClickHandler = null; // 颜色选择器的点击处理器引用
+let paletteDblClickHandler = null; // 颜色选择器的双击处理器引用（双击=确认）
 
 const PRESET_COLORS = [
     '#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A',
@@ -4327,9 +4328,13 @@ function showColorPicker(label) {
     });
     palette.appendChild(fragment);
 
-    // 移除旧的事件处理器（如果存在）
+    // 移除旧的事件处理器（如果存在）。两个 handler 都要清理，
+    // 否则每次打开 color picker 都会累积一个匿名 dblclick 监听器。
     if (paletteClickHandler) {
         palette.removeEventListener('click', paletteClickHandler);
+    }
+    if (paletteDblClickHandler) {
+        palette.removeEventListener('dblclick', paletteDblClickHandler);
     }
 
     // 使用事件委托处理颜色选择（单击选中，双击确认）
@@ -4341,14 +4346,15 @@ function showColorPicker(label) {
             customColorInput.value = target.dataset.color;
         }
     };
-    palette.addEventListener('click', paletteClickHandler);
-    palette.addEventListener('dblclick', (e) => {
+    paletteDblClickHandler = (e) => {
         const target = e.target;
         if (target.classList.contains('color-option')) {
             customColorInput.value = target.dataset.color;
             confirmColorPicker();
         }
-    });
+    };
+    palette.addEventListener('click', paletteClickHandler);
+    palette.addEventListener('dblclick', paletteDblClickHandler);
 
     // 设置当前颜色 - 转换为#XXXXXX格式
     const currentColors = getColorsForLabel(label);
