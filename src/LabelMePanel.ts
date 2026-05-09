@@ -1015,7 +1015,7 @@ export class LabelMePanel {
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> ONNX Batch Inference</h3>
                         <div class="onnx-note">Output: polygon only</div>
                         <div class="onnx-form-group">
-                            <label>Model Directory <span class="onnx-hint" data-tip-id="onnx.modelDir"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
+                            <label data-tip-id="onnx.modelDir">Model Directory</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="onnxModelDir" placeholder="Path to directory with .onnx and labels.json" />
                                 <button id="onnxModelDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="onnx.modelDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
@@ -1076,7 +1076,7 @@ export class LabelMePanel {
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> SAM AI Annotation</h3>
                         <div class="onnx-note">Configure SAM service for interactive annotation</div>
                         <div class="onnx-form-group">
-                            <label>Model Directory <span class="onnx-hint" data-tip-id="sam.modelDir"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
+                            <label data-tip-id="sam.modelDir">Model Directory</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="samModelDir" placeholder="Path to directory with encoder.onnx and decoder.onnx" />
                                 <button id="samModelDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="sam.modelDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
@@ -1101,7 +1101,7 @@ export class LabelMePanel {
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label>Encode Mode <span class="onnx-hint" data-tip-id="sam.encodeMode"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span></label>
+                            <label data-tip-id="sam.encodeMode">Encode Mode</label>
                             <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="full" checked /> Full Image</label>
                                 <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="local" /> Local Crop</label>

@@ -10,7 +10,7 @@
         return;
     }
 
-    const SHOW_DELAY_MS = 350;
+    const SHOW_DELAY_MS = 600;
     const PAD = 8;
 
     let tipsDict = null;

@@ -21,10 +21,10 @@ const TIPS = {
 
     // Drawing modes
     'mode.view':      { title: 'View Mode', desc: 'Pan and select shapes. Drag on empty space to box-select; hold Shift while dragging to add to the selection.', shortcut: 'V' },
-    'mode.polygon':   { title: 'Polygon Mode', desc: 'Click to place vertices; double-click or press Enter to close the polygon.', shortcut: 'P' },
-    'mode.rectangle': { title: 'Rectangle Mode', desc: 'Drag to draw an axis-aligned rectangle.', shortcut: 'R' },
-    'mode.line':      { title: 'Line Mode', desc: 'Click two points to draw a line.', shortcut: 'L' },
-    'mode.point':     { title: 'Point Mode', desc: 'Click to place a single annotation point.', shortcut: 'O' },
+    'mode.polygon':   { title: 'Polygon Mode', desc: 'Click to place vertices; double-click or press Enter to close the polygon. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'P' },
+    'mode.rectangle': { title: 'Rectangle Mode', desc: 'Drag to draw an axis-aligned rectangle. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'R' },
+    'mode.line':      { title: 'Line Mode', desc: 'Click two points to draw a line. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'L' },
+    'mode.point':     { title: 'Point Mode', desc: 'Click to place a single annotation point. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'O' },
     'mode.sam':       { title: 'SAM AI Mode', desc: 'Use the SAM service to generate a mask. Click to add a positive point; Shift-click to add a negative point once a positive exists, or to switch to the prompt eraser before the first positive.', shortcut: 'I' },
 
     // Sidebar action buttons
