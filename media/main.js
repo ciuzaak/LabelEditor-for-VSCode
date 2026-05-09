@@ -6128,6 +6128,10 @@ if (vscodeState && vscodeState.searchQuery) {
 function renderImageBrowserList() {
     if (!imageBrowserList || typeof workspaceImages === 'undefined') return;
 
+    // Cancel pending hover timer before discarding rows (same rationale as
+    // renderShapeList / renderLabelsList / updateVirtualScroll).
+    if (window.tooltip) window.tooltip.hide();
+
     // Clear existing content
     imageBrowserList.innerHTML = '';
 
