@@ -984,6 +984,10 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     border: 0.5px solid var(--color-border-input);
     border-radius: var(--radius-sm);
     padding: 4px 10px;
+    /* Pin width so the CLAHE Off/On toggle doesn't shift its neighbouring
+       reset/lock icons each click. Restored from commit 7286fae. */
+    min-width: 40px;
+    text-align: center;
     font-size: var(--font-12);
     cursor: pointer;
     transition: background var(--dur-fast), color var(--dur-fast);
