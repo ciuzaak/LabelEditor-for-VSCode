@@ -805,22 +805,8 @@ textarea { resize: vertical; min-height: 36px; max-height: 120px; }
     color: var(--color-text-secondary);
 }
 
-.advanced-options-btn {
-    background: none;
-    border: none;
-    font-size: 16px;
-    cursor: pointer;
-    padding: 4px 8px;
-    margin: 0;
-    opacity: 0.7;
-    transition: opacity 0.2s;
-}
-
-.advanced-options-btn:hover {
-    opacity: 1;
-    background-color: var(--color-bg-input);
-    border-radius: 3px;
-}
+.advanced-options-btn { opacity: 0.7; transition: opacity var(--dur-fast); }
+.advanced-options-btn:hover { opacity: 1; }
 
 .sidebar-dropdown {
     background-color: var(--color-bg-tertiary);
@@ -945,86 +931,56 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     margin: 0;
 }
 
+/* Lock button: positional helper + locked state painted via accent fill */
 .zoom-lock-btn {
-    padding: 4px 8px;
-    font-size: 14px;
+    flex: 0 0 auto;
     margin: 0;
-    width: 16.67%;
-    flex: 0 0 16.67%;
-    box-sizing: border-box;
-    background-color: var(--color-bg-tertiary);
-    border: 1px solid var(--color-border-input);
-    border-radius: 3px;
-    cursor: pointer;
     line-height: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+}
+.zoom-lock-btn.locked,
+.btn-icon.is-locked {
+    background: var(--color-accent);
+    color: #fff;
+    border-color: transparent;
+}
+.zoom-lock-btn.locked:hover {
+    background: var(--color-accent-hover);
 }
 
-.zoom-lock-btn:hover {
-    background-color: var(--color-bg-input);
-}
-
-.zoom-lock-btn.locked {
-    background-color: var(--color-accent);
-    color: white;
-    border-color: var(--color-accent);
-}
-
-/* Channel selection buttons */
+/* CLAHE on/off (channel-btn) — small standalone toggle */
 .channel-btn {
-    padding: 4px 8px;
-    margin: 0 2px;
-    min-width: 40px;
-    border: 1px solid var(--color-border-input);
-    background: var(--color-bg-tertiary);
+    background: var(--color-bg-input);
     color: var(--color-text-primary);
+    border: 0.5px solid var(--color-border-input);
+    border-radius: var(--radius-sm);
+    padding: 4px 10px;
+    font-size: var(--font-12);
     cursor: pointer;
-    border-radius: 3px;
-    font-size: 0.9em;
-    transition: all 0.2s;
+    transition: background var(--dur-fast), color var(--dur-fast);
 }
-
-.channel-btn:hover {
-    background: var(--color-bg-hover-input);
-}
-
+.channel-btn:hover { background: var(--color-bg-hover-input); }
 .channel-btn.active {
     background: var(--color-accent);
-    color: white;
-    border-color: var(--color-accent);
+    color: #fff;
+    border-color: transparent;
 }
 
-/* Navigation Buttons */
-.nav-btn {
-    padding: 4px 10px;
-    font-size: 14px;
-    margin-right: 8px;
-    background-color: var(--color-bg-input);
-    border: 1px solid var(--color-border-input);
-    cursor: pointer;
-}
+/* nav-btn: empty (covered by .btn .btn-icon now) */
+.nav-btn {}
 
-.nav-btn:hover {
-    background-color: var(--color-bg-hover-input);
-}
-
-/* Image Info Button & Popup */
+/* Image info icon: subtle until hover */
 .image-info-btn {
-    cursor: pointer;
-    font-size: 14px;
     padding: 2px 6px;
     margin-left: 6px;
     opacity: 0.6;
-    transition: opacity 0.2s;
+    transition: opacity var(--dur-fast);
     user-select: none;
     position: relative;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
 }
-
-.image-info-btn:hover {
-    opacity: 1;
-}
+.image-info-btn:hover { opacity: 1; }
 
 .image-info-popup {
     position: absolute;
