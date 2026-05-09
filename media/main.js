@@ -4124,6 +4124,11 @@ function renderShapeList() {
         fragment.appendChild(li);
     });
 
+    // Cancel any pending hover timer before detaching the rows it captured —
+    // otherwise show() would later run getBoundingClientRect on a detached node
+    // and place the tooltip at viewport (0, 0).
+    if (window.tooltip) window.tooltip.hide();
+
     // 一次性更新 DOM
     shapeList.innerHTML = '';
     shapeList.appendChild(fragment);
@@ -4259,6 +4264,9 @@ function renderLabelsList() {
         li.appendChild(resetBtn);
         fragment.appendChild(li);
     });
+
+    // Cancel pending hover timer (see renderShapeList for rationale).
+    if (window.tooltip) window.tooltip.hide();
 
     labelsList.innerHTML = '';
     labelsList.appendChild(fragment);
