@@ -946,8 +946,11 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 
 .zoom-header {
     display: flex;
-    justify-content: space-between;
     align-items: center;
+    gap: var(--space-2);
+    /* lock button uses margin-left: auto to anchor right; no need for
+       justify-content: space-between (which mis-distributes gaps when the
+       CLAHE row's reset toggles its display) */
 }
 
 .zoom-control input[type="range"] { margin-top: 4px; }
@@ -961,10 +964,14 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     margin: 0;
 }
 
-/* Lock button: positional helper + locked state painted via accent fill */
+/* Lock button: anchored to the right of its zoom-header row.
+   margin-left: auto pins it right regardless of how many siblings are present —
+   important for the CLAHE row, where the reset (.slider-reset-btn) toggles
+   display:none/inline and would otherwise reshuffle the row's space-between
+   layout, shifting the Off/On toggle horizontally on each click. */
 .zoom-lock-btn {
     flex: 0 0 auto;
-    margin: 0;
+    margin: 0 0 0 auto;
     line-height: 1;
 }
 .zoom-lock-btn.locked,
