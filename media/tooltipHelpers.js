@@ -1,5 +1,6 @@
-// Pure logic for tooltip placement. Deterministic in/out: given a target rect,
-// tip rect, viewport rect, and padding, produce { left, top, placement }.
+// Pure logic for tooltip placement and content composition. Deterministic
+// in/out so the security-critical path (runtime user text → escaped HTML)
+// can be tested without a DOM.
 //
 // Wrapped in a function so top-level `const` declarations don't collide with
 // other helper modules in the shared classic-script lexical scope.
@@ -33,7 +34,36 @@ function computeTooltipPosition({ target, tip, viewport, pad }) {
     return { left, top, placement };
 }
 
-const api = { computeTooltipPosition };
+const HTML_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+
+function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, ch => HTML_ESCAPES[ch]);
+}
+
+// Build the inner HTML for a tooltip. All user-controlled text fields
+// (title, desc, shortcut) are escaped here; callers can drop the result into
+// innerHTML safely. Returns '' for an empty descriptor so callers can hide
+// the tooltip cleanly.
+function buildTooltipHtml(tip) {
+    if (!tip) return '';
+    let html = '';
+    if (tip.title)    html += '<div class="le-tooltip-title">' + escapeHtml(tip.title) + '</div>';
+    if (tip.desc)     html += '<div class="le-tooltip-desc">' + escapeHtml(tip.desc) + '</div>';
+    if (tip.shortcut) html += '<div class="le-tooltip-shortcut"><kbd>' + escapeHtml(tip.shortcut) + '</kbd></div>';
+    return html;
+}
+
+// Resolve a tooltip descriptor for an element: dictionary lookup via
+// `data-tip-id` first, then literal `data-tip-text` as a desc-only fallback.
+// Static IDs win even if both are present so ad-hoc text cannot shadow a
+// canonical entry. Returns null when no descriptor is available.
+function resolveTipForAttrs({ tipId, tipText, tipsDict }) {
+    if (tipId && tipsDict && tipsDict[tipId]) return tipsDict[tipId];
+    if (tipText) return { desc: tipText };
+    return null;
+}
+
+const api = { computeTooltipPosition, escapeHtml, buildTooltipHtml, resolveTipForAttrs };
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
 } else if (root) {

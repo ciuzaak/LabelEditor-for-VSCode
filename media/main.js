@@ -6145,6 +6145,11 @@ function updateVirtualScroll() {
     virtualScrollState.endIndex = endIndex;
     virtualScrollState.scrollTop = scrollTop;
 
+    // Hide any pending tooltip first: we're about to detach the row that
+    // owns the queued hover timer, and show() on a detached node measures
+    // a zero-rect and lands the tip at viewport (0, 0).
+    if (window.tooltip) window.tooltip.hide();
+
     // Clear existing items (but keep spacer)
     const existingItems = spacer.querySelectorAll('.image-browser-item');
     existingItems.forEach(item => item.remove());

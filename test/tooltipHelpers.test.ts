@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 import * as path from 'node:path';
 
 const helpers = require(path.resolve(__dirname, '..', '..', 'media', 'tooltipHelpers.js'));
-const { computeTooltipPosition } = helpers;
+const { computeTooltipPosition, escapeHtml, buildTooltipHtml, resolveTipForAttrs } = helpers;
 
 const VIEWPORT = { width: 1000, height: 800 };
 const PAD = 8;
@@ -51,5 +51,77 @@ describe('computeTooltipPosition', () => {
         const target = { left: 100, top: 100, right: 140, bottom: 130, width: 40, height: 30 };
         const got = computeTooltipPosition({ target, tip: TIP, viewport: VIEWPORT });
         assert.equal(got.top, 130 + 8);
+    });
+});
+
+describe('escapeHtml', () => {
+    it('escapes the five HTML-significant characters', () => {
+        assert.equal(escapeHtml('&'), '&amp;');
+        assert.equal(escapeHtml('<'), '&lt;');
+        assert.equal(escapeHtml('>'), '&gt;');
+        assert.equal(escapeHtml('"'), '&quot;');
+        assert.equal(escapeHtml("'"), '&#39;');
+    });
+    it('escapes a script-tag injection attempt', () => {
+        assert.equal(
+            escapeHtml('<script>alert(1)</script>'),
+            '&lt;script&gt;alert(1)&lt;/script&gt;'
+        );
+    });
+    it('coerces non-string inputs to string before escaping', () => {
+        assert.equal(escapeHtml(42 as any), '42');
+        assert.equal(escapeHtml(null as any), 'null');
+    });
+});
+
+describe('buildTooltipHtml', () => {
+    it('returns empty string for falsy descriptor', () => {
+        assert.equal(buildTooltipHtml(null), '');
+        assert.equal(buildTooltipHtml(undefined), '');
+    });
+    it('renders title, desc, and shortcut into nested divs', () => {
+        const html = buildTooltipHtml({ title: 'A', desc: 'B', shortcut: 'C' });
+        assert.match(html, /<div class="le-tooltip-title">A<\/div>/);
+        assert.match(html, /<div class="le-tooltip-desc">B<\/div>/);
+        assert.match(html, /<div class="le-tooltip-shortcut"><kbd>C<\/kbd><\/div>/);
+    });
+    it('omits sections that are missing', () => {
+        const html = buildTooltipHtml({ desc: 'B' });
+        assert.equal(html.includes('le-tooltip-title'), false);
+        assert.equal(html.includes('le-tooltip-shortcut'), false);
+        assert.match(html, /<div class="le-tooltip-desc">B<\/div>/);
+    });
+    it('escapes user-supplied text in every field — script injection blocked', () => {
+        const evil = '<img src=x onerror=alert(1)>';
+        const html = buildTooltipHtml({ title: evil, desc: evil, shortcut: evil });
+        assert.equal(html.includes('<img'), false);
+        assert.equal(html.includes('onerror'), true); // present as text
+        // Escaped form must appear in each section
+        const escaped = '&lt;img src=x onerror=alert(1)&gt;';
+        assert.ok(html.indexOf(escaped) >= 0);
+    });
+});
+
+describe('resolveTipForAttrs', () => {
+    const dict = { 'mode.view': { title: 'View', desc: 'Pan and select' } };
+
+    it('returns null when neither id nor text is provided', () => {
+        assert.equal(resolveTipForAttrs({ tipId: null, tipText: null, tipsDict: dict }), null);
+    });
+    it('returns the dictionary entry for a known id', () => {
+        const got = resolveTipForAttrs({ tipId: 'mode.view', tipText: null, tipsDict: dict });
+        assert.equal(got.title, 'View');
+    });
+    it('falls back to a desc-only descriptor when only data-tip-text is present', () => {
+        const got = resolveTipForAttrs({ tipId: null, tipText: 'C:\\Users\\me\\img.png', tipsDict: dict });
+        assert.deepEqual(got, { desc: 'C:\\Users\\me\\img.png' });
+    });
+    it('prefers the dictionary entry when both id and text are provided', () => {
+        const got = resolveTipForAttrs({ tipId: 'mode.view', tipText: 'shadow', tipsDict: dict });
+        assert.equal(got.title, 'View');
+    });
+    it('falls back to data-tip-text when the id is unknown', () => {
+        const got = resolveTipForAttrs({ tipId: 'no.such', tipText: 'fallback', tipsDict: dict });
+        assert.deepEqual(got, { desc: 'fallback' });
     });
 });

@@ -33,19 +33,9 @@
         return tooltipEl;
     }
 
-    function escapeHtml(s) {
-        return String(s).replace(/[&<>"']/g, ch => ({
-            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-        })[ch]);
-    }
-
     function renderContent(tip) {
         const el = ensureTooltipEl();
-        let html = '';
-        if (tip.title) html += `<div class="le-tooltip-title">${escapeHtml(tip.title)}</div>`;
-        if (tip.desc)  html += `<div class="le-tooltip-desc">${escapeHtml(tip.desc)}</div>`;
-        if (tip.shortcut) html += `<div class="le-tooltip-shortcut"><kbd>${escapeHtml(tip.shortcut)}</kbd></div>`;
-        el.innerHTML = html;
+        el.innerHTML = helpers.buildTooltipHtml(tip);
     }
 
     function show(target, tip) {
@@ -75,16 +65,11 @@
     }
 
     function tipFor(el) {
-        // Two routing options:
-        //   1. data-tip-id="ns.key" → look up in tipsDict (static controls)
-        //   2. data-tip-text="..."  → use the literal attribute as desc
-        // Static IDs take precedence so a misconfigured element with both
-        // still picks up the canonical text from the dictionary.
-        const id = el.getAttribute('data-tip-id');
-        if (id && tipsDict && tipsDict[id]) return tipsDict[id];
-        const text = el.getAttribute('data-tip-text');
-        if (text) return { desc: text };
-        return null;
+        return helpers.resolveTipForAttrs({
+            tipId:   el.getAttribute('data-tip-id'),
+            tipText: el.getAttribute('data-tip-text'),
+            tipsDict
+        });
     }
 
     function onEnter(e) {
