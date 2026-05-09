@@ -30,4 +30,23 @@ describe('shouldDismissPopover', () => {
     it('returns false when popover is null (already closed)', () => {
         assert.equal(shouldDismissPopover({}, null, {}), false);
     });
+
+    it('uses composedPath when supplied — survives DOM mutation by inner click handlers', () => {
+        // Simulates: user clicks an inner button whose handler then re-renders, detaching
+        // the original target. contains() now returns false (target gone), but composedPath
+        // captured the path at dispatch and still includes the popover.
+        const detachedTarget = {};
+        const popover = { contains: (_el: any) => false };  // detached: not in DOM anymore
+        const trigger = { contains: () => false };
+        const path = [detachedTarget, popover, { tagName: 'BODY' }];
+        assert.equal(shouldDismissPopover(detachedTarget, popover, trigger, path), false);
+    });
+
+    it('composedPath outside popover and trigger → dismiss', () => {
+        const target = {};
+        const popover = { contains: () => false };
+        const trigger = { contains: () => false };
+        const path = [target, { id: 'unrelated' }];
+        assert.equal(shouldDismissPopover(target, popover, trigger, path), true);
+    });
 });

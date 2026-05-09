@@ -1,5 +1,13 @@
-function shouldDismissPopover(clickTarget, popoverEl, triggerEl) {
+function shouldDismissPopover(clickTarget, popoverEl, triggerEl, eventPath) {
     if (!popoverEl) return false;
+    // Prefer the event's composedPath() if provided — captures the path at dispatch
+    // time, so it's reliable even if a click handler has already mutated the DOM
+    // (e.g., a lock toggle replacing its inner <svg>, detaching the original target).
+    if (Array.isArray(eventPath) && eventPath.length) {
+        if (eventPath.indexOf(popoverEl) !== -1) return false;
+        if (triggerEl && eventPath.indexOf(triggerEl) !== -1) return false;
+        return true;
+    }
     if (popoverEl.contains(clickTarget)) return false;
     if (triggerEl && triggerEl.contains(clickTarget)) return false;
     return true;

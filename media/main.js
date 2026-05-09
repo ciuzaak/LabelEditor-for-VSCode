@@ -5231,15 +5231,19 @@ if (onnxInferModal) {
     });
 }
 
-// Close sidebar dropdowns when clicking outside (uses popoverDismiss helper —
-// .contains() correctly accounts for SVG icons nested inside the trigger button)
-document.addEventListener('click', (e) => {
+// Close sidebar dropdowns when clicking outside.
+// Listens on `mousedown` (fires before any inner click handlers can mutate the DOM
+// — e.g., a lock toggle re-rendering its <svg> would otherwise detach e.target,
+// making contains() falsely return "outside"). composedPath() is also passed as a
+// belt-and-braces fallback in case the path is required.
+document.addEventListener('mousedown', (e) => {
     const helpers = (typeof window !== 'undefined') ? window.LabelEditorHelpers : null;
     const dismiss = helpers ? helpers.shouldDismissPopover : null;
     if (!dismiss) return;
+    const path = (typeof e.composedPath === 'function') ? e.composedPath() : null;
     // Settings dropdown
     if (settingsMenuDropdown && settingsMenuDropdown.style.display !== 'none') {
-        if (dismiss(e.target, settingsMenuDropdown, settingsMenuBtn)) {
+        if (dismiss(e.target, settingsMenuDropdown, settingsMenuBtn, path)) {
             settingsMenuDropdown.style.display = 'none';
             const state = vscode.getState() || {};
             state.settingsMenuExpanded = false;
@@ -5248,7 +5252,7 @@ document.addEventListener('click', (e) => {
     }
     // Tools dropdown
     if (toolsMenuDropdown && toolsMenuDropdown.style.display !== 'none') {
-        if (dismiss(e.target, toolsMenuDropdown, toolsMenuBtn)) {
+        if (dismiss(e.target, toolsMenuDropdown, toolsMenuBtn, path)) {
             toolsMenuDropdown.style.display = 'none';
         }
     }
