@@ -496,11 +496,9 @@ function updateZoomUI() {
         if (lockViewEnabled) {
             zoomLockBtn.textContent = '🔒';
             zoomLockBtn.classList.add('locked');
-            zoomLockBtn.title = 'Locked: Keeping zoom and position when switching images. Click to unlock.';
         } else {
             zoomLockBtn.textContent = '🔓';
             zoomLockBtn.classList.remove('locked');
-            zoomLockBtn.title = 'Unlocked: Fit to screen on each image. Click to lock current view.';
         }
     }
 
@@ -1200,11 +1198,10 @@ function handleImageUpdate(message) {
     // Store image metadata for info popup
     currentImageMetadata = message.imageMetadata || null;
 
-    // Update filename display
+    // Update filename display. The tip is supplied by data-tip-id="nav.fileName".
     const fileNameSpan = document.getElementById('fileName');
     if (fileNameSpan) {
         fileNameSpan.textContent = newCurrentImageRelativePath || newImageName;
-        fileNameSpan.title = 'Left click: copy absolute path | Right click: copy filename';
     }
 
     // Update mutable absolute path for copy feature
@@ -5540,57 +5537,29 @@ function updateContrastResetBtn() {
 
 function updateBrightnessLockUI() {
     if (brightnessLockBtn) {
-        if (brightnessLocked) {
-            brightnessLockBtn.textContent = '🔒';
-            brightnessLockBtn.classList.add('locked');
-            brightnessLockBtn.title = 'Locked: Keeping brightness when switching images. Click to unlock.';
-        } else {
-            brightnessLockBtn.textContent = '🔓';
-            brightnessLockBtn.classList.remove('locked');
-            brightnessLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
-        }
+        brightnessLockBtn.textContent = brightnessLocked ? '🔒' : '🔓';
+        brightnessLockBtn.classList.toggle('locked', brightnessLocked);
     }
 }
 
 function updateContrastLockUI() {
     if (contrastLockBtn) {
-        if (contrastLocked) {
-            contrastLockBtn.textContent = '🔒';
-            contrastLockBtn.classList.add('locked');
-            contrastLockBtn.title = 'Locked: Keeping contrast when switching images. Click to unlock.';
-        } else {
-            contrastLockBtn.textContent = '🔓';
-            contrastLockBtn.classList.remove('locked');
-            contrastLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
-        }
+        contrastLockBtn.textContent = contrastLocked ? '🔒' : '🔓';
+        contrastLockBtn.classList.toggle('locked', contrastLocked);
     }
 }
 
 function updateChannelLockUI() {
     if (channelLockBtn) {
-        if (channelLocked) {
-            channelLockBtn.textContent = '🔒';
-            channelLockBtn.classList.add('locked');
-            channelLockBtn.title = 'Locked: Keeping channel selection when switching images. Click to unlock.';
-        } else {
-            channelLockBtn.textContent = '🔓';
-            channelLockBtn.classList.remove('locked');
-            channelLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
-        }
+        channelLockBtn.textContent = channelLocked ? '🔒' : '🔓';
+        channelLockBtn.classList.toggle('locked', channelLocked);
     }
 }
 
 function updateClaheLockUI() {
     if (claheLockBtn) {
-        if (claheLocked) {
-            claheLockBtn.textContent = '🔒';
-            claheLockBtn.classList.add('locked');
-            claheLockBtn.title = 'Locked: Keeping CLAHE settings when switching images. Click to unlock.';
-        } else {
-            claheLockBtn.textContent = '🔓';
-            claheLockBtn.classList.remove('locked');
-            claheLockBtn.title = 'Unlocked: Reset on each image. Click to lock.';
-        }
+        claheLockBtn.textContent = claheLocked ? '🔒' : '🔓';
+        claheLockBtn.classList.toggle('locked', claheLocked);
     }
 }
 
