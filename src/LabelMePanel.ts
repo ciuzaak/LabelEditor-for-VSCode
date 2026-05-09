@@ -901,12 +901,18 @@ export class LabelMePanel {
                         </div>
                         <div class="sidebar-content">
                             <div class="sidebar-labels-section" id="sidebarLabelsSection">
-                                <h3>Labels <span id="labelsCount" class="section-count"></span></h3>
+                                <div class="sidebar-section-header">
+                                    <h3>Labels</h3>
+                                    <span id="labelsCount" class="section-count"></span>
+                                </div>
                                 <ul id="labelsList"></ul>
                             </div>
                             <div id="sidebarSectionResizer" class="sidebar-section-resizer"></div>
                             <div class="sidebar-instances-section" id="sidebarInstancesSection">
-                                <h3>Instances <span id="instancesCount" class="section-count"></span></h3>
+                                <div class="sidebar-section-header">
+                                    <h3>Instances</h3>
+                                    <span id="instancesCount" class="section-count"></span>
+                                </div>
                                 <ul id="shapeList"></ul>
                             </div>
                         </div>

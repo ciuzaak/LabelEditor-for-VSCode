@@ -253,6 +253,17 @@ body {
     text-transform: none;
 }
 
+/* Dedicated header row for Labels / Instances sections */
+.sidebar-section-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin: 0 0 var(--space-2) 0;
+    flex-shrink: 0;
+}
+.sidebar-section-header h3 { margin: 0; }
+.sidebar-section-header .section-count { margin-left: auto; }
+
 /* Resizers - hairline at rest, accent + thicker on hover */
 .resizer, .image-browser-resizer {
     width: 1px;
