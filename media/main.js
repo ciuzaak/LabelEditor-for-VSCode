@@ -125,7 +125,9 @@ let samBoxSecondClick = false;    // 框选模式等待第二次点击
 let samMouseDownTime = 0;         // mousedown 时间戳，用于长按检测
 const SAM_LONG_PRESS_MS = 300;    // SAM 长按阈值（ms）
 let samEncodeMode = 'full';       // 'full' | 'local' — encode entire image or visible viewport
+let samEncodeAdjusted = false;    // When true, encode the brightness/contrast/CLAHE/channel-adjusted view instead of the original file
 let samCachedCrop = null;         // { x, y, w, h } — crop region of the currently cached encoding (null = full image)
+let samCachedAdjustSig = null;    // Signature of the adjustment state used for the current cached encoding (null when raw original was encoded)
 let samIsFreshSequence = true;    // True if we are starting a new prompt sequence and can adopt a new crop
 
 // --- Shift feedback state ---
@@ -379,6 +381,11 @@ if (vscodeState && vscodeState.samEncodeMode) {
     samEncodeMode = vscodeState.samEncodeMode;
 } else if (initialGlobalSettings.samEncodeMode) {
     samEncodeMode = initialGlobalSettings.samEncodeMode;
+}
+if (vscodeState && vscodeState.samEncodeAdjusted !== undefined) {
+    samEncodeAdjusted = !!vscodeState.samEncodeAdjusted;
+} else if (initialGlobalSettings.samEncodeAdjusted !== undefined) {
+    samEncodeAdjusted = !!initialGlobalSettings.samEncodeAdjusted;
 }
 if (vscodeState && vscodeState.samPort !== undefined) {
     samServicePort = vscodeState.samPort;
@@ -3914,6 +3921,7 @@ function cancelLabelInput() {
             samPrompts = samSavedStateBeforeConfirm.prompts;
             samMaskContour = samSavedStateBeforeConfirm.maskContour;
             samCachedCrop = samSavedStateBeforeConfirm.cachedCrop;
+            samCachedAdjustSig = samSavedStateBeforeConfirm.cachedAdjustSig ?? null;
             samIsFreshSequence = samSavedStateBeforeConfirm.isFreshSequence;
             samCurrentImagePath = samSavedStateBeforeConfirm.currentImagePath;
             samSavedStateBeforeConfirm = null;
@@ -6456,6 +6464,8 @@ function showSamConfigModal() {
     };
     restoreRadio('samDevice', savedState.samDevice ?? gs.samDevice);
     restoreRadio('samEncodeMode', savedState.samEncodeMode ?? gs.samEncodeMode ?? 'full');
+    const encodeAdjustedSaved = savedState.samEncodeAdjusted ?? gs.samEncodeAdjusted ?? false;
+    restoreRadio('samEncodeSource', encodeAdjustedSaved ? 'adjusted' : 'original');
 
     // Trigger GPU detection if GPU is selected
     const gpuGroup = document.getElementById('samGpuIndexGroup');
@@ -6484,6 +6494,7 @@ function submitSamConfig() {
     const device = document.querySelector('input[name="samDevice"]:checked')?.value || 'cpu';
     const port = parseInt(document.getElementById('samPort')?.value) || 8765;
     const encodeMode = document.querySelector('input[name="samEncodeMode"]:checked')?.value || 'full';
+    const encodeAdjusted = (document.querySelector('input[name="samEncodeSource"]:checked')?.value === 'adjusted');
     const gpuSelect = document.getElementById('samGpuIndex');
     const gpuGroup = document.getElementById('samGpuIndexGroup');
     // Use dropdown value if populated, otherwise fall back to saved/persisted index
@@ -6501,7 +6512,7 @@ function submitSamConfig() {
     }
 
     // Persist settings
-    const settings = { samModelDir: modelDir, samPythonPath: pythonPath, samDevice: device, samPort: port, samEncodeMode: encodeMode, samGpuIndex: gpuIndex ?? -1 };
+    const settings = { samModelDir: modelDir, samPythonPath: pythonPath, samDevice: device, samPort: port, samEncodeMode: encodeMode, samEncodeAdjusted: encodeAdjusted, samGpuIndex: gpuIndex ?? -1 };
     const state = vscode.getState() || {};
     Object.assign(state, settings);
     vscode.setState(state);
@@ -6511,6 +6522,15 @@ function submitSamConfig() {
 
     samServicePort = port;
     samEncodeMode = encodeMode;
+    // If the toggle changed, invalidate the cache so the next click re-encodes
+    // with (or without) the adjusted view.
+    if (samEncodeAdjusted !== encodeAdjusted) {
+        samEncodeAdjusted = encodeAdjusted;
+        samCachedAdjustSig = null;
+        samCurrentImagePath = null;
+    } else {
+        samEncodeAdjusted = encodeAdjusted;
+    }
 
     // Send to extension to start service
     vscode.postMessage({
@@ -6591,6 +6611,50 @@ async function samPingService() {
 
 let samEncodePromise = null; // Serialization chain for encode requests
 
+// Adjustment signature: a stable string the cache can key on. Null when the
+// toggle is off OR all adjustments are at defaults — both mean "encoding the
+// raw original," and the server-side cache treats them as the same entry.
+// Caveat: collapsing "Adjusted at defaults" to null assumes the processed
+// canvas at defaults is byte-equivalent to cv2.imread of the source file.
+// PNG re-encode is lossless, but exotic inputs (color-managed, EXIF-oriented,
+// non-RGB color spaces) could drift; in practice not an issue for the formats
+// this editor ingests.
+function samCurrentAdjustSig() {
+    if (!samEncodeAdjusted) return null;
+    const atDefault = (brightness === 100) && (contrast === 100)
+        && (selectedChannel === 'rgb') && !claheEnabled;
+    if (atDefault) return null;
+    const clip = claheEnabled ? Number(claheClipLimit).toFixed(2) : '0';
+    return `b${brightness}|c${contrast}|ch${selectedChannel}|cl${claheEnabled ? 1 : 0}:${clip}`;
+}
+
+// Build a PNG (base64, no data: prefix) of the current adjusted view. Applies
+// channel/CLAHE via the existing processed-canvas pipeline, then layers on
+// brightness/contrast via Canvas2D `filter` so the pixels SAM sees match what
+// the user sees on screen. Returns null if the source isn't ready or context
+// can't be acquired — caller must treat null as an encode failure.
+// Note: toDataURL is synchronous and can take several hundred ms on large
+// images; acceptable here because it only runs on re-encode (rare), gated
+// behind the "SAM Encoding…" notification.
+function samBuildAdjustedPngB64() {
+    const src = getProcessedCanvas();
+    if (!src) return null;
+    let pngCanvas = src;
+    if (brightness !== 100 || contrast !== 100) {
+        const tmp = document.createElement('canvas');
+        tmp.width = src.width;
+        tmp.height = src.height;
+        const tctx = tmp.getContext('2d');
+        if (!tctx) return null;
+        tctx.filter = `brightness(${brightness / 100}) contrast(${contrast / 100})`;
+        tctx.drawImage(src, 0, 0);
+        pngCanvas = tmp;
+    }
+    const dataUrl = pngCanvas.toDataURL('image/png');
+    const comma = dataUrl.indexOf(',');
+    return comma >= 0 ? dataUrl.slice(comma + 1) : dataUrl;
+}
+
 // Calculate the current visible viewport region in original image coordinates
 function samGetVisibleCrop() {
     const scrollX = canvasContainer.scrollLeft;
@@ -6636,13 +6700,14 @@ function samPointInCrop(px, py, crop) {
         py >= crop.originY && py <= crop.originY + crop.h;
 }
 
-async function samEncode(imagePath, crop) {
+async function samEncode(imagePath, crop, adjustSig) {
     // If an encode is already in flight, wait for it to finish, then re-check
     if (samEncodePromise) {
         await samEncodePromise;
         // After previous encode settled, check if cache matches
         if (samCurrentImagePath === imagePath &&
-            JSON.stringify(samCachedCrop) === JSON.stringify(crop)) return;
+            JSON.stringify(samCachedCrop) === JSON.stringify(crop) &&
+            samCachedAdjustSig === adjustSig) return;
     }
 
     const doEncode = async () => {
@@ -6651,6 +6716,20 @@ async function samEncode(imagePath, crop) {
         try {
             const payload = { image_path: imagePath };
             if (crop) payload.crop = crop;
+            // When an adjustment signature is active, send the rendered PNG so the
+            // server encodes pixels matching what the user sees on screen.
+            // If the PNG build fails we must abort — silently falling back to the
+            // raw image would mark the cache as "adjusted" while it isn't.
+            if (adjustSig) {
+                const b64 = samBuildAdjustedPngB64();
+                if (!b64) {
+                    window.notifyBus.show('error', 'SAM Adjusted Encode Error');
+                    window.notifyBus.clearSticky('sam.status');
+                    return;
+                }
+                payload.image_b64 = b64;
+                payload.adjust_sig = adjustSig;
+            }
 
             const resp = await fetch(`http://127.0.0.1:${samServicePort}/encode`, {
                 method: 'POST',
@@ -6661,8 +6740,10 @@ async function samEncode(imagePath, crop) {
             if (data.ok) {
                 samCurrentImagePath = imagePath;
                 samCachedCrop = crop || null;
+                samCachedAdjustSig = adjustSig || null;
                 const modeLabel = crop ? 'Local' : 'Full';
-                window.notifyBus.show('success', `SAM Ready [${modeLabel}] (${data.time_ms || 0}ms)`, { sticky: true, key: 'sam.status' });
+                const adjLabel = adjustSig ? ' • Adjusted' : '';
+                window.notifyBus.show('success', `SAM Ready [${modeLabel}${adjLabel}] (${data.time_ms || 0}ms)`, { sticky: true, key: 'sam.status' });
             } else {
                 window.notifyBus.show('error', 'SAM Encode Error');
                 window.notifyBus.clearSticky('sam.status');
@@ -6692,12 +6773,19 @@ async function samDecode() {
     if (samEncodeMode === 'local') {
         requestCrop = samGetVisibleCrop(); // null if no scrollbars (falls back to full)
     }
+    const requestAdjustSig = samCurrentAdjustSig();
 
     // Lazy encode: ensure current image is encoded before first decode
     // In local mode, also re-encode when:
     //   1. This is a fresh sequence AND the current viewport crop differs from cached
     //   2. Any prompt falls outside the existing cached crop (user scrolled away)
+    // Independent of mode: re-encode when the image-adjustment signature changes.
+    // For an in-progress local sequence, the crop check still has to run because
+    // adopting a new viewport crop would orphan earlier prompts — we re-encode at
+    // the cached crop instead so prompt coordinates stay valid.
+    const adjustMismatched = (requestAdjustSig !== samCachedAdjustSig);
     let needEncode = (samCurrentImagePath !== requestPath);
+
     if (!needEncode && samEncodeMode === 'local') {
         const cropMismatched = JSON.stringify(requestCrop) !== JSON.stringify(samCachedCrop);
 
@@ -6706,24 +6794,33 @@ async function samDecode() {
             needEncode = true;
         } else {
             // Sequence in progress: stick to the existing cached crop to avoid orphaning old prompts.
-            // Only re-encode if a prompt actually falls outside that cached region.
+            let promptsOutside = false;
             for (const prompt of samPrompts) {
                 if (prompt.type === 'point') {
                     if (!samPointInCrop(prompt.data[0], prompt.data[1], samCachedCrop)) {
-                        needEncode = true;
+                        promptsOutside = true;
                         break;
                     }
                 } else if (prompt.type === 'rectangle') {
                     if (!samPointInCrop(prompt.data[0], prompt.data[1], samCachedCrop) ||
                         !samPointInCrop(prompt.data[2], prompt.data[3], samCachedCrop)) {
-                        needEncode = true;
+                        promptsOutside = true;
                         break;
                     }
                 }
             }
 
+            if (promptsOutside) {
+                needEncode = true;
+            } else if (adjustMismatched) {
+                // Adjustment changed mid-sequence and prompts still fit the cached
+                // crop — re-encode at that same crop so coordinates remain valid.
+                requestCrop = samCachedCrop;
+                needEncode = true;
+            }
+
             // If re-encoding is needed because prompts were outside, clear older prompts.
-            if (needEncode) {
+            if (promptsOutside) {
                 samPrompts = [samPrompts[samPrompts.length - 1]]; // Keep only the latest prompt
                 samMaskContour = null;
                 samIsFreshSequence = true; // We are essentially starting over
@@ -6734,8 +6831,13 @@ async function samDecode() {
         }
     }
 
+    // Full-mode adjust mismatch (or any unhandled case): force re-encode.
+    if (!needEncode && adjustMismatched) {
+        needEncode = true;
+    }
+
     if (needEncode) {
-        await samEncode(requestPath, requestCrop);
+        await samEncode(requestPath, requestCrop, requestAdjustSig);
         // After encode success/fail, reset fresh flag (it will be true again on clear/confirm)
         samIsFreshSequence = false;
         // After encode, revalidate: has the state been cleared or image changed?
@@ -6743,6 +6845,9 @@ async function samDecode() {
         const activePath = currentAbsoluteImagePath || imagePath;
         if (activePath !== requestPath) return;
         if (samCurrentImagePath !== requestPath) return;
+        // If the user moved an adjustment slider during the encode, the cache is
+        // already stale for what's on screen — bail and let the next click re-encode.
+        if (samCurrentAdjustSig() !== samCachedAdjustSig) return;
     }
 
     // Translate prompt coordinates using floating origin if crop is active
@@ -6809,6 +6914,7 @@ function samClearState() {
     samBoxSecondClick = false;
     samMouseDownTime = 0;
     samCachedCrop = null;
+    samCachedAdjustSig = null;
     samCurrentImagePath = null;
     samIsFreshSequence = true;
     if (window.notifyBus) window.notifyBus.clearSticky('sam.status');
@@ -6822,6 +6928,7 @@ async function samCheckAndEnterMode() {
     const gs = (typeof initialGlobalSettings !== 'undefined') ? initialGlobalSettings : {};
     samServicePort = savedState.samPort ?? gs.samPort ?? 8765;
     samEncodeMode = savedState.samEncodeMode ?? gs.samEncodeMode ?? 'full';
+    samEncodeAdjusted = !!(savedState.samEncodeAdjusted ?? gs.samEncodeAdjusted ?? false);
 
     // Try to ping the service
     const ok = await samPingService();
@@ -6867,6 +6974,7 @@ function samUndoLastPrompt() {
             samDecodeVersion++;  // Invalidate any in-flight decode
             samMaskContour = null;
             samCachedCrop = null;
+            samCachedAdjustSig = null;
             samCurrentImagePath = null;
             samIsFreshSequence = true;
             draw();
@@ -6887,6 +6995,7 @@ function samConfirmAnnotation() {
         prompts: JSON.parse(JSON.stringify(samPrompts)),
         maskContour: JSON.parse(JSON.stringify(samMaskContour)),
         cachedCrop: samCachedCrop ? JSON.parse(JSON.stringify(samCachedCrop)) : null,
+        cachedAdjustSig: samCachedAdjustSig,
         isFreshSequence: samIsFreshSequence,
         currentImagePath: samCurrentImagePath
     };
@@ -6902,6 +7011,7 @@ function samConfirmAnnotation() {
     samDragStart = null;
     samDragCurrent = null;
     samCachedCrop = null;
+    samCachedAdjustSig = null;
     samCurrentImagePath = null;
     samIsFreshSequence = true;
 
@@ -7116,6 +7226,7 @@ window._samOnImageUpdate = function () {
         samBoxSecondClick = false;
         samMouseDownTime = 0;
         samCachedCrop = null;
+        samCachedAdjustSig = null;
         // Clear samCurrentImagePath so lazy encode triggers on next interaction
         samCurrentImagePath = null;
         updateShiftFeedback();

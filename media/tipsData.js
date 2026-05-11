@@ -106,6 +106,7 @@ const TIPS = {
     'sam.device':         { title: 'Device', desc: 'Run the SAM service on CPU or GPU.' },
     'sam.gpuIndex':       { title: 'GPU Index', desc: 'Which GPU to use when Device is GPU.' },
     'sam.encodeMode':     { title: 'Encode Mode', desc: 'Full Image is the default. Local Crop encodes only the visible viewport when zoomed in for better small-target accuracy.' },
+    'sam.encodeAdjusted': { title: 'Encode Source', desc: 'Original (default): SAM always sees the raw image file. Adjusted View: SAM encodes the image with current Brightness/Contrast/CLAHE/Channel applied as pixels — changing any adjustment triggers a re-encode on the next click.' },
     'sam.port':           { title: 'Service Port', desc: 'Local port for the SAM HTTP service.' },
     'sam.modelDirBrowse': { title: 'Browse', desc: 'Pick the SAM model directory.' },
     'sam.pythonBrowse':   { title: 'Browse', desc: 'Pick the Python executable.' }

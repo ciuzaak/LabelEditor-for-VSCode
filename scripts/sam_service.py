@@ -6,6 +6,7 @@ Supports both SAM1 and SAM2 model variants via auto-detection.
 """
 
 import argparse
+import base64
 import json
 import os
 import sys
@@ -302,6 +303,7 @@ class SAMHandler(BaseHTTPRequestHandler):
     cached_embedding = None
     cached_image_path = None
     cached_crop = None  # {"x": int, "y": int, "w": int, "h": int} or None
+    cached_adjust_sig = None  # Signature of image-adjustment state (None when raw original was encoded)
 
     def log_message(self, format, *args):
         """Override to add timestamp and flush."""
@@ -360,23 +362,47 @@ class SAMHandler(BaseHTTPRequestHandler):
 
         # Parse optional crop region
         crop = body.get("crop", None)  # {"x": int, "y": int, "w": int, "h": int}
+        # Optional adjusted-view payload: when the client wants SAM to see brightness/
+        # contrast/CLAHE/channel-selected pixels, it sends the rendered PNG as base64
+        # along with an adjust_sig that is folded into the cache key.
+        image_b64 = body.get("image_b64", None)
+        adjust_sig = body.get("adjust_sig", None)
 
-        # Check cache (must match both image path and crop region)
+        # Guard: an adjusted PNG without a signature would poison the raw-original
+        # cache entry (same path/crop, adjust_sig=None on both sides → false hit).
+        if image_b64 and not adjust_sig:
+            self._send_json({"error": "image_b64 requires a non-empty adjust_sig"}, 400)
+            return
+
+        # Check cache (must match image path, crop region, and adjustment signature)
         if (SAMHandler.cached_image_path == image_path
                 and SAMHandler.cached_embedding is not None
-                and SAMHandler.cached_crop == crop):
-            self.log_message("Encoder cache hit: %s%s",
+                and SAMHandler.cached_crop == crop
+                and SAMHandler.cached_adjust_sig == adjust_sig):
+            self.log_message("Encoder cache hit: %s%s%s",
                              os.path.basename(image_path),
-                             f" crop={crop}" if crop else "")
+                             f" crop={crop}" if crop else "",
+                             f" adj={adjust_sig}" if adjust_sig else "")
             self._send_json({"ok": True, "cached": True})
             return
 
-        # Read image
+        # Read image — prefer the client-rendered adjusted PNG when supplied
         t0 = time.perf_counter()
-        cv_image = imread_unicode(image_path)
-        if cv_image is None:
-            self._send_json({"error": f"Failed to read image: {image_path}"}, 400)
-            return
+        if image_b64:
+            try:
+                raw = base64.b64decode(image_b64, validate=True)
+            except Exception as e:
+                self._send_json({"error": f"Invalid base64 in image_b64: {e}"}, 400)
+                return
+            cv_image = cv2.imdecode(np.frombuffer(raw, dtype=np.uint8), cv2.IMREAD_COLOR)
+            if cv_image is None:
+                self._send_json({"error": "Failed to decode adjusted image bytes"}, 400)
+                return
+        else:
+            cv_image = imread_unicode(image_path)
+            if cv_image is None:
+                self._send_json({"error": f"Failed to read image: {image_path}"}, 400)
+                return
 
         # Apply crop if specified
         if crop:
@@ -416,10 +442,12 @@ class SAMHandler(BaseHTTPRequestHandler):
         SAMHandler.cached_embedding = embedding
         SAMHandler.cached_image_path = image_path
         SAMHandler.cached_crop = crop
+        SAMHandler.cached_adjust_sig = adjust_sig
 
         crop_info = f" crop=({x},{y},{w},{h})" if crop else ""
-        self.log_message("Encoded %s%s in %.0fms",
-                         os.path.basename(image_path), crop_info, (t1 - t0) * 1000)
+        adj_info = f" adj={adjust_sig}" if adjust_sig else ""
+        self.log_message("Encoded %s%s%s in %.0fms",
+                         os.path.basename(image_path), crop_info, adj_info, (t1 - t0) * 1000)
         self._send_json({"ok": True, "cached": False, "time_ms": round((t1 - t0) * 1000)})
 
     def _handle_decode(self, body):

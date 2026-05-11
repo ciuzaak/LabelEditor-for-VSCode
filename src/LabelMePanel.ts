@@ -1108,6 +1108,13 @@ export class LabelMePanel {
                             </div>
                         </div>
                         <div class="onnx-form-group">
+                            <label data-tip-id="sam.encodeAdjusted">Encode Source</label>
+                            <div class="onnx-radio-group segmented-group">
+                                <label class="onnx-radio"><input type="radio" name="samEncodeSource" value="original" checked /> Original</label>
+                                <label class="onnx-radio"><input type="radio" name="samEncodeSource" value="adjusted" /> Adjusted View</label>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
                             <label data-tip-id="sam.port">Port</label>
                             <input type="number" id="samPort" value="8765" min="1024" max="65535" style="width:80px" />
                         </div>
@@ -1156,6 +1163,7 @@ export class LabelMePanel {
                         samDevice: ${JSON.stringify(this._globalState.get('samDevice') || 'cpu')},
                         samPort: ${this._globalState.get('samPort') ?? 8765},
                         samEncodeMode: ${JSON.stringify(this._globalState.get('samEncodeMode') || 'full')},
+                        samEncodeAdjusted: ${this._globalState.get('samEncodeAdjusted') ?? false},
                         samGpuIndex: ${this._globalState.get('samGpuIndex') ?? -1},
                         onnxGpuIndex: ${this._globalState.get('onnxGpuIndex') ?? -1}
                     };

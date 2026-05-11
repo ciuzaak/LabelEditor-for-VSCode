@@ -109,7 +109,14 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
   - Real-time mask preview with SVG overlay
   - Lazy encoding: image embedding computed on first interaction for efficiency
   - Supports SAM1 and SAM2 ONNX models with automatic detection
-  - Configuration: model directory, Python interpreter, device (CPU/GPU), port
+  - **Encode Mode** (since v0.12.1): pick **Full Image** (default) or **Local Crop** in the SAM config dialog
+    - Local Crop encodes only the visible viewport when zoomed in, dramatically improving accuracy on small targets
+    - A yellow dashed rectangle marks the currently encoded region; in-progress sequences stick to the cached crop until prompts fall outside it
+  - **Encode Source** (New in v0.16.1): pick **Original** (default) or **Adjusted View** in the SAM config dialog
+    - Original: SAM always sees the raw image file (cheapest; embedding is reusable across sessions)
+    - Adjusted View: SAM encodes the image with current Brightness / Contrast / CLAHE / Channel applied as pixels; useful for low-contrast / medical / microscopy data where adjustments reveal structure
+    - Changes to any adjustment slider trigger a re-encode lazily on the next SAM click — same pattern as scrolling out of the cached crop in Local mode
+  - Configuration: model directory, Python interpreter, device (CPU/GPU), port, encode mode, encode source
   - All settings persist across sessions
   - SAM service runs as a standalone Python HTTP server in VS Code terminal
   - Requires: Python with `onnxruntime`, `opencv-python`, `numpy`
@@ -163,6 +170,12 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - Every interactive control — buttons, sliders, radios, list-row actions, modal form fields — has a rich tooltip with title, description, and (where applicable) keyboard shortcut
 - 500 ms hover delay; clicking does not pop a tooltip; keyboard `Tab` still gets immediate tooltips for accessibility
 - Eraser gesture (Shift-click) is documented in every drawing-mode tip
+
+### SAM Encode Source (New in v0.16.1)
+- Opt-in toggle in the SAM config dialog: **Original** (raw file, default) or **Adjusted View** (Brightness / Contrast / CLAHE / Channel applied as pixels before encoding)
+- Lets SAM see what *you* see — particularly valuable for low-contrast, medical, or microscopy data where CLAHE reveals structure
+- Lazy re-encode: moving any adjustment slider triggers a single re-encode on the next SAM click; in Local Crop mode the cached crop is preserved so existing prompts remain valid
+- Cache is keyed on `(image path, crop, adjustment signature)` so the original-image embedding is never overwritten
 
 ## 📦 Installation
 

@@ -2,6 +2,15 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.16.1] - 2026-05-11
+
+### Added
+- **SAM Encode Source — Original / Adjusted View**: Opt-in toggle in the SAM config dialog that lets SAM encode the brightness/contrast/CLAHE/channel-adjusted view instead of the raw image file. Useful for low-contrast, medical, or microscopy data where adjustments reveal the target structure. When set to Adjusted View, the webview renders a PNG of the processed canvas (channel + CLAHE applied as pixels, then brightness/contrast via Canvas2D `filter`) and sends it as base64 along with an adjustment signature. The Python service decodes the base64 and keys its embedding cache on `(image path, crop, adjust_sig)` so the original-image embedding is never overwritten.
+  - Re-encode is lazy: moving any adjustment slider invalidates only the on-screen view; the next SAM click triggers a single re-encode — same pattern as scrolling out of the cached crop in Local Crop mode
+  - In Local Crop mode mid-sequence, an adjust-only change re-encodes at the *cached* crop so existing prompts stay aligned; a viewport scroll that moves prompts out of the cached crop still trims them and re-encodes at the new viewport (existing behavior preserved)
+  - Post-encode revalidation: if an adjustment slider moves during the encode, the decode bails and waits for the next click rather than running against a stale embedding
+  - Server-side guards reject malformed payloads (`image_b64` without `adjust_sig`, invalid base64) with distinct error messages so cache poisoning is impossible
+
 ## [0.16.0] - 2026-05-09
 
 ### Added
