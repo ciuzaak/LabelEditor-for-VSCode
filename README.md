@@ -24,7 +24,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 
 ### Image Browser (New in v0.7.0)
 - **Sidebar Image List**: Browse all images in the workspace from a dedicated sidebar
-  - Toggle with ☰ button in toolbar
+  - Toggle with the panel-left button in toolbar
   - Shows all images organized by folder structure
   - Click any image to navigate instantly
   - Current image is highlighted
@@ -49,7 +49,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - **Theme Switching** (New in v0.8.0):
   - ☀️ Light mode for bright environments
   - 🌙 Dark mode matching VS Code dark themes
-  - 🔄 Auto mode - follows VS Code's current theme
+  - ◐ Auto mode — follows VS Code's current theme
 - **Image Info Popup** (New in v0.13.5): Click ℹ in the toolbar to view image metadata (dimensions, file size, DPI, bit depth)
 - **Brightness & Contrast Control** (New in v0.13.4): Adjust image display without modifying original data
   - Sliders with individual reset (↺) and lock (🔓/🔒) buttons
@@ -62,7 +62,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 ### Navigation & Workflow
 - **LabelMe Format**: Compatible with LabelMe JSON format for ML pipelines
 - **Zoom & Pan**: Smooth zooming with mouse-centered pivot and full scrolling
-- **Image Browser**: Quick access to all workspace images via sidebar (☰)
+- **Image Browser**: Quick access to all workspace images via the sidebar (panel-left toolbar button)
 - **Image Navigation**: Quick prev/next buttons + keyboard shortcuts (A/D)
 - **Copy Image Path** (New in v0.9.0): Click filename in toolbar to copy absolute path; right-click to copy filename only
 - **Manual Save**: Control when to save annotations (Ctrl+S)
@@ -87,7 +87,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 
 ### ONNX Batch Inference (New in v0.11.2)
 - **Automated Annotation**: Run ONNX segmentation models on workspace images
-  - Access via Tools → 🤖 ONNX Batch Infer
+  - Access via the Tools (wrench) menu → ONNX Batch Infer
   - Configurable: model directory, Python interpreter, CPU/GPU, RGB/BGR
   - Scope: infer on all images or current image only
   - Existing annotations: skip / merge / overwrite
@@ -99,7 +99,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 
 ### SAM AI Annotation (New in v0.12.0)
 - **Interactive Segmentation**: Annotate with the Segment Anything Model (SAM)
-  - Enter SAM mode via toolbar button (🧠) or keyboard shortcut (`I`)
+  - Enter SAM mode via the toolbar button (✨ sparkles) or keyboard shortcut (`I`)
   - **Left click**: Positive point prompt
   - **Shift+Left click**: Negative point prompt (requires at least one positive prompt; otherwise Shift starts the eraser, just like in non-SAM modes)
   - **Left click + Drag**: Rectangle (box) prompt
@@ -210,7 +210,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 
 ### Advanced Options
 - Click the **⚙️ icon** to open advanced settings
-- Choose **theme**: Light (☀️), Dark (🌙), or Auto (🔄)
+- Choose **theme**: Light (☀️), Dark (🌙), or Auto (◐)
 - Adjust **brightness** and **contrast** with sliders (display only, lock to preserve across images)
 - Adjust **border width** and **fill opacity** with sliders
 - Click **↺** on any setting to reset to default
@@ -242,7 +242,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 
 ### Toolbar Buttons
 - **◀ / ▶**: Navigate between images
-- **👁️ / ⬠ / ▭ / ⟋ / • / 🧠**: Switch between View, Polygon, Rectangle, Line, Point, and SAM modes
+- **👁️ / ⬠ / ▭ / ⟋ / • / ✨**: Switch between View, Polygon, Rectangle, Line, Point, and SAM modes
 - **⚙️**: Open advanced rendering options
 - **Save**: Save current annotations
 
