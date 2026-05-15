@@ -480,7 +480,8 @@ if (claheClipLimitSlider && claheClipLimitValue) {
 
 function updateClaheToggleUI() {
     if (claheToggleBtn) {
-        claheToggleBtn.textContent = claheEnabled ? 'On' : 'Off';
+        const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
+        claheToggleBtn.textContent = claheEnabled ? tt('toggle.on') : tt('toggle.off');
         claheToggleBtn.classList.toggle('active', claheEnabled);
     }
     if (claheControls) {
@@ -5976,6 +5977,7 @@ if (languageSelect && window.i18n) {
         renderLabelsList();
         renderKeybindingsList();
         updateImageInfoPopup();
+        updateClaheToggleUI();
         draw();
         vscode.postMessage({ command: 'saveGlobalSettings', key: 'locale', value: e.target.value });
     });
@@ -7386,8 +7388,11 @@ async function samEncode(imagePath, crop, adjustSig) {
                 samCurrentImagePath = imagePath;
                 samCachedCrop = crop || null;
                 samCachedAdjustSig = adjustSig || null;
-                const modeLabel = crop ? 'Local' : 'Full';
-                const adjLabel = adjustSig ? ' • Adjusted' : '';
+                // Mode and adjust fragments are translatable too — without
+                // this they appeared as "Local" / "Full" / "Adjusted" inside
+                // an otherwise translated SAM-ready toast.
+                const modeLabel = crop ? tt('sam.mode.local') : tt('sam.mode.full');
+                const adjLabel = adjustSig ? ' • ' + tt('sam.mode.adjusted') : '';
                 window.notifyBus.show('success', tt('status.samReady', { mode: modeLabel, adj: adjLabel, time: data.time_ms || 0 }), { sticky: true, key: 'sam.status' });
             } else {
                 window.notifyBus.show('error', tt('status.samEncodeError'));
@@ -7532,8 +7537,8 @@ async function samDecode() {
             } else {
                 samMaskContour = data.contour;
             }
-            const modeLabel = samCachedCrop ? 'Local' : 'Full';
             const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k, p) => k;
+            const modeLabel = samCachedCrop ? tt('sam.mode.local') : tt('sam.mode.full');
             window.notifyBus.show('success', tt('status.samDecoded', { mode: modeLabel, time: data.time_ms || 0 }), { sticky: true, key: 'sam.status' });
             draw();
             // Note: don't call updateShiftFeedback here — samDecode doesn't
