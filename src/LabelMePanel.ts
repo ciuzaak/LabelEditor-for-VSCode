@@ -440,7 +440,7 @@ export class LabelMePanel {
                         return;
                     }
                     case 'exportDatasetPrepare':
-                        await this._prepareExportDataset(message.scope);
+                        await this._prepareExportDataset(message.scope, message.currentImage);
                         return;
                     case 'exportDatasetRun':
                         await this._runExportDataset(message.config);
@@ -1435,11 +1435,18 @@ export class LabelMePanel {
         return images;
     }
 
-    private async _prepareExportDataset(scope: string) {
+    private async _prepareExportDataset(
+        scope: string,
+        currentImage?: { shapes: ExportShape[]; width: number; height: number }
+    ) {
         if (this._workspaceImages.length === 0 && scope === 'all') {
             await this._scanWorkspaceImages();
         }
-        const images = await this._collectExportImages(scope);
+        // Forward the unsaved current image override so the class-detection
+        // preview sees the same shapes the eventual export run will write.
+        // Without this, brand-new labels from an unsaved edit wouldn't show up
+        // in the modal's class list and the run step would warn/skip them.
+        const images = await this._collectExportImages(scope, currentImage);
         const labelSet = new Set<string>();
         let annotationCount = 0;
         for (const img of images) {

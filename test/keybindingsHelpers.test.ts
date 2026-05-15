@@ -128,6 +128,13 @@ describe('keybindings disabled-row behaviour', () => {
         assert.equal(kb.matchAction(ev('V'), bindings, {}), null);
         assert.equal(kb.matchAction(ev('P'), bindings, {}), 'mode.polygon');
     });
+    it('matchAction also skips ALT_BINDINGS when the primary is disabled', () => {
+        // edit.delete defaults to Delete with Backspace as an alt. If the user
+        // disables edit.delete via Override, neither key should still trigger.
+        const bindings = { 'edit.delete': null };
+        const alts = { 'edit.delete': [{ key: 'Backspace' }] };
+        assert.equal(kb.matchAction(ev('Backspace'), bindings, alts), null);
+    });
 });
 
 describe('keybindings.eventToBinding / isModifierOnly', () => {

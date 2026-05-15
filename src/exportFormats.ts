@@ -212,6 +212,16 @@ export function buildYoloBboxLines(image: ExportImage, classes: string[]): { tex
             warnings.push({ image: image.fileName, label, shape_type: shape.shape_type, reason: 'zero-area bbox' });
             continue;
         }
+        // A collinear diagonal polygon has positive bbox extent but zero
+        // polygon area — still meaningless as a detection target. Catch this
+        // by checking the ring's polygon area when one is available.
+        if (shape.shape_type !== 'point' && shape.shape_type !== 'linestrip') {
+            const ring = shapeToPolygonRing(shape);
+            if (ring && polygonArea(ring) <= DEGENERATE_EPS) {
+                warnings.push({ image: image.fileName, label, shape_type: shape.shape_type, reason: 'zero-area geometry' });
+                continue;
+            }
+        }
         const cx = clamp01((box.x + box.w / 2) / image.width);
         const cy = clamp01((box.y + box.h / 2) / image.height);
         const w = clamp01(box.w / image.width);

@@ -218,6 +218,20 @@ describe('degenerate geometry rejection', () => {
         assert.ok(warnings.some(w => w.reason === 'zero-area bbox'));
     });
 
+    it('YOLO bbox drops a collinear polygon even when its bbox has positive extent', () => {
+        const image: ExportImage = {
+            fileName: 'diag.png', width: 100, height: 100,
+            shapes: [
+                // Diagonal collinear polygon: bbox is 40x40 (positive) but polygon area is 0.
+                { label: 'cat', shape_type: 'polygon', points: [[10, 10], [30, 30], [50, 50]] }
+            ]
+        };
+        const { text, warnings } = buildYoloBboxLines(image, ['cat']);
+        assert.equal(text, '');
+        assert.equal(warnings.length, 1);
+        assert.equal(warnings[0].reason, 'zero-area geometry');
+    });
+
     it('YOLO seg drops a zero-area polygon', () => {
         const image: ExportImage = {
             fileName: 'flat.png', width: 100, height: 100,

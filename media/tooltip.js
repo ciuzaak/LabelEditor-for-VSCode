@@ -92,10 +92,18 @@
         // Falls through to the static `shortcut` field when bindings aren't
         // loaded (early init) or the action has no current binding.
         if (tip.shortcutAction && window.keybindings && window.currentBindings) {
-            const live = window.currentBindings[tip.shortcutAction];
+            const ownsAction = Object.prototype.hasOwnProperty.call(window.currentBindings, tip.shortcutAction);
+            const live = ownsAction ? window.currentBindings[tip.shortcutAction] : undefined;
             if (live) {
                 const display = window.keybindings.display(live);
                 if (display) return Object.assign({}, tip, { shortcut: display });
+            } else if (ownsAction && live === null) {
+                // Disabled-by-Override: scrub the stale default shortcut so
+                // the tooltip doesn't advertise a key combo that no longer
+                // triggers the action.
+                const clone = Object.assign({}, tip);
+                delete clone.shortcut;
+                return clone;
             }
         }
         return tip;

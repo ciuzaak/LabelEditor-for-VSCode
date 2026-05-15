@@ -82,6 +82,11 @@
         }
         if (alts) {
             for (const id in alts) {
+                // If the primary binding is explicitly disabled (null), the
+                // alt must not dispatch either — otherwise Override clearing
+                // edit.delete still leaves Backspace deleting, defeating the
+                // whole point of the disabled sentinel.
+                if (bindings && Object.prototype.hasOwnProperty.call(bindings, id) && bindings[id] === null) continue;
                 for (const alt of alts[id]) {
                     if (matches(event, alt)) return id;
                 }

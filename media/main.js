@@ -2894,19 +2894,15 @@ document.addEventListener('mousemove', (e) => {
         const dx = x - dragStartPoint.x;
         const dy = y - dragStartPoint.y;
 
-        // Move all points by the delta
+        // Move all points by the delta. Both the center and the edge get
+        // clamped to image bounds — matches rectangle/polygon's drag
+        // behaviour (corners snap to the edge when the cursor leaves the
+        // image). This sacrifices a tiny bit of radius preservation when the
+        // circle is dragged into a corner, but the alternative — writing
+        // out-of-bounds edge points to the JSON — has worse downstream
+        // consequences for export, eraser, and round-trip tests.
         const shape = shapes[shapeBeingEdited];
-        if (shape.shape_type === 'circle') {
-            // Translate the center but leave the radius alone — the edge point
-            // must travel with the center even if it lands outside the image,
-            // otherwise the circle deforms when dragged near the boundary.
-            const newCenter = clampImageCoords(originalEditPoints[0][0] + dx, originalEditPoints[0][1] + dy);
-            const cdx = newCenter[0] - originalEditPoints[0][0];
-            const cdy = newCenter[1] - originalEditPoints[0][1];
-            shape.points = [newCenter, [originalEditPoints[1][0] + cdx, originalEditPoints[1][1] + cdy]];
-        } else {
-            shape.points = originalEditPoints.map(p => clampImageCoords(p[0] + dx, p[1] + dy));
-        }
+        shape.points = originalEditPoints.map(p => clampImageCoords(p[0] + dx, p[1] + dy));
 
         draw();
     } else if (isDraggingVertex && activeVertexIndex !== -1) {
@@ -2951,7 +2947,10 @@ document.addEventListener('mousemove', (e) => {
                 const oldCx = originalEditPoints[0];
                 const dx = newCx[0] - oldCx[0];
                 const dy = newCx[1] - oldCx[1];
-                shape.points = [newCx, [originalEditPoints[1][0] + dx, originalEditPoints[1][1] + dy]];
+                // Clamp the translated edge as well so a center drag near the
+                // boundary doesn't push the recorded edge outside the image.
+                const newEdge = clampImageCoords(originalEditPoints[1][0] + dx, originalEditPoints[1][1] + dy);
+                shape.points = [newCx, newEdge];
             } else {
                 // Clamp the dragged edge to image bounds so a vertex edit can
                 // never push the recorded edge point outside [0,w]×[0,h].
@@ -5427,11 +5426,35 @@ function showExportDatasetModal() {
     renderExportClassList();
     exportDatasetModal.style.display = 'flex';
     // Request scope-aware prep
-    vscode.postMessage({ command: 'exportDatasetPrepare', scope: getExportScope() });
+    // Forward the unsaved-shapes override so the class-detection preview sees
+    // exactly what the run step will write — without it, new labels from a
+    // dirty edit don't show up in the modal's class list.
+    vscode.postMessage({
+        command: 'exportDatasetPrepare',
+        scope: getExportScope(),
+        currentImage: buildExportCurrentImageOverride() || undefined
+    });
 }
 
 function hideExportDatasetModal() {
     if (exportDatasetModal) exportDatasetModal.style.display = 'none';
+}
+
+// Build the unsaved-shapes override sent to the host for current-scope
+// export. Returns null when scope isn't 'current' or the image hasn't loaded
+// yet so the host falls through to its disk-read path.
+function buildExportCurrentImageOverride() {
+    if (getExportScope() !== 'current') return null;
+    if (!img || !(img.width > 0) || !(img.height > 0)) return null;
+    return {
+        shapes: shapes.map(shape => {
+            const { visible, ...rest } = shape;
+            if (!rest.description) delete rest.description;
+            return rest;
+        }),
+        width: img.width,
+        height: img.height
+    };
 }
 
 function submitExportDataset() {
@@ -5441,21 +5464,8 @@ function submitExportDataset() {
         outputDir: exportOutputDirInput ? exportOutputDirInput.value.trim() : '',
         classes: exportClasses.slice()
     };
-    // For the current-scope export, ship the in-memory shapes (already
-    // stripped of UI-only fields like `visible`) so any unsaved edits go to
-    // the converted output. Without this, the host reads the stale sidecar
-    // JSON and silently exports yesterday's annotations.
-    if (config.scope === 'current' && img && img.width > 0 && img.height > 0) {
-        config.currentImage = {
-            shapes: shapes.map(shape => {
-                const { visible, ...rest } = shape;
-                if (!rest.description) delete rest.description;
-                return rest;
-            }),
-            width: img.width,
-            height: img.height
-        };
-    }
+    const override = buildExportCurrentImageOverride();
+    if (override) config.currentImage = override;
     vscode.postMessage({ command: 'exportDatasetRun', config });
 }
 
@@ -5500,7 +5510,14 @@ if (exportCancelBtn) exportCancelBtn.addEventListener('click', hideExportDataset
 // Re-request preparation when the scope flips between "all" and "current".
 document.querySelectorAll('input[name="exportScope"]').forEach(radio => {
     radio.addEventListener('change', () => {
-        vscode.postMessage({ command: 'exportDatasetPrepare', scope: getExportScope() });
+        // Forward the unsaved-shapes override so the class-detection preview sees
+    // exactly what the run step will write — without it, new labels from a
+    // dirty edit don't show up in the modal's class list.
+    vscode.postMessage({
+        command: 'exportDatasetPrepare',
+        scope: getExportScope(),
+        currentImage: buildExportCurrentImageOverride() || undefined
+    });
     });
 });
 
@@ -5825,13 +5842,13 @@ function renderKeybindingsList() {
         const row = document.createElement('div');
         row.className = 'kb-row';
         row.dataset.action = id;
+        const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
         const name = document.createElement('span');
         name.className = 'kb-name';
         name.textContent = actionDisplayName(id);
         const current = document.createElement('span');
         current.className = 'kb-current';
-        current.textContent = window.keybindings.display(currentBindings[id]) || '(none)';
-        const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
+        current.textContent = window.keybindings.display(currentBindings[id]) || tt('kb.none');
         const captureBtn = document.createElement('button');
         captureBtn.className = 'btn btn-icon kb-capture';
         captureBtn.textContent = '✎';
@@ -5872,7 +5889,10 @@ function finishKeybindingsCapture(applied) {
     keybindingsCapture = null;
     rowEl.classList.remove('kb-capturing');
     const current = rowEl.querySelector('.kb-current');
-    if (current) current.textContent = window.keybindings.display(currentBindings[actionId]) || '(none)';
+    if (current) {
+        const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
+        current.textContent = window.keybindings.display(currentBindings[actionId]) || tt('kb.none');
+    }
 }
 
 function captureKeyHandler(e) {
