@@ -1565,3 +1565,15 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     border-radius: 4px;
     font-size: 0.9em;
 }
+
+/* Two-row mode toolbar — view/sam on top, drawing modes on the bottom. */
+.mode-toggle-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+/* Force the segmented groups inside the stack to fill the row so the
+   two-button and five-button rows align visually. */
+.mode-toggle-stack > .segmented-group {
+    display: flex;
+}

@@ -912,14 +912,18 @@ export class LabelMePanel {
                     <div class="sidebar" id="sidebar">
                         <div class="sidebar-config-section">
                             <div class="sidebar-toolbar">
-                                <div class="mode-toggle-group segmented-group">
-                                    <button id="viewModeBtn" class="mode-btn segmented-item active" data-tip-id="mode.view"><svg class="icon" aria-hidden="true"><use href="#icon-eye"/></svg></button>
-                                    <button id="polygonModeBtn" class="mode-btn segmented-item" data-tip-id="mode.polygon"><svg class="icon" aria-hidden="true"><use href="#icon-pentagon"/></svg></button>
-                                    <button id="rectangleModeBtn" class="mode-btn segmented-item" data-tip-id="mode.rectangle"><svg class="icon" aria-hidden="true"><use href="#icon-square"/></svg></button>
-                                    <button id="lineModeBtn" class="mode-btn segmented-item" data-tip-id="mode.line"><svg class="icon" aria-hidden="true"><use href="#icon-slash"/></svg></button>
-                                    <button id="pointModeBtn" class="mode-btn segmented-item" data-tip-id="mode.point"><svg class="icon" aria-hidden="true"><use href="#icon-dot"/></svg></button>
-                                    <button id="circleModeBtn" class="mode-btn segmented-item" data-tip-id="mode.circle"><svg class="icon" aria-hidden="true"><use href="#icon-circle-outline"/></svg></button>
-                                    <button id="samModeBtn" class="mode-btn segmented-item" data-tip-id="mode.sam"><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg></button>
+                                <div class="mode-toggle-stack">
+                                    <div class="mode-toggle-group segmented-group">
+                                        <button id="viewModeBtn" class="mode-btn segmented-item active" data-tip-id="mode.view"><svg class="icon" aria-hidden="true"><use href="#icon-eye"/></svg></button>
+                                        <button id="samModeBtn" class="mode-btn segmented-item" data-tip-id="mode.sam"><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg></button>
+                                    </div>
+                                    <div class="mode-toggle-group segmented-group">
+                                        <button id="polygonModeBtn" class="mode-btn segmented-item" data-tip-id="mode.polygon"><svg class="icon" aria-hidden="true"><use href="#icon-pentagon"/></svg></button>
+                                        <button id="rectangleModeBtn" class="mode-btn segmented-item" data-tip-id="mode.rectangle"><svg class="icon" aria-hidden="true"><use href="#icon-square"/></svg></button>
+                                        <button id="lineModeBtn" class="mode-btn segmented-item" data-tip-id="mode.line"><svg class="icon" aria-hidden="true"><use href="#icon-slash"/></svg></button>
+                                        <button id="pointModeBtn" class="mode-btn segmented-item" data-tip-id="mode.point"><svg class="icon" aria-hidden="true"><use href="#icon-dot"/></svg></button>
+                                        <button id="circleModeBtn" class="mode-btn segmented-item" data-tip-id="mode.circle"><svg class="icon" aria-hidden="true"><use href="#icon-circle-outline"/></svg></button>
+                                    </div>
                                 </div>
                                 <div class="sidebar-actions segmented-group">
                                     <button id="settingsMenuBtn" class="sidebar-icon-btn segmented-item" data-tip-id="actions.settings"><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg></button>
