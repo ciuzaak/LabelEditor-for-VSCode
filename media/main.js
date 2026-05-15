@@ -2050,8 +2050,12 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 finishPolygon();
             } else if (currentMode === 'circle') {
                 // Second click sets the edge point and finalises the circle.
+                // Clamp the edge to image bounds so the recorded shape never
+                // contains coordinates outside [0, w]×[0, h] — matches the
+                // rectangle/polygon convention. Whole-shape drag has a
+                // separate code path that preserves radius near the boundary.
                 if (currentPoints.length >= 1) {
-                    currentPoints[1] = [x, y];
+                    currentPoints[1] = clampImageCoords(x, y);
                 }
                 const r = getCircleRadius(currentPoints);
                 if (r < 0.5) {
@@ -2253,8 +2257,10 @@ canvasWrapper.addEventListener('mousemove', (e) => {
                     const my = e.clientY - rect.top;
                     const x = mx / zoomLevel;
                     const y = my / zoomLevel;
-                    // Keep the center fixed; only the edge point follows the cursor.
-                    currentPoints = [currentPoints[0], [x, y]];
+                    // Keep the center fixed; the live edge point clamps to
+                    // image bounds so the second-click capture below matches
+                    // the rubber-band preview.
+                    currentPoints = [currentPoints[0], clampImageCoords(x, y)];
                 }
                 draw(e);
                 animationFrameId = null;
@@ -2946,7 +2952,9 @@ document.addEventListener('mousemove', (e) => {
                 const dy = newCx[1] - oldCx[1];
                 shape.points = [newCx, [originalEditPoints[1][0] + dx, originalEditPoints[1][1] + dy]];
             } else {
-                shape.points[1] = [x, y];
+                // Clamp the dragged edge to image bounds so a vertex edit can
+                // never push the recorded edge point outside [0,w]×[0,h].
+                shape.points[1] = clampImageCoords(x, y);
             }
         } else {
             // For polygon/line/point, just update the vertex directly
