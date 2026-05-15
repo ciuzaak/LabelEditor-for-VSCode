@@ -1505,3 +1505,52 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .export-add-class input {
     flex: 1;
 }
+
+/* Keyboard Shortcuts settings panel */
+.keybindings-list {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-height: 240px;
+    overflow-y: auto;
+    border: 1px solid var(--vscode-input-border, rgba(128,128,128,0.3));
+    border-radius: 4px;
+    padding: 2px;
+    margin: 4px 0;
+}
+.kb-row {
+    display: grid;
+    grid-template-columns: 1fr auto auto auto;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 6px;
+    border-radius: 3px;
+}
+.kb-row.kb-capturing {
+    background: var(--vscode-list-activeSelectionBackground, rgba(255,255,255,0.05));
+}
+.kb-name {
+    font-size: 0.9em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.kb-current {
+    font-family: monospace;
+    font-size: 0.85em;
+    opacity: 0.85;
+    text-align: right;
+    padding: 0 6px;
+    min-width: 60px;
+}
+.kb-error {
+    grid-column: 1 / -1;
+    font-size: 0.8em;
+    color: var(--vscode-errorForeground, #f48771);
+    padding: 4px 0;
+}
+.kb-error button {
+    margin-left: 6px;
+    padding: 2px 8px;
+    font-size: 0.85em;
+}

@@ -367,6 +367,20 @@ if (vscodeState && vscodeState.currentMode) {
     currentMode = vscodeState.currentMode;
 }
 
+// Boot the keyboard-binding table. Persisted overrides from initialGlobalSettings
+// are merged with the frozen defaults so a stale/partial map still works after
+// new actions are added in a release. window.currentBindings is the single
+// source of truth consulted by the dispatcher AND the settings UI.
+let currentBindings = (window.keybindings && window.keybindings.mergeWithDefaults)
+    ? window.keybindings.mergeWithDefaults(initialGlobalSettings.keyboardBindings)
+    : {};
+window.currentBindings = currentBindings;
+
+// True while the settings panel is waiting on the next keypress to record a
+// new binding. The main keydown dispatcher bails when this is set so the user
+// can press already-bound combos without triggering them.
+let keybindingsCapture = null; // { actionId, rowEl } or null
+
 // 从vscode state恢复lockViewEnabled (先从vscode state，再从globalSettings)
 if (vscodeState && vscodeState.lockViewEnabled !== undefined) {
     lockViewEnabled = vscodeState.lockViewEnabled;
@@ -1425,12 +1439,21 @@ window.addEventListener('blur', () => {
     }
 });
 
+// Dispatcher: every shortcut goes through window.keybindings.matchAction. The
+// per-action behaviour lives in handleAction() so the settings UI can rebind
+// without touching the dispatcher.
 document.addEventListener('keydown', (e) => {
     // Ignore shortcuts if any modal is open (except Enter/Esc handled in input)
     if (labelModal.style.display === 'flex') return;
     if (onnxInferModal && onnxInferModal.style.display === 'flex') return;
     if (colorPickerModal && colorPickerModal.style.display === 'flex') return;
     if (samConfigModal && samConfigModal.style.display === 'flex') return;
+    if (exportDatasetModal && exportDatasetModal.style.display === 'flex') return;
+
+    // Capture mode owns the next press — the row in the settings UI is waiting
+    // to bind it. The capture handler attaches/detaches itself; this is just a
+    // belt-and-braces guard so a stray key doesn't fall through to actions.
+    if (keybindingsCapture) return;
 
     // Skip most shortcuts when an input/textarea/select is focused,
     // allowing text editing keys to work normally. Only Ctrl-prefixed
@@ -1441,214 +1464,143 @@ document.addEventListener('keydown', (e) => {
         return;
     }
 
-    // Ctrl+F: Search
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'f' || e.key === 'F')) {
-        e.preventDefault();
-        if (searchInputContainer && searchInput) {
-            // Check if sidebar is collapsed
-            if (imageBrowserSidebar && imageBrowserSidebar.classList.contains('collapsed')) {
-                // Open sidebar
-                imageBrowserSidebar.classList.remove('collapsed');
-                imageBrowserExpanded = true;
+    const kb = window.keybindings;
+    if (!kb) return;
+    const actionId = kb.matchAction(e, currentBindings, kb.ALT_BINDINGS);
+    if (actionId) {
+        handleAction(actionId, e);
+    }
+});
 
-                // Restore sidebar width if saved
-                const state = vscode.getState() || {};
-                if (state.leftSidebarWidth) {
-                    imageBrowserSidebar.style.width = state.leftSidebarWidth + 'px';
-                }
-
-                // Update state
-                state.imageBrowserExpanded = true;
-                vscode.setState(state);
-
-                // Show and focus search
-                searchInputContainer.style.display = 'flex';
-                searchInput.focus();
-            } else {
-                // Sidebar is open, toggle search box
-                if (searchInputContainer.style.display === 'none') {
+function handleAction(id, e) {
+    switch (id) {
+        case 'browser.find':
+            e.preventDefault();
+            if (searchInputContainer && searchInput) {
+                if (imageBrowserSidebar && imageBrowserSidebar.classList.contains('collapsed')) {
+                    imageBrowserSidebar.classList.remove('collapsed');
+                    imageBrowserExpanded = true;
+                    const state = vscode.getState() || {};
+                    if (state.leftSidebarWidth) {
+                        imageBrowserSidebar.style.width = state.leftSidebarWidth + 'px';
+                    }
+                    state.imageBrowserExpanded = true;
+                    vscode.setState(state);
                     searchInputContainer.style.display = 'flex';
                     searchInput.focus();
                 } else {
-                    // Close search box and clear search
-                    searchInputContainer.style.display = 'none';
-                    searchInput.value = '';
-                    filterImages('');
+                    if (searchInputContainer.style.display === 'none') {
+                        searchInputContainer.style.display = 'flex';
+                        searchInput.focus();
+                    } else {
+                        searchInputContainer.style.display = 'none';
+                        searchInput.value = '';
+                        filterImages('');
+                    }
                 }
             }
-        }
-    }
-
-    // Ctrl+S: Save
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        save();
-    }
-
-    // Ctrl+Z: Undo
-    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key === 'z') {
-        e.preventDefault();
-        undo();
-    }
-
-    // Ctrl+Shift+Z or Ctrl+Y: Redo
-    if (((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'z') ||
-        ((e.ctrlKey || e.metaKey) && e.key === 'y')) {
-        e.preventDefault();
-        redo();
-    }
-
-    // Ctrl+A: Select all instances
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
-        e.preventDefault();
-        selectAllShapes();
-        renderShapeList();
-        draw();
-        return;
-    }
-
-    // Ctrl+G: Merge selected shapes
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'g' || e.key === 'G')) {
-        e.preventDefault();
-        mergeSelectedShapes();
-        return;
-    }
-
-    // Ctrl+R: Rename selected shape(s)
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'r' || e.key === 'R')) {
-        e.preventDefault();
-        if (selectedShapeIndices.size > 1) {
-            showBatchRenameModal();
-        } else if (selectedShapeIndex !== -1) {
-            showLabelModal(selectedShapeIndex);
-        }
-        return;
-    }
-
-    // Ctrl+H: Toggle visibility of selected shape(s)
-    if ((e.ctrlKey || e.metaKey) && (e.key === 'h' || e.key === 'H')) {
-        e.preventDefault();
-        toggleSelectedVisibility();
-        return;
-    }
-
-    // A: Prev Image (only without Ctrl)
-    if ((e.key === 'a' || e.key === 'A') && !e.ctrlKey && !e.metaKey) {
-        vscode.postMessage({ command: 'prev' });
-    }
-
-    // D: Next Image
-    if ((e.key === 'd' || e.key === 'D') && !e.ctrlKey && !e.metaKey) {
-        vscode.postMessage({ command: 'next' });
-    }
-
-    // Delete/Backspace: Delete selected shape(s)
-    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedShapeIndices.size > 0) {
-        if (selectedShapeIndices.size > 1) {
-            deleteSelectedShapes();
-        } else {
-            deleteShape(selectedShapeIndex);
-        }
-    }
-
-    // ESC: Cancel drawing or exit drag/edit mode
-    if (e.key === 'Escape') {
-        // Skip if an input/textarea/select element is focused (e.g. search box)
-        // Let those controls handle their own Escape behavior without side-effects
-        const tag = document.activeElement?.tagName;
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') {
             return;
-        }
-
-        // First priority: hide context menu if visible
-        if (shapeContextMenu && shapeContextMenu.style.display !== 'none') {
-            hideShapeContextMenu();
+        case 'edit.save':
+            e.preventDefault();
+            save();
             return;
-        }
-
-        // Cancel box selection
-        if (isBoxSelecting) {
-            isBoxSelecting = false;
-            boxSelectStart = null;
-            boxSelectCurrent = null;
-            draw();
+        case 'edit.undo':
+            e.preventDefault();
+            undo();
             return;
-        }
-
-        // Cancel eraser operation
-        if (eraserActive || eraserMouseDownPos) {
-            cancelEraser();
-            eraserMouseDownPos = null;
-            eraserMouseDownTime = 0;
-            eraserIsDragging = false;
-            eraserDragCurrent = null;
+        case 'edit.redo':
+            e.preventDefault();
+            redo();
             return;
-        }
-
-        // Second priority: exit edit mode
-        if (isEditingShape) {
-            exitShapeEditMode(false); // Cancel and restore original position
-            return;
-        }
-
-        // Third priority: cancel drawing
-        if (isDrawing) {
-            isDrawing = false;
-            currentPoints = [];
-            draw();
-            return;
-        }
-
-        // Fourth priority: clear SAM prompts (ESC clears all points/box at once)
-        if (currentMode === 'sam' && (samPrompts.length > 0 || samMaskContour || samBoxSecondClick)) {
-            samClearState();
-            return;
-        }
-
-        // Fifth priority: clear multi-selection
-        if (selectedShapeIndices.size > 0) {
-            clearSelection();
+        case 'edit.selectAll':
+            e.preventDefault();
+            selectAllShapes();
             renderShapeList();
             draw();
             return;
+        case 'edit.merge':
+            e.preventDefault();
+            mergeSelectedShapes();
+            return;
+        case 'edit.rename':
+            e.preventDefault();
+            if (selectedShapeIndices.size > 1) {
+                showBatchRenameModal();
+            } else if (selectedShapeIndex !== -1) {
+                showLabelModal(selectedShapeIndex);
+            }
+            return;
+        case 'edit.toggleVisible':
+            e.preventDefault();
+            toggleSelectedVisibility();
+            return;
+        case 'nav.prev':
+            vscode.postMessage({ command: 'prev' });
+            return;
+        case 'nav.next':
+            vscode.postMessage({ command: 'next' });
+            return;
+        case 'edit.delete':
+            if (selectedShapeIndices.size > 0) {
+                if (selectedShapeIndices.size > 1) {
+                    deleteSelectedShapes();
+                } else {
+                    deleteShape(selectedShapeIndex);
+                }
+            }
+            return;
+        case 'edit.cancel': {
+            const tag = document.activeElement?.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+            if (shapeContextMenu && shapeContextMenu.style.display !== 'none') {
+                hideShapeContextMenu();
+                return;
+            }
+            if (isBoxSelecting) {
+                isBoxSelecting = false;
+                boxSelectStart = null;
+                boxSelectCurrent = null;
+                draw();
+                return;
+            }
+            if (eraserActive || eraserMouseDownPos) {
+                cancelEraser();
+                eraserMouseDownPos = null;
+                eraserMouseDownTime = 0;
+                eraserIsDragging = false;
+                eraserDragCurrent = null;
+                return;
+            }
+            if (isEditingShape) {
+                exitShapeEditMode(false);
+                return;
+            }
+            if (isDrawing) {
+                isDrawing = false;
+                currentPoints = [];
+                draw();
+                return;
+            }
+            if (currentMode === 'sam' && (samPrompts.length > 0 || samMaskContour || samBoxSecondClick)) {
+                samClearState();
+                return;
+            }
+            if (selectedShapeIndices.size > 0) {
+                clearSelection();
+                renderShapeList();
+                draw();
+            }
+            return;
         }
+        case 'mode.view':       setMode('view');      return;
+        case 'mode.point':      setMode('point');     return;
+        case 'mode.line':       setMode('line');      return;
+        case 'mode.polygon':    setMode('polygon');   return;
+        case 'mode.rectangle':  setMode('rectangle'); return;
+        case 'mode.circle':     setMode('circle');    return;
+        case 'mode.sam':        setMode('sam');       return;
     }
-
-    // V: View Mode
-    if ((e.key === 'v' || e.key === 'V') && !e.ctrlKey && !e.metaKey) {
-        setMode('view');
-    }
-
-    // O: Point Mode
-    if ((e.key === 'o' || e.key === 'O') && !e.ctrlKey && !e.metaKey) {
-        setMode('point');
-    }
-
-    // L: Line Mode
-    if ((e.key === 'l' || e.key === 'L') && !e.ctrlKey && !e.metaKey) {
-        setMode('line');
-    }
-
-    // P: Polygon Mode
-    if ((e.key === 'p' || e.key === 'P') && !e.ctrlKey && !e.metaKey) {
-        setMode('polygon');
-    }
-
-    // R: Rectangle Mode
-    if ((e.key === 'r' || e.key === 'R') && !e.ctrlKey && !e.metaKey) {
-        setMode('rectangle');
-    }
-
-    // C: Circle Mode
-    if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey) {
-        setMode('circle');
-    }
-
-    // I: SAM AI Mode
-    if ((e.key === 'i' || e.key === 'I') && !e.ctrlKey && !e.metaKey) {
-        setMode('sam');
-    }
-});
+}
 
 
 // --- Color Generation ---
@@ -5707,6 +5659,155 @@ if (toolsMenuBtn) {
         toggleSidebarDropdown(toolsMenuDropdown, settingsMenuDropdown);
     });
 }
+
+// --- Keyboard Shortcuts settings UI ---
+const keybindingsList = document.getElementById('keybindingsList');
+const keybindingsResetAllBtn = document.getElementById('keybindingsResetAllBtn');
+
+function persistKeyboardBindings() {
+    // Strip rows that match the default so the saved object stays small and
+    // future default tweaks naturally propagate.
+    const diff = {};
+    if (window.keybindings) {
+        for (const id in currentBindings) {
+            if (!window.keybindings.bindingsEqual(currentBindings[id], window.keybindings.DEFAULTS[id])) {
+                diff[id] = currentBindings[id];
+            }
+        }
+    }
+    vscode.postMessage({ command: 'saveGlobalSettings', key: 'keyboardBindings', value: diff });
+}
+
+function renderKeybindingsList() {
+    if (!keybindingsList || !window.keybindings) return;
+    keybindingsList.innerHTML = '';
+    for (const id in window.keybindings.DEFAULTS) {
+        const row = document.createElement('div');
+        row.className = 'kb-row';
+        row.dataset.action = id;
+        const name = document.createElement('span');
+        name.className = 'kb-name';
+        name.textContent = window.keybindings.ACTION_NAMES[id] || id;
+        const current = document.createElement('span');
+        current.className = 'kb-current';
+        current.textContent = window.keybindings.display(currentBindings[id]) || '(none)';
+        const captureBtn = document.createElement('button');
+        captureBtn.className = 'btn btn-icon kb-capture';
+        captureBtn.textContent = '✎';
+        captureBtn.title = 'Capture new binding';
+        captureBtn.onclick = () => startKeybindingsCapture(id, row);
+        const resetBtn = document.createElement('button');
+        resetBtn.className = 'btn btn-icon kb-reset';
+        resetBtn.textContent = '↺';
+        resetBtn.title = 'Reset to default';
+        resetBtn.onclick = () => resetKeybinding(id);
+        const error = document.createElement('div');
+        error.className = 'kb-error';
+        error.style.display = 'none';
+        row.appendChild(name);
+        row.appendChild(current);
+        row.appendChild(captureBtn);
+        row.appendChild(resetBtn);
+        row.appendChild(error);
+        keybindingsList.appendChild(row);
+    }
+}
+
+function startKeybindingsCapture(actionId, rowEl) {
+    if (keybindingsCapture) finishKeybindingsCapture(false);
+    keybindingsCapture = { actionId, rowEl };
+    rowEl.classList.add('kb-capturing');
+    const current = rowEl.querySelector('.kb-current');
+    if (current) current.textContent = 'Press a key...';
+    const error = rowEl.querySelector('.kb-error');
+    if (error) error.style.display = 'none';
+    document.addEventListener('keydown', captureKeyHandler, true);
+}
+
+function finishKeybindingsCapture(applied) {
+    if (!keybindingsCapture) return;
+    document.removeEventListener('keydown', captureKeyHandler, true);
+    const { rowEl, actionId } = keybindingsCapture;
+    keybindingsCapture = null;
+    rowEl.classList.remove('kb-capturing');
+    const current = rowEl.querySelector('.kb-current');
+    if (current) current.textContent = window.keybindings.display(currentBindings[actionId]) || '(none)';
+}
+
+function captureKeyHandler(e) {
+    // Always swallow the event while capturing so it neither triggers actions
+    // nor reaches focused inputs.
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!keybindingsCapture || !window.keybindings) return;
+
+    // ESC cancels capture without binding.
+    if (e.key === 'Escape') {
+        finishKeybindingsCapture(false);
+        return;
+    }
+
+    // Modifier-only presses are not bindable.
+    if (window.keybindings.isModifierOnly(e)) return;
+
+    const binding = window.keybindings.eventToBinding(e);
+    if (!binding) return;
+
+    const { actionId, rowEl } = keybindingsCapture;
+    const conflict = window.keybindings.findConflict(actionId, binding, currentBindings);
+    if (conflict) {
+        const errorEl = rowEl.querySelector('.kb-error');
+        if (errorEl) {
+            errorEl.style.display = 'block';
+            const otherName = window.keybindings.ACTION_NAMES[conflict] || conflict;
+            errorEl.innerHTML = '';
+            const msg = document.createElement('span');
+            msg.textContent = `Conflicts with ${otherName} — `;
+            const overrideBtn = document.createElement('button');
+            overrideBtn.className = 'btn';
+            overrideBtn.textContent = 'Override';
+            overrideBtn.onclick = () => {
+                // Clear the conflicting row by giving it a placeholder key the
+                // user can rebind later. Store the binding for actionId and
+                // wipe the conflicting one to make capture explicit.
+                delete currentBindings[conflict];
+                currentBindings[actionId] = binding;
+                persistKeyboardBindings();
+                renderKeybindingsList();
+                if (window.tooltip && window.tooltip.hide) window.tooltip.hide();
+            };
+            errorEl.appendChild(msg);
+            errorEl.appendChild(overrideBtn);
+        }
+        // Stay in capture mode so the user can pick a different combo.
+        return;
+    }
+
+    currentBindings[actionId] = binding;
+    persistKeyboardBindings();
+    finishKeybindingsCapture(true);
+    renderKeybindingsList();
+}
+
+function resetKeybinding(actionId) {
+    if (!window.keybindings) return;
+    currentBindings[actionId] = { ...window.keybindings.DEFAULTS[actionId] };
+    persistKeyboardBindings();
+    renderKeybindingsList();
+}
+
+if (keybindingsResetAllBtn) {
+    keybindingsResetAllBtn.addEventListener('click', () => {
+        if (!window.keybindings) return;
+        currentBindings = window.keybindings.mergeWithDefaults(null);
+        window.currentBindings = currentBindings;
+        persistKeyboardBindings();
+        renderKeybindingsList();
+    });
+}
+
+renderKeybindingsList();
 
 // Border Width slider
 if (borderWidthSlider) {

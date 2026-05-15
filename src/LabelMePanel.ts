@@ -811,6 +811,10 @@ export class LabelMePanel {
         const popoverDismissPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'popoverDismiss.js');
         const popoverDismissUri = webview.asWebviewUri(popoverDismissPath);
 
+        // Keybindings helpers (pure functions + frozen defaults, must load before main.js)
+        const keybindingsPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'keybindings.js');
+        const keybindingsUri = webview.asWebviewUri(keybindingsPath);
+
         // Read CSS file content and inline it to prevent race condition on Windows
         // where JS executes before CSS finishes loading via external <link>, causing
         // layout chaos (zero container dimensions, unstyled dropdowns visible, etc.)
@@ -981,6 +985,9 @@ export class LabelMePanel {
                                             <input type="range" id="claheClipLimitSlider" min="1" max="10" value="2" step="0.5" data-tip-id="image.claheClipLimit">
                                         </div>
                                     </div>
+                                    <div class="settings-group-header">Keyboard Shortcuts</div>
+                                    <div class="keybindings-list" id="keybindingsList"></div>
+                                    <button id="keybindingsResetAllBtn" class="btn" style="margin-top: 4px;">Reset all to defaults</button>
                                 </div>
                                 <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
                                     <div class="sidebar-dropdown-item" id="exportSvgMenuItem" data-tip-id="tools.exportSvg"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-download"/></svg> Export SVG</div>
@@ -1245,7 +1252,8 @@ export class LabelMePanel {
                         exportFormat: ${JSON.stringify(this._globalState.get('exportFormat') || 'coco')},
                         exportScope: ${JSON.stringify(this._globalState.get('exportScope') || 'all')},
                         exportOutputDir: ${JSON.stringify(this._globalState.get('exportOutputDir') || '')},
-                        exportClasses: ${JSON.stringify(this._globalState.get('exportClasses') || [])}
+                        exportClasses: ${JSON.stringify(this._globalState.get('exportClasses') || [])},
+                        keyboardBindings: ${JSON.stringify(this._globalState.get('keyboardBindings') || null)}
                     };
                 </script>
                 <script src="${polyClipUri}"></script>
@@ -1257,6 +1265,7 @@ export class LabelMePanel {
                 <script src="${tooltipHelpersUri}"></script>
                 <script src="${tooltipUri}"></script>
                 <script src="${popoverDismissUri}"></script>
+                <script src="${keybindingsUri}"></script>
                 <script src="${scriptUri}"></script>
             </body>
             </html>`;

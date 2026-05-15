@@ -65,11 +65,23 @@
     }
 
     function tipFor(el) {
-        return helpers.resolveTipForAttrs({
+        const tip = helpers.resolveTipForAttrs({
             tipId:   el.getAttribute('data-tip-id'),
             tipText: el.getAttribute('data-tip-text'),
             tipsDict
         });
+        // If the entry advertises a rebindable action, override its shortcut
+        // string with the live binding so users see what's currently active.
+        // Falls through to the static `shortcut` field when bindings aren't
+        // loaded (early init) or the action has no current binding.
+        if (tip && tip.shortcutAction && window.keybindings && window.currentBindings) {
+            const live = window.currentBindings[tip.shortcutAction];
+            if (live) {
+                const display = window.keybindings.display(live);
+                if (display) return Object.assign({}, tip, { shortcut: display });
+            }
+        }
+        return tip;
     }
 
     function onEnter(e) {

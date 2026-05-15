@@ -11,8 +11,8 @@
 const TIPS = {
     // Top toolbar / image browser
     'nav.toggleBrowser':   { title: 'Toggle Image Browser', desc: 'Show or hide the image list on the left.' },
-    'nav.prev':            { title: 'Previous Image', desc: 'Open the previous image in the workspace.', shortcut: 'A' },
-    'nav.next':            { title: 'Next Image', desc: 'Open the next image in the workspace.', shortcut: 'D' },
+    'nav.prev':            { title: 'Previous Image', desc: 'Open the previous image in the workspace.', shortcut: 'A', shortcutAction: 'nav.prev' },
+    'nav.next':            { title: 'Next Image', desc: 'Open the next image in the workspace.', shortcut: 'D', shortcutAction: 'nav.next' },
     'nav.fileName':        { title: 'Current File', desc: 'Left-click copies the absolute path; right-click copies just the filename.' },
     'nav.imageInfo':       { title: 'Image Info', desc: 'Show file size, dimensions, bit depth, and DPI.' },
     'browser.search':      { title: 'Search Images', desc: 'Filter the image list by filename.' },
@@ -20,18 +20,18 @@ const TIPS = {
     'browser.searchClose': { title: 'Clear Search', desc: 'Clear the search filter and keep focus in the search field.' },
 
     // Drawing modes
-    'mode.view':      { title: 'View Mode', desc: 'Pan and select shapes. Drag on empty space to box-select; hold Shift while dragging to add to the selection.', shortcut: 'V' },
-    'mode.polygon':   { title: 'Polygon Mode', desc: 'Click to place vertices; double-click or press Enter to close the polygon. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'P' },
-    'mode.rectangle': { title: 'Rectangle Mode', desc: 'Drag to draw an axis-aligned rectangle. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'R' },
-    'mode.line':      { title: 'Line Mode', desc: 'Click two points to draw a line. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'L' },
-    'mode.point':     { title: 'Point Mode', desc: 'Click to place a single annotation point. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'O' },
-    'mode.circle':    { title: 'Circle Mode', desc: 'Click to set the center, then click again on the circumference. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'C' },
-    'mode.sam':       { title: 'SAM AI Mode', desc: 'Use the SAM service to generate a mask. Click to add a positive point; Shift-click to add a negative point once a positive exists, or to switch to the prompt eraser before the first positive.', shortcut: 'I' },
+    'mode.view':      { title: 'View Mode', desc: 'Pan and select shapes. Drag on empty space to box-select; hold Shift while dragging to add to the selection.', shortcut: 'V', shortcutAction: 'mode.view' },
+    'mode.polygon':   { title: 'Polygon Mode', desc: 'Click to place vertices; double-click or press Enter to close the polygon. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'P', shortcutAction: 'mode.polygon' },
+    'mode.rectangle': { title: 'Rectangle Mode', desc: 'Drag to draw an axis-aligned rectangle. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'R', shortcutAction: 'mode.rectangle' },
+    'mode.line':      { title: 'Line Mode', desc: 'Click two points to draw a line. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'L', shortcutAction: 'mode.line' },
+    'mode.point':     { title: 'Point Mode', desc: 'Click to place a single annotation point. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'O', shortcutAction: 'mode.point' },
+    'mode.circle':    { title: 'Circle Mode', desc: 'Click to set the center, then click again on the circumference. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'C', shortcutAction: 'mode.circle' },
+    'mode.sam':       { title: 'SAM AI Mode', desc: 'Use the SAM service to generate a mask. Click to add a positive point; Shift-click to add a negative point once a positive exists, or to switch to the prompt eraser before the first positive.', shortcut: 'I', shortcutAction: 'mode.sam' },
 
     // Sidebar action buttons
     'actions.settings': { title: 'Settings', desc: 'Open theme, view, annotation style, and image adjustment controls.' },
     'actions.tools':    { title: 'Tools', desc: 'Export SVG and run ONNX batch inference.' },
-    'actions.save':     { title: 'Save', desc: 'Save annotations to the LabelMe JSON next to the image.', shortcut: 'Ctrl+S' },
+    'actions.save':     { title: 'Save', desc: 'Save annotations to the LabelMe JSON next to the image.', shortcut: 'Ctrl+S', shortcutAction: 'edit.save' },
 
     // Theme
     'theme.light': { title: 'Light Theme', desc: 'Use the light theme regardless of the VS Code appearance.' },
@@ -93,9 +93,9 @@ const TIPS = {
 
     // Shape context menu (rendered dynamically in main.js)
     'context.edit':          { title: 'Edit', desc: 'Edit polygon vertices.' },
-    'context.rename':        { title: 'Rename', desc: 'Change the label of the selected shape(s).', shortcut: 'Ctrl+R' },
-    'context.merge':         { title: 'Merge', desc: 'Merge the selected shapes (union for overlapping polygons of the same label, otherwise grouped).', shortcut: 'Ctrl+G' },
-    'context.toggleVisible': { title: 'Show/Hide', desc: 'Toggle visibility of the selected shape(s).', shortcut: 'Ctrl+H' },
+    'context.rename':        { title: 'Rename', desc: 'Change the label of the selected shape(s).', shortcut: 'Ctrl+R', shortcutAction: 'edit.rename' },
+    'context.merge':         { title: 'Merge', desc: 'Merge the selected shapes (union for overlapping polygons of the same label, otherwise grouped).', shortcut: 'Ctrl+G', shortcutAction: 'edit.merge' },
+    'context.toggleVisible': { title: 'Show/Hide', desc: 'Toggle visibility of the selected shape(s).', shortcut: 'Ctrl+H', shortcutAction: 'edit.toggleVisible' },
     'context.delete':        { title: 'Delete', desc: 'Delete the selected shape(s).' },
 
     // ONNX modal
