@@ -9,6 +9,14 @@ import {
     getImageMetadata,
     scanWorkspaceImages
 } from './labelMeUtils';
+import {
+    buildCocoDocument,
+    buildYoloBboxLines,
+    buildYoloSegLines,
+    buildClassesTxt,
+    ExportImage,
+    ExportShape
+} from './exportFormats';
 
 export class LabelMePanel {
     public static readonly panels: Set<LabelMePanel> = new Set();
@@ -415,6 +423,28 @@ export class LabelMePanel {
                         }
                         return;
                     }
+                    case 'browseExportOutputDir': {
+                        const folderUris = await vscode.window.showOpenDialog({
+                            canSelectFolders: true,
+                            canSelectFiles: false,
+                            canSelectMany: false,
+                            openLabel: 'Select Output Directory',
+                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                        });
+                        if (folderUris && folderUris.length > 0) {
+                            this._safePost({
+                                command: 'exportBrowseResult',
+                                value: folderUris[0].fsPath
+                            });
+                        }
+                        return;
+                    }
+                    case 'exportDatasetPrepare':
+                        await this._prepareExportDataset(message.scope);
+                        return;
+                    case 'exportDatasetRun':
+                        await this._runExportDataset(message.config);
+                        return;
                 }
             },
             null,
@@ -954,6 +984,7 @@ export class LabelMePanel {
                                 </div>
                                 <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
                                     <div class="sidebar-dropdown-item" id="exportSvgMenuItem" data-tip-id="tools.exportSvg"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-download"/></svg> Export SVG</div>
+                                    <div class="sidebar-dropdown-item" id="exportDatasetMenuItem" data-tip-id="tools.exportDataset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-download"/></svg> Export Dataset</div>
                                     <div class="sidebar-dropdown-item" id="onnxBatchInferMenuItem" data-tip-id="tools.onnxBatchInfer"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-cpu"/></svg> ONNX Batch Infer</div>
                                 </div>
                             </div>
@@ -1127,6 +1158,49 @@ export class LabelMePanel {
                     </div>
                 </div>
 
+                <!-- Modal for Export Dataset -->
+                <div id="exportDatasetModal" class="modal">
+                    <div class="modal-content onnx-infer-content">
+                        <button class="modal-close" data-modal-close="exportDatasetModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg> Export Dataset</h3>
+                        <div class="onnx-form-group">
+                            <label data-tip-id="export.format">Format</label>
+                            <div class="onnx-radio-group segmented-group">
+                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="coco" checked /> COCO</label>
+                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="yolo-bbox" /> YOLO bbox</label>
+                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="yolo-seg" /> YOLO seg</label>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label data-tip-id="export.scope">Scope</label>
+                            <div class="onnx-radio-group segmented-group">
+                                <label class="onnx-radio"><input type="radio" name="exportScope" value="all" checked /> All Images</label>
+                                <label class="onnx-radio"><input type="radio" name="exportScope" value="current" /> Current Image</label>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label data-tip-id="export.outputDir">Output Directory</label>
+                            <div class="onnx-path-input">
+                                <input type="text" id="exportOutputDir" placeholder="Folder to write the converted files" />
+                                <button id="exportOutputDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label data-tip-id="export.classes">Classes <span style="font-weight:normal; opacity:0.7">(order = class index)</span></label>
+                            <ul id="exportClassList" class="export-class-list"></ul>
+                            <div class="export-add-class">
+                                <input type="text" id="exportAddClassInput" placeholder="Add class name" />
+                                <button id="exportAddClassBtn" class="btn">Add</button>
+                            </div>
+                        </div>
+                        <div class="onnx-image-count">Images: <strong id="exportImageCount">0</strong> · Annotations: <strong id="exportAnnotationCount">0</strong></div>
+                        <div class="modal-buttons">
+                            <button id="exportRunBtn" class="btn btn-primary">Run</button>
+                            <button id="exportCancelBtn" class="btn">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
                 <script>
                     const vscode = acquireVsCodeApi();
                     const imageUrl = "${imageUri}";
@@ -1167,7 +1241,11 @@ export class LabelMePanel {
                         samEncodeMode: ${JSON.stringify(this._globalState.get('samEncodeMode') || 'full')},
                         samEncodeAdjusted: ${this._globalState.get('samEncodeAdjusted') ?? false},
                         samGpuIndex: ${this._globalState.get('samGpuIndex') ?? -1},
-                        onnxGpuIndex: ${this._globalState.get('onnxGpuIndex') ?? -1}
+                        onnxGpuIndex: ${this._globalState.get('onnxGpuIndex') ?? -1},
+                        exportFormat: ${JSON.stringify(this._globalState.get('exportFormat') || 'coco')},
+                        exportScope: ${JSON.stringify(this._globalState.get('exportScope') || 'all')},
+                        exportOutputDir: ${JSON.stringify(this._globalState.get('exportOutputDir') || '')},
+                        exportClasses: ${JSON.stringify(this._globalState.get('exportClasses') || [])}
                     };
                 </script>
                 <script src="${polyClipUri}"></script>
@@ -1225,6 +1303,147 @@ export class LabelMePanel {
             this._notify('success', 'SVG exported to ' + path.basename(svgPath));
         } catch (err) {
             this._notify('error', 'Failed to export SVG: ' + (err as Error).message);
+        }
+    }
+
+    private async _collectExportImages(scope: string): Promise<ExportImage[]> {
+        const relPaths = scope === 'current'
+            ? [path.relative(this._rootPath, this._imageUri.fsPath)]
+            : this._workspaceImages.slice();
+
+        const images: ExportImage[] = [];
+        for (const rel of relPaths) {
+            const absImg = path.join(this._rootPath, rel);
+            const jsonPath = absImg.replace(/\.[^/.]+$/, '') + '.json';
+            let shapes: ExportShape[] = [];
+            let width = 0;
+            let height = 0;
+            if (existsSync(jsonPath)) {
+                try {
+                    const json = JSON.parse(await fs.readFile(jsonPath, 'utf8'));
+                    shapes = (json.shapes || []).map((s: any) => ({
+                        label: s.label,
+                        shape_type: s.shape_type,
+                        points: s.points
+                    }));
+                    if (typeof json.imageWidth === 'number') width = json.imageWidth;
+                    if (typeof json.imageHeight === 'number') height = json.imageHeight;
+                } catch {
+                    // Treat as no annotations.
+                }
+            }
+            if (!width || !height) {
+                try {
+                    const meta = await getImageMetadata(absImg);
+                    if (meta.width) width = meta.width;
+                    if (meta.height) height = meta.height;
+                } catch {
+                    // Leave 0 — caller will skip
+                }
+            }
+            images.push({ fileName: rel.replace(/\\/g, '/'), width, height, shapes });
+        }
+        return images;
+    }
+
+    private async _prepareExportDataset(scope: string) {
+        if (this._workspaceImages.length === 0 && scope === 'all') {
+            await this._scanWorkspaceImages();
+        }
+        const images = await this._collectExportImages(scope);
+        const labelSet = new Set<string>();
+        let annotationCount = 0;
+        for (const img of images) {
+            for (const s of img.shapes) {
+                if (s.label) {
+                    labelSet.add(s.label);
+                    annotationCount++;
+                }
+            }
+        }
+        const detectedClasses = Array.from(labelSet).sort();
+        this._safePost({
+            command: 'exportDatasetPrepareResult',
+            imageCount: images.length,
+            annotationCount,
+            detectedClasses
+        });
+    }
+
+    private async _runExportDataset(config: {
+        format: string;
+        scope: string;
+        outputDir: string;
+        classes: string[];
+    }) {
+        if (!config.outputDir) {
+            this._notify('error', 'Pick an output directory first');
+            this._safePost({ command: 'exportDatasetRunResult', ok: false });
+            return;
+        }
+        if (!config.classes || config.classes.length === 0) {
+            this._notify('error', 'Add at least one class');
+            this._safePost({ command: 'exportDatasetRunResult', ok: false });
+            return;
+        }
+        try {
+            await fs.mkdir(config.outputDir, { recursive: true });
+            const images = await this._collectExportImages(config.scope);
+            // Drop images with unknown dimensions (no JSON and no file probe).
+            const usable = images.filter(img => img.width > 0 && img.height > 0);
+            const skippedImages = images.length - usable.length;
+            let totalWarnings = 0;
+
+            if (config.format === 'coco') {
+                const { document, warnings } = buildCocoDocument(usable, config.classes);
+                totalWarnings += warnings.length;
+                await fs.writeFile(
+                    path.join(config.outputDir, 'annotations.json'),
+                    JSON.stringify(document, null, 2),
+                    'utf8'
+                );
+            } else if (config.format === 'yolo-bbox' || config.format === 'yolo-seg') {
+                // Resolve filename collisions across nested folders.
+                const usedNames = new Map<string, number>();
+                for (const img of usable) {
+                    const base = path.basename(img.fileName, path.extname(img.fileName));
+                    const seen = usedNames.get(base) || 0;
+                    const finalName = seen === 0 ? base : `${base}_${seen + 1}`;
+                    usedNames.set(base, seen + 1);
+                    const out = config.format === 'yolo-bbox'
+                        ? buildYoloBboxLines(img, config.classes)
+                        : buildYoloSegLines(img, config.classes);
+                    totalWarnings += out.warnings.length;
+                    await fs.writeFile(
+                        path.join(config.outputDir, finalName + '.txt'),
+                        out.text,
+                        'utf8'
+                    );
+                }
+                await fs.writeFile(
+                    path.join(config.outputDir, 'classes.txt'),
+                    buildClassesTxt(config.classes),
+                    'utf8'
+                );
+            } else {
+                this._notify('error', 'Unknown export format: ' + config.format);
+                this._safePost({ command: 'exportDatasetRunResult', ok: false });
+                return;
+            }
+
+            // Persist last-used settings.
+            await this._globalState.update('exportFormat', config.format);
+            await this._globalState.update('exportScope', config.scope);
+            await this._globalState.update('exportOutputDir', config.outputDir);
+            await this._globalState.update('exportClasses', config.classes);
+
+            const skipMsg = skippedImages > 0 ? ` · ${skippedImages} skipped (no dimensions)` : '';
+            const warnMsg = totalWarnings > 0 ? ` · ${totalWarnings} annotation warnings` : '';
+            this._notify('success', `Exported ${usable.length} images to ${config.outputDir}${skipMsg}${warnMsg}`);
+            this._safePost({ command: 'exportDatasetRunResult', ok: true });
+        } catch (err) {
+            this._notify('error', 'Export failed: ' + (err as Error).message);
+            this._safePost({ command: 'exportDatasetRunResult', ok: false });
         }
     }
 

@@ -1095,6 +1095,19 @@ window.addEventListener('message', event => {
             }
             break;
         }
+        case 'exportBrowseResult': {
+            const input = document.getElementById('exportOutputDir');
+            if (input) input.value = message.value;
+            break;
+        }
+        case 'exportDatasetPrepareResult': {
+            applyExportPrepareResult(message);
+            break;
+        }
+        case 'exportDatasetRunResult': {
+            if (message.ok) hideExportDatasetModal();
+            break;
+        }
         case 'gpuDetectResult': {
             // Populate BOTH ONNX and SAM GPU dropdowns (whichever modal is open)
             const gpuGroups = [
@@ -5270,6 +5283,176 @@ function exportSvg() {
 if (exportSvgMenuItem) {
     exportSvgMenuItem.addEventListener('click', exportSvg);
 }
+
+// --- Export Dataset (COCO / YOLO) ---
+const exportDatasetMenuItem = document.getElementById('exportDatasetMenuItem');
+const exportDatasetModal = document.getElementById('exportDatasetModal');
+const exportOutputDirInput = document.getElementById('exportOutputDir');
+const exportOutputDirBrowse = document.getElementById('exportOutputDirBrowse');
+const exportClassList = document.getElementById('exportClassList');
+const exportAddClassInput = document.getElementById('exportAddClassInput');
+const exportAddClassBtn = document.getElementById('exportAddClassBtn');
+const exportImageCountSpan = document.getElementById('exportImageCount');
+const exportAnnotationCountSpan = document.getElementById('exportAnnotationCount');
+const exportRunBtn = document.getElementById('exportRunBtn');
+const exportCancelBtn = document.getElementById('exportCancelBtn');
+
+// Working class list — user edits this until they Run.
+let exportClasses = [];
+
+function getExportFormat() {
+    const checked = document.querySelector('input[name="exportFormat"]:checked');
+    return checked ? checked.value : 'coco';
+}
+
+function getExportScope() {
+    const checked = document.querySelector('input[name="exportScope"]:checked');
+    return checked ? checked.value : 'all';
+}
+
+function renderExportClassList() {
+    if (!exportClassList) return;
+    exportClassList.innerHTML = '';
+    exportClasses.forEach((name, idx) => {
+        const li = document.createElement('li');
+        li.className = 'export-class-row';
+        const idxBadge = document.createElement('span');
+        idxBadge.className = 'export-class-index';
+        idxBadge.textContent = '#' + idx;
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'export-class-name';
+        nameSpan.textContent = name;
+        const upBtn = document.createElement('button');
+        upBtn.className = 'btn btn-icon';
+        upBtn.textContent = '↑';
+        upBtn.disabled = idx === 0;
+        upBtn.onclick = () => {
+            if (idx === 0) return;
+            const tmp = exportClasses[idx - 1];
+            exportClasses[idx - 1] = exportClasses[idx];
+            exportClasses[idx] = tmp;
+            renderExportClassList();
+        };
+        const downBtn = document.createElement('button');
+        downBtn.className = 'btn btn-icon';
+        downBtn.textContent = '↓';
+        downBtn.disabled = idx === exportClasses.length - 1;
+        downBtn.onclick = () => {
+            if (idx === exportClasses.length - 1) return;
+            const tmp = exportClasses[idx + 1];
+            exportClasses[idx + 1] = exportClasses[idx];
+            exportClasses[idx] = tmp;
+            renderExportClassList();
+        };
+        const removeBtn = document.createElement('button');
+        removeBtn.className = 'btn btn-icon';
+        removeBtn.textContent = '×';
+        removeBtn.onclick = () => {
+            exportClasses.splice(idx, 1);
+            renderExportClassList();
+        };
+        li.appendChild(idxBadge);
+        li.appendChild(nameSpan);
+        li.appendChild(upBtn);
+        li.appendChild(downBtn);
+        li.appendChild(removeBtn);
+        exportClassList.appendChild(li);
+    });
+}
+
+function applyExportPrepareResult(message) {
+    if (exportImageCountSpan) exportImageCountSpan.textContent = message.imageCount;
+    if (exportAnnotationCountSpan) exportAnnotationCountSpan.textContent = message.annotationCount;
+    // Merge detected classes into the working list — preserve user-edited order;
+    // append any newly seen labels at the end. Existing entries unchanged.
+    const present = new Set(exportClasses);
+    for (const c of message.detectedClasses) {
+        if (!present.has(c)) {
+            exportClasses.push(c);
+            present.add(c);
+        }
+    }
+    renderExportClassList();
+}
+
+function showExportDatasetModal() {
+    if (toolsMenuDropdown) toolsMenuDropdown.style.display = 'none';
+    if (!exportDatasetModal) return;
+    // Restore persisted settings
+    if (initialGlobalSettings && initialGlobalSettings.exportFormat) {
+        const fmtInput = document.querySelector(`input[name="exportFormat"][value="${initialGlobalSettings.exportFormat}"]`);
+        if (fmtInput) fmtInput.checked = true;
+    }
+    if (initialGlobalSettings && initialGlobalSettings.exportScope) {
+        const scopeInput = document.querySelector(`input[name="exportScope"][value="${initialGlobalSettings.exportScope}"]`);
+        if (scopeInput) scopeInput.checked = true;
+    }
+    if (exportOutputDirInput && initialGlobalSettings && initialGlobalSettings.exportOutputDir) {
+        exportOutputDirInput.value = initialGlobalSettings.exportOutputDir;
+    }
+    // Seed class list from persisted edits — auto-detect appends new ones.
+    exportClasses = Array.isArray(initialGlobalSettings && initialGlobalSettings.exportClasses)
+        ? initialGlobalSettings.exportClasses.slice()
+        : [];
+    renderExportClassList();
+    exportDatasetModal.style.display = 'flex';
+    // Request scope-aware prep
+    vscode.postMessage({ command: 'exportDatasetPrepare', scope: getExportScope() });
+}
+
+function hideExportDatasetModal() {
+    if (exportDatasetModal) exportDatasetModal.style.display = 'none';
+}
+
+function submitExportDataset() {
+    const config = {
+        format: getExportFormat(),
+        scope: getExportScope(),
+        outputDir: exportOutputDirInput ? exportOutputDirInput.value.trim() : '',
+        classes: exportClasses.slice()
+    };
+    vscode.postMessage({ command: 'exportDatasetRun', config });
+}
+
+if (exportDatasetMenuItem) {
+    exportDatasetMenuItem.addEventListener('click', showExportDatasetModal);
+}
+if (exportOutputDirBrowse && exportOutputDirInput) {
+    exportOutputDirBrowse.addEventListener('click', () => {
+        vscode.postMessage({
+            command: 'browseExportOutputDir',
+            currentValue: exportOutputDirInput.value || undefined
+        });
+    });
+}
+if (exportAddClassBtn && exportAddClassInput) {
+    const addClassFromInput = () => {
+        const name = exportAddClassInput.value.trim();
+        if (!name) return;
+        if (exportClasses.includes(name)) {
+            if (window.notifyBus) window.notifyBus.show('warn', `Class "${name}" already in list`);
+            return;
+        }
+        exportClasses.push(name);
+        exportAddClassInput.value = '';
+        renderExportClassList();
+    };
+    exportAddClassBtn.addEventListener('click', addClassFromInput);
+    exportAddClassInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addClassFromInput();
+        }
+    });
+}
+if (exportRunBtn) exportRunBtn.addEventListener('click', submitExportDataset);
+if (exportCancelBtn) exportCancelBtn.addEventListener('click', hideExportDatasetModal);
+// Re-request preparation when the scope flips between "all" and "current".
+document.querySelectorAll('input[name="exportScope"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+        vscode.postMessage({ command: 'exportDatasetPrepare', scope: getExportScope() });
+    });
+});
 
 // --- ONNX Batch Inference ---
 const onnxBatchInferMenuItem = document.getElementById('onnxBatchInferMenuItem');

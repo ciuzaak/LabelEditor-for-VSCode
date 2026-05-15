@@ -19,6 +19,8 @@ export interface ImageMetadata {
     bitDepth?: number;
     dpiX?: number;
     dpiY?: number;
+    width?: number;
+    height?: number;
 }
 
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp'];
@@ -220,6 +222,8 @@ async function readPngMetadata(fd: fs.FileHandle, fileSize: number, result: Imag
     if (headerRead === 33
         && header.readUInt32BE(8) === 13
         && header.toString('ascii', 12, 16) === 'IHDR') {
+        result.width = header.readUInt32BE(16);
+        result.height = header.readUInt32BE(20);
         result.bitDepth = header[24];
         const colorType = header[25];
         if (colorType === 2) result.bitDepth = header[24] * 3;
@@ -284,6 +288,9 @@ async function readJpegMetadata(fd: fs.FileHandle, result: ImageMetadata): Promi
         if ((marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC)
             && i + 9 < bytesRead) {
             const precision = buf[i + 4];
+            // SOF segment: precision (1) + height (2) + width (2) + components (1)
+            result.height = buf.readUInt16BE(i + 5);
+            result.width = buf.readUInt16BE(i + 7);
             const numComponents = buf[i + 9];
             result.bitDepth = precision * numComponents;
             break;
@@ -306,6 +313,12 @@ async function readBmpMetadata(fd: fs.FileHandle, result: ImageMetadata): Promis
     const bmpHeader = Buffer.alloc(54);
     const { bytesRead: bmpRead } = await fd.read(bmpHeader, 0, 54, 0);
     const dibSize = bmpRead >= 18 ? bmpHeader.readUInt32LE(14) : 0;
+    if (dibSize >= 40 && bmpRead >= 26) {
+        result.width = bmpHeader.readInt32LE(18);
+        // Height in BMP can be negative (top-down rows); we want the visual
+        // dimension, so take the absolute value.
+        result.height = Math.abs(bmpHeader.readInt32LE(22));
+    }
     if (dibSize >= 40 && bmpRead >= 30) {
         result.bitDepth = bmpHeader.readUInt16LE(28);
     }
