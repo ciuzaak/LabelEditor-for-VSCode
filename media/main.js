@@ -1084,7 +1084,16 @@ window.addEventListener('message', event => {
             const opts = {};
             if (message.key) opts.key = message.key;
             if (message.sticky) opts.sticky = true;
-            window.notifyBus.show(level, message.text || '', opts);
+            // Prefer i18nKey if the host supplied one; falls back to the raw
+            // text so older callers keep working unchanged.
+            let displayText = message.text || '';
+            if (message.i18nKey && window.i18n && window.i18n.t) {
+                const translated = window.i18n.t(message.i18nKey, message.i18nParams);
+                if (translated && translated !== message.i18nKey) {
+                    displayText = translated;
+                }
+            }
+            window.notifyBus.show(level, displayText, opts);
             break;
         }
         case 'requestSave':
@@ -3863,7 +3872,7 @@ function renderRecentLabels() {
 
         const currentTitle = document.createElement('div');
         currentTitle.className = 'label-section-title';
-        currentTitle.textContent = 'Current Image';
+        currentTitle.textContent = (window.i18n && window.i18n.t) ? window.i18n.t('imageInfo.current') : 'Current Image';
         currentSection.appendChild(currentTitle);
 
         const currentChips = document.createElement('div');
@@ -3882,7 +3891,7 @@ function renderRecentLabels() {
 
         const historyTitle = document.createElement('div');
         historyTitle.className = 'label-section-title';
-        historyTitle.textContent = 'History';
+        historyTitle.textContent = (window.i18n && window.i18n.t) ? window.i18n.t('imageInfo.history') : 'History';
         historySection.appendChild(historyTitle);
 
         const historyChips = document.createElement('div');
@@ -5778,15 +5787,16 @@ function renderKeybindingsList() {
         const current = document.createElement('span');
         current.className = 'kb-current';
         current.textContent = window.keybindings.display(currentBindings[id]) || '(none)';
+        const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
         const captureBtn = document.createElement('button');
         captureBtn.className = 'btn btn-icon kb-capture';
         captureBtn.textContent = '✎';
-        captureBtn.title = 'Capture new binding';
+        captureBtn.title = tt('kb.captureNewBinding');
         captureBtn.onclick = () => startKeybindingsCapture(id, row);
         const resetBtn = document.createElement('button');
         resetBtn.className = 'btn btn-icon kb-reset';
         resetBtn.textContent = '↺';
-        resetBtn.title = 'Reset to default';
+        resetBtn.title = tt('kb.resetToDefault');
         resetBtn.onclick = () => resetKeybinding(id);
         const error = document.createElement('div');
         error.className = 'kb-error';
@@ -5805,7 +5815,7 @@ function startKeybindingsCapture(actionId, rowEl) {
     keybindingsCapture = { actionId, rowEl };
     rowEl.classList.add('kb-capturing');
     const current = rowEl.querySelector('.kb-current');
-    if (current) current.textContent = 'Press a key...';
+    if (current) current.textContent = (window.i18n && window.i18n.t) ? window.i18n.t('kb.pressKey') : 'Press a key...';
     const error = rowEl.querySelector('.kb-error');
     if (error) error.style.display = 'none';
     document.addEventListener('keydown', captureKeyHandler, true);
@@ -5849,11 +5859,12 @@ function captureKeyHandler(e) {
             errorEl.style.display = 'block';
             const otherName = window.keybindings.ACTION_NAMES[conflict] || conflict;
             errorEl.innerHTML = '';
+            const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k, p) => k;
             const msg = document.createElement('span');
-            msg.textContent = `Conflicts with ${otherName} — `;
+            msg.textContent = tt('kb.conflictsWith', { name: otherName });
             const overrideBtn = document.createElement('button');
             overrideBtn.className = 'btn';
-            overrideBtn.textContent = 'Override';
+            overrideBtn.textContent = tt('kb.override');
             overrideBtn.onclick = () => {
                 // Clear the conflicting row by giving it a placeholder key the
                 // user can rebind later. Store the binding for actionId and
@@ -5909,10 +5920,15 @@ if (languageSelect && window.i18n) {
         }
         applyI18n();
         // Re-render UI sections whose text we render dynamically. Tooltips
-        // re-resolve on next hover automatically.
+        // re-resolve on next hover automatically. Image-info popup and the
+        // currently-rendered canvas overlay (SAM "Encoding…" hint) repaint on
+        // their next event; force a draw so the canvas text doesn't lag the
+        // language switch when the popup happens to be open.
         renderShapeList();
         renderLabelsList();
         renderKeybindingsList();
+        updateImageInfoPopup();
+        draw();
         vscode.postMessage({ command: 'saveGlobalSettings', key: 'locale', value: e.target.value });
     });
 }
@@ -6415,24 +6431,25 @@ function updateImageInfoPopup() {
 }
 
 function renderImageInfoContent(popup) {
+    const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
     const rows = [];
     // Dimensions from loaded image
     if (img && img.width > 0 && img.height > 0) {
-        rows.push({ label: 'Dimensions', value: `${img.width} \u00d7 ${img.height}` });
+        rows.push({ label: tt('imageInfo.dimensions'), value: `${img.width} \u00d7 ${img.height}` });
     }
     // File size from extension metadata
     if (currentImageMetadata) {
         if (currentImageMetadata.fileSize) {
-            rows.push({ label: 'File Size', value: formatFileSize(currentImageMetadata.fileSize) });
+            rows.push({ label: tt('imageInfo.fileSize'), value: formatFileSize(currentImageMetadata.fileSize) });
         }
         if (currentImageMetadata.dpiX) {
             const dpi = currentImageMetadata.dpiX === currentImageMetadata.dpiY
                 ? `${currentImageMetadata.dpiX}`
                 : `${currentImageMetadata.dpiX} \u00d7 ${currentImageMetadata.dpiY}`;
-            rows.push({ label: 'DPI', value: dpi });
+            rows.push({ label: tt('imageInfo.dpi'), value: dpi });
         }
         if (currentImageMetadata.bitDepth) {
-            rows.push({ label: 'Bit Depth', value: `${currentImageMetadata.bitDepth}` });
+            rows.push({ label: tt('imageInfo.bitDepth'), value: `${currentImageMetadata.bitDepth}` });
         }
     }
 
@@ -6440,7 +6457,7 @@ function renderImageInfoContent(popup) {
     if (rows.length === 0) {
         const span = document.createElement('span');
         span.style.opacity = '0.5';
-        span.textContent = 'No info available';
+        span.textContent = tt('imageInfo.empty');
         popup.appendChild(span);
         return;
     }
@@ -7915,7 +7932,7 @@ function drawSAMOverlay() {
         text.setAttribute('y', 30 / zoomLevel);
         text.setAttribute('font-size', `${16 / zoomLevel}px`);
         text.setAttribute('fill', 'orange');
-        text.textContent = 'Encoding...';
+        text.textContent = (window.i18n && window.i18n.t) ? window.i18n.t('status.samEncodingShort') : 'Encoding...';
         text.style.pointerEvents = 'none';
         svgOverlay.appendChild(text);
     }

@@ -72,7 +72,7 @@ export class LabelMePanel {
     private _notify(
         level: 'info' | 'success' | 'warn' | 'error',
         text: string,
-        opts?: { key?: string; sticky?: boolean }
+        opts?: { key?: string; sticky?: boolean; i18nKey?: string; i18nParams?: Record<string, unknown> }
     ): void {
         if (!this._webviewReady) {
             if (this._pendingNotifications.length >= 50) {
@@ -619,7 +619,11 @@ export class LabelMePanel {
 
         this._sendImageListUpdate();
 
-        this._notify('success', `Refreshed: Found ${this._workspaceImages.length} images`);
+        this._notify(
+            'success',
+            `Refreshed: Found ${this._workspaceImages.length} images`,
+            { i18nKey: 'status.refreshed', i18nParams: { count: this._workspaceImages.length } }
+        );
     }
 
     public updateWebviewOptions() {
@@ -694,7 +698,11 @@ export class LabelMePanel {
                 existingData = JSON.parse(jsonContent);
             } catch (e) {
                 console.error("Failed to load existing JSON", e);
-                this._notify('warn', `Failed to load annotation file: ${(e as Error).message}`);
+                this._notify(
+                    'warn',
+                    `Failed to load annotation file: ${(e as Error).message}`,
+                    { i18nKey: 'status.loadJsonFailed', i18nParams: { err: (e as Error).message } }
+                );
             }
         }
 
@@ -850,7 +858,11 @@ export class LabelMePanel {
                     existingData = JSON.parse(jsonContent);
                 } catch (e) {
                     console.error("Failed to load existing JSON", e);
-                    this._notify('warn', `Failed to load annotation file: ${(e as Error).message}`);
+                    this._notify(
+                    'warn',
+                    `Failed to load annotation file: ${(e as Error).message}`,
+                    { i18nKey: 'status.loadJsonFailed', i18nParams: { err: (e as Error).message } }
+                );
                 }
             }
         }
@@ -1313,7 +1325,11 @@ export class LabelMePanel {
         this._isSaving = true;
         try {
             await fs.writeFile(jsonPath, JSON.stringify(labelMeData, null, 2), 'utf8');
-            this._notify('success', 'Annotation saved to ' + path.basename(jsonPath));
+            this._notify(
+                'success',
+                'Annotation saved to ' + path.basename(jsonPath),
+                { i18nKey: 'status.savedTo', i18nParams: { file: path.basename(jsonPath) } }
+            );
 
             // Notify webview that save completed.
             // The webview will check if the confirmed save matches the current snapshot.
@@ -1321,7 +1337,11 @@ export class LabelMePanel {
             // If dirty (user edited during save), it stays dirty and does NOT post navigate.
             this._safePost({ command: 'saveComplete' });
         } catch (err) {
-            this._notify('error', 'Failed to save annotation: ' + (err as Error).message);
+            this._notify(
+                'error',
+                'Failed to save annotation: ' + (err as Error).message,
+                { i18nKey: 'status.saveFailed', i18nParams: { err: (err as Error).message } }
+            );
             // Clear pending navigation so a later unrelated save doesn't trigger it
             this._pendingNavigation = undefined;
             this._pendingNavigationPath = undefined;
@@ -1343,9 +1363,17 @@ export class LabelMePanel {
 
         try {
             await fs.writeFile(svgPath, svg, 'utf8');
-            this._notify('success', 'SVG exported to ' + path.basename(svgPath));
+            this._notify(
+                'success',
+                'SVG exported to ' + path.basename(svgPath),
+                { i18nKey: 'status.svgExported', i18nParams: { file: path.basename(svgPath) } }
+            );
         } catch (err) {
-            this._notify('error', 'Failed to export SVG: ' + (err as Error).message);
+            this._notify(
+                'error',
+                'Failed to export SVG: ' + (err as Error).message,
+                { i18nKey: 'status.svgExportFailed', i18nParams: { err: (err as Error).message } }
+            );
         }
     }
 
@@ -1420,12 +1448,12 @@ export class LabelMePanel {
         classes: string[];
     }) {
         if (!config.outputDir) {
-            this._notify('error', 'Pick an output directory first');
+            this._notify('error', 'Pick an output directory first', { i18nKey: 'status.exportPickDir' });
             this._safePost({ command: 'exportDatasetRunResult', ok: false });
             return;
         }
         if (!config.classes || config.classes.length === 0) {
-            this._notify('error', 'Add at least one class');
+            this._notify('error', 'Add at least one class', { i18nKey: 'status.exportNeedClass' });
             this._safePost({ command: 'exportDatasetRunResult', ok: false });
             return;
         }
@@ -1469,7 +1497,11 @@ export class LabelMePanel {
                     'utf8'
                 );
             } else {
-                this._notify('error', 'Unknown export format: ' + config.format);
+                this._notify(
+                    'error',
+                    'Unknown export format: ' + config.format,
+                    { i18nKey: 'status.exportUnknownFormat', i18nParams: { format: config.format } }
+                );
                 this._safePost({ command: 'exportDatasetRunResult', ok: false });
                 return;
             }
@@ -1482,10 +1514,21 @@ export class LabelMePanel {
 
             const skipMsg = skippedImages > 0 ? ` · ${skippedImages} skipped (no dimensions)` : '';
             const warnMsg = totalWarnings > 0 ? ` · ${totalWarnings} annotation warnings` : '';
-            this._notify('success', `Exported ${usable.length} images to ${config.outputDir}${skipMsg}${warnMsg}`);
+            // Skip/warning counts get appended only to the English fallback. The
+            // localised version stays clean ({count} images to {path}); the
+            // detailed counts also surface in the modal status next to Run.
+            this._notify(
+                'success',
+                `Exported ${usable.length} images to ${config.outputDir}${skipMsg}${warnMsg}`,
+                { i18nKey: 'status.exportDone', i18nParams: { count: usable.length, path: config.outputDir } }
+            );
             this._safePost({ command: 'exportDatasetRunResult', ok: true });
         } catch (err) {
-            this._notify('error', 'Export failed: ' + (err as Error).message);
+            this._notify(
+                'error',
+                'Export failed: ' + (err as Error).message,
+                { i18nKey: 'status.exportFailed', i18nParams: { err: (err as Error).message } }
+            );
             this._safePost({ command: 'exportDatasetRunResult', ok: false });
         }
     }
@@ -1521,7 +1564,7 @@ export class LabelMePanel {
     }) {
         // Validate model directory
         if (!config.modelDir || !existsSync(config.modelDir)) {
-            this._notify('error', 'ONNX Batch Infer: Model directory does not exist.');
+            this._notify('error', 'ONNX Batch Infer: Model directory does not exist.', { i18nKey: 'status.onnxModelDirMissing' });
             return;
         }
 
@@ -1529,13 +1572,13 @@ export class LabelMePanel {
         const dirEntries = await fs.readdir(config.modelDir);
         const hasOnnx = dirEntries.some(f => f.endsWith('.onnx'));
         if (!hasOnnx) {
-            this._notify('error', 'ONNX Batch Infer: No .onnx file found in model directory.');
+            this._notify('error', 'ONNX Batch Infer: No .onnx file found in model directory.', { i18nKey: 'status.onnxNoOnnx' });
             return;
         }
 
         // Check for labels.json
         if (!existsSync(path.join(config.modelDir, 'labels.json'))) {
-            this._notify('error', 'ONNX Batch Infer: labels.json not found in model directory.');
+            this._notify('error', 'ONNX Batch Infer: labels.json not found in model directory.', { i18nKey: 'status.onnxNoLabels' });
             return;
         }
 
@@ -1549,7 +1592,7 @@ export class LabelMePanel {
                 await this._scanWorkspaceImages();
             }
             if (this._workspaceImages.length === 0) {
-                this._notify('warn', 'ONNX Batch Infer: No images found in workspace.');
+                this._notify('warn', 'ONNX Batch Infer: No images found in workspace.', { i18nKey: 'status.onnxNoImages' });
                 return;
             }
             absoluteImagePaths = this._workspaceImages.map(rel => path.join(this._rootPath, rel));
@@ -1568,7 +1611,11 @@ export class LabelMePanel {
         // Locate the bundled Python script
         const scriptPath = path.join(this._extensionUri.fsPath, 'scripts', 'onnx_batch_infer.py');
         if (!existsSync(scriptPath)) {
-            this._notify('error', 'ONNX Batch Infer: Inference script not found at ' + scriptPath);
+            this._notify(
+                'error',
+                'ONNX Batch Infer: Inference script not found at ' + scriptPath,
+                { i18nKey: 'status.onnxNoScript', i18nParams: { path: scriptPath } }
+            );
             return;
         }
 
@@ -1606,7 +1653,11 @@ export class LabelMePanel {
         terminal.show();
         terminal.sendText(command);
 
-        this._notify('info', `ONNX Batch Infer started: ${absoluteImagePaths.length} images. Check the terminal for progress.`);
+        this._notify(
+            'info',
+            `ONNX Batch Infer started: ${absoluteImagePaths.length} images. Check the terminal for progress.`,
+            { i18nKey: 'status.onnxStarted', i18nParams: { count: absoluteImagePaths.length } }
+        );
     }
 
     /**
@@ -1621,7 +1672,7 @@ export class LabelMePanel {
     }) {
         // Validate model directory
         if (!config.modelDir || !existsSync(config.modelDir)) {
-            this._notify('error', 'SAM Service: Model directory does not exist.');
+            this._notify('error', 'SAM Service: Model directory does not exist.', { i18nKey: 'status.samModelDirMissing' });
             return;
         }
 
@@ -1629,21 +1680,29 @@ export class LabelMePanel {
         const dirEntries = await fs.readdir(config.modelDir);
         const onnxFiles = dirEntries.filter(f => f.toLowerCase().endsWith('.onnx'));
         if (onnxFiles.length < 2) {
-            this._notify('error', 'SAM Service: Need at least 2 ONNX files (encoder + decoder) in model directory.');
+            this._notify('error', 'SAM Service: Need at least 2 ONNX files (encoder + decoder) in model directory.', { i18nKey: 'status.samNeedTwoOnnx' });
             return;
         }
 
         // Avoid launching a second SAM service on a port we already started one on
         // in this extension-host session (e.g. from another panel).
         if (LabelMePanel._samServicePorts.has(config.port)) {
-            this._notify('warn', `SAM Service already running on port ${config.port} from another panel. Reusing it; change the port in settings if you want a separate instance.`);
+            this._notify(
+                'warn',
+                `SAM Service already running on port ${config.port} from another panel. Reusing it; change the port in settings if you want a separate instance.`,
+                { i18nKey: 'status.samAlreadyRunning', i18nParams: { port: config.port } }
+            );
             return;
         }
 
         // Locate the bundled Python script
         const scriptPath = path.join(this._extensionUri.fsPath, 'scripts', 'sam_service.py');
         if (!existsSync(scriptPath)) {
-            this._notify('error', 'SAM Service: Service script not found at ' + scriptPath);
+            this._notify(
+                'error',
+                'SAM Service: Service script not found at ' + scriptPath,
+                { i18nKey: 'status.samNoScript', i18nParams: { path: scriptPath } }
+            );
             return;
         }
 
@@ -1689,6 +1748,10 @@ export class LabelMePanel {
         terminal.show();
         terminal.sendText(command);
 
-        this._notify('info', `SAM Service starting on port ${config.port}. Check the terminal for status.`);
+        this._notify(
+            'info',
+            `SAM Service starting on port ${config.port}. Check the terminal for status.`,
+            { i18nKey: 'status.samServiceStarting', i18nParams: { port: config.port } }
+        );
     }
 }
