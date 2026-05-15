@@ -5737,7 +5737,7 @@ if (toolsMenuBtn) {
 // --- More Settings modal (Language + Keyboard Shortcuts) ---
 const moreSettingsMenuItem = document.getElementById('moreSettingsMenuItem');
 const moreSettingsModal = document.getElementById('moreSettingsModal');
-const moreSettingsCloseBtn = document.getElementById('moreSettingsCloseBtn');
+const moreSettingsCloseBtn = document.getElementById('moreSettingsCancelBtn');
 
 function showMoreSettingsModal() {
     if (settingsMenuDropdown) settingsMenuDropdown.style.display = 'none';
@@ -5746,6 +5746,12 @@ function showMoreSettingsModal() {
 }
 
 function hideMoreSettingsModal() {
+    // If the user closes the modal while a capture row is still listening,
+    // tear it down — otherwise the document-level keydown handler stays
+    // attached and silently swallows every subsequent shortcut.
+    if (typeof keybindingsCapture !== 'undefined' && keybindingsCapture) {
+        finishKeybindingsCapture(false);
+    }
     if (moreSettingsModal) moreSettingsModal.style.display = 'none';
 }
 
@@ -5762,16 +5768,30 @@ const keybindingsResetAllBtn = document.getElementById('keybindingsResetAllBtn')
 
 function persistKeyboardBindings() {
     // Strip rows that match the default so the saved object stays small and
-    // future default tweaks naturally propagate.
+    // future default tweaks naturally propagate. Explicit `null` entries
+    // (disabled rows from Override) are kept verbatim — they are how we
+    // remember that the user intentionally cleared a default binding.
     const diff = {};
     if (window.keybindings) {
         for (const id in currentBindings) {
-            if (!window.keybindings.bindingsEqual(currentBindings[id], window.keybindings.DEFAULTS[id])) {
-                diff[id] = currentBindings[id];
+            const cur = currentBindings[id];
+            if (cur === null) { diff[id] = null; continue; }
+            if (!window.keybindings.bindingsEqual(cur, window.keybindings.DEFAULTS[id])) {
+                diff[id] = cur;
             }
         }
     }
     vscode.postMessage({ command: 'saveGlobalSettings', key: 'keyboardBindings', value: diff });
+}
+
+function actionDisplayName(id) {
+    // i18n key wins when the localized dictionary defines one; otherwise fall
+    // back to the English label baked into keybindings.js.
+    if (window.i18n && window.i18n.t) {
+        const t = window.i18n.t('kb.action.' + id);
+        if (t && t !== 'kb.action.' + id) return t;
+    }
+    return (window.keybindings && window.keybindings.ACTION_NAMES[id]) || id;
 }
 
 function renderKeybindingsList() {
@@ -5783,7 +5803,7 @@ function renderKeybindingsList() {
         row.dataset.action = id;
         const name = document.createElement('span');
         name.className = 'kb-name';
-        name.textContent = window.keybindings.ACTION_NAMES[id] || id;
+        name.textContent = actionDisplayName(id);
         const current = document.createElement('span');
         current.className = 'kb-current';
         current.textContent = window.keybindings.display(currentBindings[id]) || '(none)';
@@ -5857,7 +5877,7 @@ function captureKeyHandler(e) {
         const errorEl = rowEl.querySelector('.kb-error');
         if (errorEl) {
             errorEl.style.display = 'block';
-            const otherName = window.keybindings.ACTION_NAMES[conflict] || conflict;
+            const otherName = actionDisplayName(conflict);
             errorEl.innerHTML = '';
             const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k, p) => k;
             const msg = document.createElement('span');
@@ -5866,12 +5886,17 @@ function captureKeyHandler(e) {
             overrideBtn.className = 'btn';
             overrideBtn.textContent = tt('kb.override');
             overrideBtn.onclick = () => {
-                // Clear the conflicting row by giving it a placeholder key the
-                // user can rebind later. Store the binding for actionId and
-                // wipe the conflicting one to make capture explicit.
-                delete currentBindings[conflict];
+                // Mark the conflicting row as disabled (null) instead of
+                // deleting it. persistKeyboardBindings stores the null so the
+                // override survives reload — otherwise mergeWithDefaults would
+                // restore the conflicting default and bring the clash back.
+                currentBindings[conflict] = null;
                 currentBindings[actionId] = binding;
                 persistKeyboardBindings();
+                // Tear down the capture listener so subsequent keys reach the
+                // dispatcher again — without this, the user can't even click
+                // away cleanly because their next keypress would be swallowed.
+                finishKeybindingsCapture(true);
                 renderKeybindingsList();
                 if (window.tooltip && window.tooltip.hide) window.tooltip.hide();
             };

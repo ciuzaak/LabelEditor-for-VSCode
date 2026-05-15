@@ -108,6 +108,26 @@ describe('keybindings.mergeWithDefaults', () => {
         const out = kb.mergeWithDefaults({ 'bogus.action': { key: 'X' } });
         assert.equal(out['bogus.action'], undefined);
     });
+    it('preserves explicit null (disabled by Override) across reload', () => {
+        const out = kb.mergeWithDefaults({ 'mode.view': null });
+        assert.equal(out['mode.view'], null);
+    });
+});
+
+describe('keybindings disabled-row behaviour', () => {
+    it('matches() never returns true for a null binding', () => {
+        assert.equal(kb.matches(ev('V'), null), false);
+        assert.equal(kb.matches(ev('Escape'), null), false);
+    });
+    it('findConflict skips disabled rows so reassignment is allowed', () => {
+        const bindings = { 'mode.view': null, 'mode.polygon': { key: 'P' } };
+        assert.equal(kb.findConflict('edit.foo', { key: 'V' }, bindings), null);
+    });
+    it('matchAction skips null entries during dispatch', () => {
+        const bindings = { 'mode.view': null, 'mode.polygon': { key: 'P' } };
+        assert.equal(kb.matchAction(ev('V'), bindings, {}), null);
+        assert.equal(kb.matchAction(ev('P'), bindings, {}), 'mode.polygon');
+    });
 });
 
 describe('keybindings.eventToBinding / isModifierOnly', () => {

@@ -1247,7 +1247,9 @@ export class LabelMePanel {
                         <button id="keybindingsResetAllBtn" class="btn" style="margin-top: 4px;" data-i18n="button.resetAllDefaults">Reset all to defaults</button>
 
                         <div class="modal-buttons">
-                            <button id="moreSettingsCloseBtn" class="btn btn-primary" data-i18n="button.close">Close</button>
+                            <!-- Named *CancelBtn so the shared modal-close (×) wiring routes through
+                                 hideMoreSettingsModal() and gets capture-listener cleanup for free. -->
+                            <button id="moreSettingsCancelBtn" class="btn btn-primary" data-i18n="button.close">Close</button>
                         </div>
                     </div>
                 </div>

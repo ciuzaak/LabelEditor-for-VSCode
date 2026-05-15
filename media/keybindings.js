@@ -34,8 +34,9 @@
         'edit.delete': [{ key: 'Backspace' }]
     };
 
-    // Human-readable labels for the settings UI. English-only here; an i18n
-    // pass can route these through `t()` later.
+    // Human-readable labels for the settings UI (English fallback). main.js
+    // prefers `kb.action.<id>` via i18n.t when the dictionary defines one, so
+    // localised builds can override these without touching this module.
     const ACTION_NAMES = {
         'mode.view':          'View Mode',
         'mode.polygon':       'Polygon Mode',
@@ -64,7 +65,9 @@
     }
 
     function matches(event, b) {
-        if (!b) return false;
+        // A null/missing binding is treated as "disabled" — it must not match
+        // any event. This is how Override and Reset propagate a cleared row.
+        if (!b || typeof b.key !== 'string') return false;
         if (normKey(event.key) !== normKey(b.key)) return false;
         if (!!event.ctrlKey  !== !!b.ctrl)  return false;
         if (!!event.shiftKey !== !!b.shift) return false;
@@ -105,7 +108,9 @@
     }
 
     function bindingsEqual(a, b) {
+        if (a === null && b === null) return true; // both disabled
         if (!a || !b) return false;
+        if (typeof a.key !== 'string' || typeof b.key !== 'string') return false;
         return normKey(a.key) === normKey(b.key)
             && !!a.ctrl === !!b.ctrl
             && !!a.shift === !!b.shift
@@ -116,7 +121,9 @@
     function findConflict(actionId, binding, bindings) {
         for (const id in bindings) {
             if (id === actionId) continue;
-            if (bindingsEqual(binding, bindings[id])) return id;
+            const other = bindings[id];
+            if (!other || typeof other.key !== 'string') continue; // disabled row
+            if (bindingsEqual(binding, other)) return id;
         }
         return null;
     }
@@ -125,10 +132,16 @@
         const out = {};
         for (const k in DEFAULTS) {
             const def = DEFAULTS[k];
-            const s = saved && saved[k];
-            // Saved values fully replace the default (a remap should not bleed
-            // modifier flags from the default into the user's binding).
-            out[k] = s && typeof s.key === 'string' ? { ...s } : { ...def };
+            if (saved && Object.prototype.hasOwnProperty.call(saved, k)) {
+                const s = saved[k];
+                // Explicit null means the user disabled this action via the
+                // override flow — keep it disabled, do not fall back to the
+                // default (otherwise reload silently re-introduces the conflict
+                // that the override resolved).
+                if (s === null) { out[k] = null; continue; }
+                if (s && typeof s.key === 'string') { out[k] = { ...s }; continue; }
+            }
+            out[k] = { ...def };
         }
         return out;
     }
