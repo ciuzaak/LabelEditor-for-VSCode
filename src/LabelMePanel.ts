@@ -1379,13 +1379,29 @@ export class LabelMePanel {
         }
     }
 
-    private async _collectExportImages(scope: string): Promise<ExportImage[]> {
-        const relPaths = scope === 'current'
-            ? [path.relative(this._rootPath, this._imageUri.fsPath)]
-            : this._workspaceImages.slice();
+    private async _collectExportImages(
+        scope: string,
+        currentOverride?: { shapes: ExportShape[]; width: number; height: number }
+    ): Promise<ExportImage[]> {
+        const currentRel = path.relative(this._rootPath, this._imageUri.fsPath);
+        const relPaths = scope === 'current' ? [currentRel] : this._workspaceImages.slice();
 
         const images: ExportImage[] = [];
         for (const rel of relPaths) {
+            // Prefer the in-memory shapes for the current image when the caller
+            // supplied them — otherwise an unsaved edit silently exports the
+            // stale sidecar JSON, which is the opposite of what a user
+            // re-running export expects after tweaking annotations.
+            if (currentOverride && rel === currentRel) {
+                images.push({
+                    fileName: rel.replace(/\\/g, '/'),
+                    width: currentOverride.width,
+                    height: currentOverride.height,
+                    shapes: currentOverride.shapes
+                });
+                continue;
+            }
+
             const absImg = path.join(this._rootPath, rel);
             const jsonPath = absImg.replace(/\.[^/.]+$/, '') + '.json';
             let shapes: ExportShape[] = [];
@@ -1448,6 +1464,7 @@ export class LabelMePanel {
         scope: string;
         outputDir: string;
         classes: string[];
+        currentImage?: { shapes: ExportShape[]; width: number; height: number };
     }) {
         if (!config.outputDir) {
             this._notify('error', 'Pick an output directory first', { i18nKey: 'status.exportPickDir' });
@@ -1461,7 +1478,7 @@ export class LabelMePanel {
         }
         try {
             await fs.mkdir(config.outputDir, { recursive: true });
-            const images = await this._collectExportImages(config.scope);
+            const images = await this._collectExportImages(config.scope, config.currentImage);
             // Drop images with unknown dimensions (no JSON and no file probe).
             const usable = images.filter(img => img.width > 0 && img.height > 0);
             const skippedImages = images.length - usable.length;
@@ -1476,13 +1493,21 @@ export class LabelMePanel {
                     'utf8'
                 );
             } else if (config.format === 'yolo-bbox' || config.format === 'yolo-seg') {
-                // Resolve filename collisions across nested folders.
-                const usedNames = new Map<string, number>();
+                // Resolve filename collisions across nested folders. Track the
+                // FINAL chosen names — counting by base alone would still
+                // collide when an input happens to be named `foo_2.jpg`
+                // alongside a `foo.jpg` (the manual suffix consumes the slot
+                // that the auto-suffix would have wanted).
+                const usedFinal = new Set<string>();
                 for (const img of usable) {
                     const base = path.basename(img.fileName, path.extname(img.fileName));
-                    const seen = usedNames.get(base) || 0;
-                    const finalName = seen === 0 ? base : `${base}_${seen + 1}`;
-                    usedNames.set(base, seen + 1);
+                    let finalName = base;
+                    let n = 2;
+                    while (usedFinal.has(finalName)) {
+                        finalName = `${base}_${n}`;
+                        n++;
+                    }
+                    usedFinal.add(finalName);
                     const out = config.format === 'yolo-bbox'
                         ? buildYoloBboxLines(img, config.classes)
                         : buildYoloSegLines(img, config.classes);

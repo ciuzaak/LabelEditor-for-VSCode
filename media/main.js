@@ -5432,6 +5432,21 @@ function submitExportDataset() {
         outputDir: exportOutputDirInput ? exportOutputDirInput.value.trim() : '',
         classes: exportClasses.slice()
     };
+    // For the current-scope export, ship the in-memory shapes (already
+    // stripped of UI-only fields like `visible`) so any unsaved edits go to
+    // the converted output. Without this, the host reads the stale sidecar
+    // JSON and silently exports yesterday's annotations.
+    if (config.scope === 'current' && img && img.width > 0 && img.height > 0) {
+        config.currentImage = {
+            shapes: shapes.map(shape => {
+                const { visible, ...rest } = shape;
+                if (!rest.description) delete rest.description;
+                return rest;
+            }),
+            width: img.width,
+            height: img.height
+        };
+    }
     vscode.postMessage({ command: 'exportDatasetRun', config });
 }
 

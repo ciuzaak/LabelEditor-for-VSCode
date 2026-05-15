@@ -23,6 +23,9 @@ export interface ExportWarning {
 }
 
 const CIRCLE_SEGMENTS = 32;
+// Below this, COCO segmentation rings and YOLO bboxes collapse to invalid
+// zero-area annotations. Reject + warn rather than emit unparseable output.
+const DEGENERATE_EPS = 1e-6;
 
 export function polygonArea(points: number[][]): number {
     if (!points || points.length < 3) return 0;
@@ -145,13 +148,18 @@ export function buildCocoDocument(images: ExportImage[], classes: string[]): {
                 continue;
             }
             const bbox = polygonAabb(ring);
+            const area = polygonArea(ring);
+            if (area <= DEGENERATE_EPS || bbox.w <= DEGENERATE_EPS || bbox.h <= DEGENERATE_EPS) {
+                warnings.push({ image: image.fileName, label, shape_type: t, reason: 'zero-area geometry' });
+                continue;
+            }
             annotations.push({
                 id: nextAnnId++,
                 image_id: imageId,
                 category_id: catId,
                 segmentation: [ringToFlat(ring)],
                 bbox: [bbox.x, bbox.y, bbox.w, bbox.h],
-                area: polygonArea(ring),
+                area,
                 iscrowd: 0
             });
         }
@@ -196,6 +204,14 @@ export function buildYoloBboxLines(image: ExportImage, classes: string[]): { tex
             warnings.push({ image: image.fileName, label, shape_type: shape.shape_type, reason: 'no bbox' });
             continue;
         }
+        // Point shapes intentionally produce a 1x1 px bbox (handled in
+        // shapeAabb); for every other shape, a zero-extent box would emit a
+        // YOLO line with w=0/h=0 which most trainers reject. Skip + warn.
+        if (shape.shape_type !== 'point'
+            && (box.w <= DEGENERATE_EPS || box.h <= DEGENERATE_EPS)) {
+            warnings.push({ image: image.fileName, label, shape_type: shape.shape_type, reason: 'zero-area bbox' });
+            continue;
+        }
         const cx = clamp01((box.x + box.w / 2) / image.width);
         const cy = clamp01((box.y + box.h / 2) / image.height);
         const w = clamp01(box.w / image.width);
@@ -226,6 +242,10 @@ export function buildYoloSegLines(image: ExportImage, classes: string[]): { text
         const ring = shapeToPolygonRing(shape);
         if (!ring || ring.length < 3 || image.width <= 0 || image.height <= 0) {
             warnings.push({ image: image.fileName, label, shape_type: t, reason: 'degenerate geometry' });
+            continue;
+        }
+        if (polygonArea(ring) <= DEGENERATE_EPS) {
+            warnings.push({ image: image.fileName, label, shape_type: t, reason: 'zero-area geometry' });
             continue;
         }
         const parts: string[] = [String(idx)];

@@ -186,3 +186,48 @@ describe('buildClassesTxt', () => {
         assert.equal(buildClassesTxt([]), '');
     });
 });
+
+describe('degenerate geometry rejection', () => {
+    it('COCO drops a zero-radius circle with a zero-area warning', () => {
+        const images: ExportImage[] = [{
+            fileName: 'tiny.png', width: 100, height: 100,
+            shapes: [
+                { label: 'cat', shape_type: 'circle', points: [[50, 50], [50, 50]] }, // r = 0
+                { label: 'cat', shape_type: 'polygon', points: [[10, 10], [20, 10], [30, 10]] } // collinear
+            ]
+        }];
+        const { document, warnings } = buildCocoDocument(images, ['cat']);
+        assert.equal((document as any).annotations.length, 0);
+        assert.equal(warnings.length, 2);
+        assert.ok(warnings.every(w => w.reason === 'zero-area geometry'));
+    });
+
+    it('YOLO bbox drops a zero-extent polygon but keeps point shapes', () => {
+        const image: ExportImage = {
+            fileName: 'mixed.png', width: 100, height: 100,
+            shapes: [
+                { label: 'cat', shape_type: 'polygon', points: [[10, 10], [10, 10], [10, 10]] }, // 0×0
+                { label: 'kp', shape_type: 'point', points: [[5, 5]] }
+            ]
+        };
+        const { text, warnings } = buildYoloBboxLines(image, ['cat', 'kp']);
+        // Only the point shape should be present in the output.
+        const lines = text.trim().split('\n').filter(s => s.length > 0);
+        assert.equal(lines.length, 1);
+        assert.equal(lines[0].split(' ')[0], '1');
+        assert.ok(warnings.some(w => w.reason === 'zero-area bbox'));
+    });
+
+    it('YOLO seg drops a zero-area polygon', () => {
+        const image: ExportImage = {
+            fileName: 'flat.png', width: 100, height: 100,
+            shapes: [
+                { label: 'cat', shape_type: 'polygon', points: [[10, 10], [30, 10], [50, 10]] } // collinear
+            ]
+        };
+        const { text, warnings } = buildYoloSegLines(image, ['cat']);
+        assert.equal(text, '');
+        assert.equal(warnings.length, 1);
+        assert.equal(warnings[0].reason, 'zero-area geometry');
+    });
+});
