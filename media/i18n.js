@@ -16,6 +16,7 @@
             'settings.imageAdjustment': 'Image Adjustment',
             'settings.keyboardShortcuts': 'Keyboard Shortcuts',
             'settings.language': 'Language',
+            'settings.appearance': 'Appearance',
             'settings.more': 'More settings…',
 
             // Generic form labels
@@ -348,6 +349,7 @@
             'settings.imageAdjustment': '图像调整',
             'settings.keyboardShortcuts': '键盘快捷键',
             'settings.language': '语言',
+            'settings.appearance': '外观',
             'settings.more': '更多设置…',
 
             'label.theme': '主题',

@@ -931,14 +931,6 @@ export class LabelMePanel {
                                     <button id="saveBtn" class="sidebar-icon-btn segmented-item" data-tip-id="actions.save" disabled><svg class="icon" aria-hidden="true"><use href="#icon-save"/></svg></button>
                                 </div>
                                 <div id="settingsMenuDropdown" class="sidebar-dropdown" style="display: none;">
-                                    <div class="theme-control">
-                                        <label data-i18n="label.theme">Theme</label>
-                                        <div class="theme-toggle-group segmented-group">
-                                            <button id="themeLightBtn" class="theme-btn segmented-item" data-tip-id="theme.light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg></button>
-                                            <button id="themeDarkBtn" class="theme-btn segmented-item" data-tip-id="theme.dark"><svg class="icon" aria-hidden="true"><use href="#icon-moon"/></svg></button>
-                                            <button id="themeAutoBtn" class="theme-btn segmented-item" data-tip-id="theme.auto"><svg class="icon" aria-hidden="true"><use href="#icon-circle-half"/></svg></button>
-                                        </div>
-                                    </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label><span data-i18n="label.zoom">Zoom</span>: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" data-tip-id="view.zoomReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
@@ -1221,7 +1213,15 @@ export class LabelMePanel {
                         <button class="modal-close" data-modal-close="moreSettingsModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg> <span data-i18n="modal.moreSettings">More Settings</span></h3>
 
-                        <div class="settings-group-header" data-i18n="settings.language">Language</div>
+                        <div class="settings-group-header" data-i18n="settings.appearance">Appearance</div>
+                        <div class="more-settings-row">
+                            <label data-i18n="label.theme">Theme</label>
+                            <div class="theme-toggle-group segmented-group">
+                                <button id="themeLightBtn" class="theme-btn segmented-item" data-tip-id="theme.light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg></button>
+                                <button id="themeDarkBtn" class="theme-btn segmented-item" data-tip-id="theme.dark"><svg class="icon" aria-hidden="true"><use href="#icon-moon"/></svg></button>
+                                <button id="themeAutoBtn" class="theme-btn segmented-item" data-tip-id="theme.auto"><svg class="icon" aria-hidden="true"><use href="#icon-circle-half"/></svg></button>
+                            </div>
+                        </div>
                         <div class="more-settings-row">
                             <label data-i18n="label.language">Language</label>
                             <select id="languageSelect" class="language-select">
