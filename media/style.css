@@ -1554,3 +1554,14 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     padding: 2px 8px;
     font-size: 0.85em;
 }
+
+/* Language picker — match the theme-control look */
+.language-select {
+    margin-left: 8px;
+    padding: 2px 6px;
+    background: var(--vscode-input-background, transparent);
+    color: inherit;
+    border: 1px solid var(--vscode-input-border, rgba(128,128,128,0.3));
+    border-radius: 4px;
+    font-size: 0.9em;
+}

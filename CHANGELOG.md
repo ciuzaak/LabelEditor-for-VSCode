@@ -2,6 +2,35 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [0.17.0] - 2026-05-15
+
+### Added
+- **Circle Shapes**: New mode for round annotations.
+  - Press `C` or click the ◯ button to enter Circle Mode; first click sets the center, second click sets a point on the circumference (live radius preview between clicks).
+  - Stored in LabelMe JSON as `shape_type: "circle"` with `points: [[cx, cy], [edgeX, edgeY]]` — same convention as upstream LabelMe.
+  - Vertex-edit: center handle translates the whole circle; edge handle adjusts the radius. Whole-shape drag preserves the radius even when clamped near the image boundary.
+  - Eraser overlapping a circle decays it to one or more polygons (32-segment polygonisation).
+  - SVG export emits a real `<circle cx cy r>`.
+  - Merge stays polygon/rectangle only — a selection containing a circle hides the Merge entry and turns `Ctrl+G` into a no-op.
+- **Dataset Export — COCO / YOLO**: Tools menu → Export Dataset opens a modal that converts annotations into COCO Instances, YOLO bbox (detection), or YOLO seg (segmentation) formats.
+  - Scope: every workspace image or just the current one.
+  - Class list auto-detects labels in scope; rows can be reordered (`↑`/`↓`), renamed, or removed — order defines class indices (0-based for YOLO, 1-based for COCO).
+  - Persisted across sessions: format, scope, output directory, and the user's class list edits.
+  - Shape handling: polygon and rectangle round-trip 1:1; circle polygonises to 32 segments for segmentation outputs and uses its AABB for bbox formats; point and linestrip drop with a warning except YOLO bbox (point → 1×1 px box; linestrip → AABB).
+  - Filename collisions across nested folders are auto-suffixed (`name_2.txt`, `name_3.txt`, ...).
+- **Keyboard Shortcut Customization**: Every documented shortcut is rebindable via Settings → Keyboard Shortcuts.
+  - Click ✎ on a row, press the new combo, and it binds immediately. Esc cancels capture.
+  - Conflict detection shows an inline error with an Override button that clears the colliding row in the current session.
+  - ↺ on a row resets it to its default; the bottom Reset-all button restores every default.
+  - `Ctrl+Y` (Redo) and `Backspace` (Delete) remain hardcoded as secondary bindings — so existing muscle memory survives even after primaries get remapped.
+  - Tooltips display the live binding via a new `shortcutAction` field on `tipsData.js` entries — tip text never disagrees with the active shortcut.
+  - The webview keydown dispatcher now goes through `window.keybindings.matchAction → handleAction(actionId)` instead of hardcoded `e.key === 'a'` checks; saved bindings persist as a diff against the default table.
+- **Multi-Language Support**: Settings panel gains a Language picker (English / 简体中文).
+  - Static labels marked with `data-i18n` keys are translated on boot and re-applied on each language change.
+  - Dynamic strings — context menu labels with selection counts, merge status messages, circle-too-small warning, export "class already in list" — also flip locale.
+  - Selection persists in `globalState`; the dictionary lives in `media/i18n.js`. Community PRs welcome for additional locales.
+  - VS Code-side native dialogs (unsaved-changes prompt, file pickers) stay English to keep the host UI consistent.
+
 ## [0.16.1] - 2026-05-11
 
 ### Added

@@ -815,6 +815,10 @@ export class LabelMePanel {
         const keybindingsPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'keybindings.js');
         const keybindingsUri = webview.asWebviewUri(keybindingsPath);
 
+        // i18n dictionary (must load before main.js so applyI18n can run on boot)
+        const i18nPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'i18n.js');
+        const i18nUri = webview.asWebviewUri(i18nPath);
+
         // Read CSS file content and inline it to prevent race condition on Windows
         // where JS executes before CSS finishes loading via external <link>, causing
         // layout chaos (zero container dimensions, unstyled dropdowns visible, etc.)
@@ -864,7 +868,7 @@ export class LabelMePanel {
                 <div class="app-container">
                     <div id="imageBrowserSidebar" class="image-browser-sidebar collapsed">
                         <div class="image-browser-header">
-                            <h3>Images</h3>
+                            <h3 data-i18n="section.images">Images</h3>
                             <span id="imageCount">(${workspaceImages.length})</span>
                             <button id="searchImagesBtn" class="btn btn-icon header-btn" data-tip-id="browser.search"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg></button>
                             <button id="refreshImagesBtn" class="btn btn-icon header-btn" data-tip-id="browser.refresh"><svg class="icon" aria-hidden="true"><use href="#icon-refresh-cw"/></svg></button>
@@ -924,12 +928,19 @@ export class LabelMePanel {
                                 </div>
                                 <div id="settingsMenuDropdown" class="sidebar-dropdown" style="display: none;">
                                     <div class="theme-control">
-                                        <label>Theme</label>
+                                        <label data-i18n="label.theme">Theme</label>
                                         <div class="theme-toggle-group segmented-group">
                                             <button id="themeLightBtn" class="theme-btn segmented-item" data-tip-id="theme.light"><svg class="icon" aria-hidden="true"><use href="#icon-sun"/></svg></button>
                                             <button id="themeDarkBtn" class="theme-btn segmented-item" data-tip-id="theme.dark"><svg class="icon" aria-hidden="true"><use href="#icon-moon"/></svg></button>
                                             <button id="themeAutoBtn" class="theme-btn segmented-item" data-tip-id="theme.auto"><svg class="icon" aria-hidden="true"><use href="#icon-circle-half"/></svg></button>
                                         </div>
+                                    </div>
+                                    <div class="theme-control">
+                                        <label data-i18n="label.language">Language</label>
+                                        <select id="languageSelect" class="language-select">
+                                            <option value="en">English</option>
+                                            <option value="zh-CN">中文</option>
+                                        </select>
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
@@ -937,7 +948,7 @@ export class LabelMePanel {
                                             <button id="zoomLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="view.zoomLock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                     </div>
-                                    <div class="settings-group-header">Annotation Style</div>
+                                    <div class="settings-group-header" data-i18n="settings.annotationStyle">Annotation Style</div>
                                     <div class="slider-control">
                                         <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" data-tip-id="style.borderWidthReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
                                         <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5" data-tip-id="style.borderWidth">
@@ -946,7 +957,7 @@ export class LabelMePanel {
                                         <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" data-tip-id="style.fillOpacityReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
                                         <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5" data-tip-id="style.fillOpacity">
                                     </div>
-                                    <div class="settings-group-header">Image Adjustment</div>
+                                    <div class="settings-group-header" data-i18n="settings.imageAdjustment">Image Adjustment</div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Channel:</label>
@@ -985,21 +996,21 @@ export class LabelMePanel {
                                             <input type="range" id="claheClipLimitSlider" min="1" max="10" value="2" step="0.5" data-tip-id="image.claheClipLimit">
                                         </div>
                                     </div>
-                                    <div class="settings-group-header">Keyboard Shortcuts</div>
+                                    <div class="settings-group-header" data-i18n="settings.keyboardShortcuts">Keyboard Shortcuts</div>
                                     <div class="keybindings-list" id="keybindingsList"></div>
-                                    <button id="keybindingsResetAllBtn" class="btn" style="margin-top: 4px;">Reset all to defaults</button>
+                                    <button id="keybindingsResetAllBtn" class="btn" style="margin-top: 4px;" data-i18n="button.resetAllDefaults">Reset all to defaults</button>
                                 </div>
                                 <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
-                                    <div class="sidebar-dropdown-item" id="exportSvgMenuItem" data-tip-id="tools.exportSvg"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-download"/></svg> Export SVG</div>
-                                    <div class="sidebar-dropdown-item" id="exportDatasetMenuItem" data-tip-id="tools.exportDataset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-download"/></svg> Export Dataset</div>
-                                    <div class="sidebar-dropdown-item" id="onnxBatchInferMenuItem" data-tip-id="tools.onnxBatchInfer"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-cpu"/></svg> ONNX Batch Infer</div>
+                                    <div class="sidebar-dropdown-item" id="exportSvgMenuItem" data-tip-id="tools.exportSvg"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-download"/></svg> <span data-i18n="tools.exportSvg">Export SVG</span></div>
+                                    <div class="sidebar-dropdown-item" id="exportDatasetMenuItem" data-tip-id="tools.exportDataset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-download"/></svg> <span data-i18n="tools.exportDataset">Export Dataset</span></div>
+                                    <div class="sidebar-dropdown-item" id="onnxBatchInferMenuItem" data-tip-id="tools.onnxBatchInfer"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-cpu"/></svg> <span data-i18n="tools.onnxBatchInfer">ONNX Batch Infer</span></div>
                                 </div>
                             </div>
                         </div>
                         <div class="sidebar-content">
                             <div class="sidebar-labels-section" id="sidebarLabelsSection">
                                 <div class="sidebar-section-header">
-                                    <h3>Labels</h3>
+                                    <h3 data-i18n="section.labels">Labels</h3>
                                     <span id="labelsCount" class="section-count"></span>
                                 </div>
                                 <ul id="labelsList"></ul>
@@ -1007,7 +1018,7 @@ export class LabelMePanel {
                             <div id="sidebarSectionResizer" class="sidebar-section-resizer"></div>
                             <div class="sidebar-instances-section" id="sidebarInstancesSection">
                                 <div class="sidebar-section-header">
-                                    <h3>Instances</h3>
+                                    <h3 data-i18n="section.instances">Instances</h3>
                                     <span id="instancesCount" class="section-count"></span>
                                 </div>
                                 <ul id="shapeList"></ul>
@@ -1020,13 +1031,13 @@ export class LabelMePanel {
                 <div id="labelModal" class="modal">
                     <div class="modal-content">
                         <button class="modal-close" data-modal-close="labelModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
-                        <h3>Enter Label</h3>
+                        <h3 data-i18n="modal.enterLabel">Enter Label</h3>
                         <input type="text" id="labelInput" placeholder="Enter label name">
                         <textarea id="descriptionInput" placeholder="Add description (optional)" rows="2"></textarea>
                         <div id="recentLabels"></div>
                         <div class="modal-buttons">
-                            <button id="modalOkBtn" class="btn btn-primary">OK</button>
-                            <button id="modalCancelBtn" class="btn">Cancel</button>
+                            <button id="modalOkBtn" class="btn btn-primary" data-i18n="button.ok">OK</button>
+                            <button id="modalCancelBtn" class="btn" data-i18n="button.cancel">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -1035,15 +1046,15 @@ export class LabelMePanel {
                 <div id="colorPickerModal" class="modal">
                     <div class="modal-content color-picker-content">
                         <button class="modal-close" data-modal-close="colorPickerModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
-                        <h3>Choose Color</h3>
+                        <h3 data-i18n="modal.chooseColor">Choose Color</h3>
                         <div class="color-palette"></div>
                         <div class="custom-color-input">
-                            <label>Custom Color:</label>
+                            <label data-i18n="label.customColor">Custom Color:</label>
                             <input type="text" id="customColorInput" placeholder="#xxxxxx" maxlength="7">
                         </div>
                         <div class="modal-buttons">
-                            <button id="colorOkBtn" class="btn btn-primary">OK</button>
-                            <button id="colorCancelBtn" class="btn">Cancel</button>
+                            <button id="colorOkBtn" class="btn btn-primary" data-i18n="button.ok">OK</button>
+                            <button id="colorCancelBtn" class="btn" data-i18n="button.cancel">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -1169,9 +1180,9 @@ export class LabelMePanel {
                 <div id="exportDatasetModal" class="modal">
                     <div class="modal-content onnx-infer-content">
                         <button class="modal-close" data-modal-close="exportDatasetModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
-                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg> Export Dataset</h3>
+                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg> <span data-i18n="modal.exportDataset">Export Dataset</span></h3>
                         <div class="onnx-form-group">
-                            <label data-tip-id="export.format">Format</label>
+                            <label data-tip-id="export.format" data-i18n="label.format">Format</label>
                             <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="exportFormat" value="coco" checked /> COCO</label>
                                 <label class="onnx-radio"><input type="radio" name="exportFormat" value="yolo-bbox" /> YOLO bbox</label>
@@ -1179,31 +1190,31 @@ export class LabelMePanel {
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="export.scope">Scope</label>
+                            <label data-tip-id="export.scope" data-i18n="label.scope">Scope</label>
                             <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="exportScope" value="all" checked /> All Images</label>
                                 <label class="onnx-radio"><input type="radio" name="exportScope" value="current" /> Current Image</label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="export.outputDir">Output Directory</label>
+                            <label data-tip-id="export.outputDir" data-i18n="label.outputDir">Output Directory</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="exportOutputDir" placeholder="Folder to write the converted files" />
                                 <button id="exportOutputDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="export.classes">Classes <span style="font-weight:normal; opacity:0.7">(order = class index)</span></label>
+                            <label data-tip-id="export.classes"><span data-i18n="label.classes">Classes</span> <span style="font-weight:normal; opacity:0.7">(<span data-i18n="label.classOrderHint">order = class index</span>)</span></label>
                             <ul id="exportClassList" class="export-class-list"></ul>
                             <div class="export-add-class">
                                 <input type="text" id="exportAddClassInput" placeholder="Add class name" />
-                                <button id="exportAddClassBtn" class="btn">Add</button>
+                                <button id="exportAddClassBtn" class="btn" data-i18n="button.add">Add</button>
                             </div>
                         </div>
-                        <div class="onnx-image-count">Images: <strong id="exportImageCount">0</strong> · Annotations: <strong id="exportAnnotationCount">0</strong></div>
+                        <div class="onnx-image-count"><span data-i18n="export.imageCount">Images</span>: <strong id="exportImageCount">0</strong> · <span data-i18n="export.annotationCount">Annotations</span>: <strong id="exportAnnotationCount">0</strong></div>
                         <div class="modal-buttons">
-                            <button id="exportRunBtn" class="btn btn-primary">Run</button>
-                            <button id="exportCancelBtn" class="btn">Cancel</button>
+                            <button id="exportRunBtn" class="btn btn-primary" data-i18n="button.run">Run</button>
+                            <button id="exportCancelBtn" class="btn" data-i18n="button.cancel">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -1253,7 +1264,8 @@ export class LabelMePanel {
                         exportScope: ${JSON.stringify(this._globalState.get('exportScope') || 'all')},
                         exportOutputDir: ${JSON.stringify(this._globalState.get('exportOutputDir') || '')},
                         exportClasses: ${JSON.stringify(this._globalState.get('exportClasses') || [])},
-                        keyboardBindings: ${JSON.stringify(this._globalState.get('keyboardBindings') || null)}
+                        keyboardBindings: ${JSON.stringify(this._globalState.get('keyboardBindings') || null)},
+                        locale: ${JSON.stringify(this._globalState.get('locale') || 'en')}
                     };
                 </script>
                 <script src="${polyClipUri}"></script>
@@ -1266,6 +1278,7 @@ export class LabelMePanel {
                 <script src="${tooltipUri}"></script>
                 <script src="${popoverDismissUri}"></script>
                 <script src="${keybindingsUri}"></script>
+                <script src="${i18nUri}"></script>
                 <script src="${scriptUri}"></script>
             </body>
             </html>`;

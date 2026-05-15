@@ -10,13 +10,14 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 ## ✨ Features
 
 ### Core Annotation
-- **Multiple Shape Types**: Draw polygon, rectangle, line, and point annotations
+- **Multiple Shape Types**: Draw polygon, rectangle, line, point, and circle annotations
 - **Multiple Drawing Modes**: Toggle between viewing and editing modes
   - 👁️ **View Mode**: Browse and select without accidental edits (default)
   - ⬠ **Polygon Mode**: Create new polygon annotations
   - ▭ **Rectangle Mode**: Create new rectangle annotations
   - ⟋ **Line Mode**: Create polyline annotations
   - • **Point Mode**: Create point landmarks
+  - ◯ **Circle Mode** (New in v0.17.0): Click center, then circumference — saved as `circle` shape (LabelMe center+edge points)
 - **Unified Edit Mode** (New in v0.10.0): seamlessly move shapes or adjust vertices by simply clicking on them
 - **Context Menu** (New in v0.10.0): Right-click any shape to Edit, Rename, Hide, or Delete
 - **Label Management**: Assign and edit labels for each annotated region
@@ -171,6 +172,46 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - 500 ms hover delay; clicking does not pop a tooltip; keyboard `Tab` still gets immediate tooltips for accessibility
 - Eraser gesture (Shift-click) is documented in every drawing-mode tip
 
+### Circle Shapes (New in v0.17.0)
+- Press `C` or click the ◯ button to enter Circle Mode
+- Click once to set the center, click again on the circumference; live radius preview between clicks
+- Stored in LabelMe JSON as `shape_type: "circle"` with `points: [[cx, cy], [edgeX, edgeY]]`
+- Vertex-edit handles: center translates the whole circle, edge handle resizes the radius
+- Eraser overlapping a circle decays it to one or more polygons
+- Excluded from Merge (which remains polygon/rectangle only)
+- SVG export emits a real `<circle cx cy r>`
+
+### Dataset Export — COCO / YOLO (New in v0.17.0)
+- Tools menu → **Export Dataset** opens a modal:
+  - **Format**: COCO Instances, YOLO bbox (detection), YOLO seg (segmentation)
+  - **Scope**: every workspace image, or just the current one
+  - **Output Directory**: native folder picker
+  - **Classes**: auto-detected from labels in scope; reorder/rename/remove rows control class indices (first row = `0` for YOLO, `1` for COCO)
+- Conversions:
+  - Polygon → segmentation ring + bbox for COCO; full polygon for YOLO seg; AABB for YOLO bbox
+  - Rectangle → expanded to 4 corners for COCO seg / YOLO seg; direct bbox for YOLO bbox
+  - Circle → polygonised to 32 segments for segmentation; AABB (cx-r, cy-r, 2r, 2r) for bbox
+  - Point → 1×1 px bbox for YOLO bbox only (skipped from COCO/seg)
+  - Linestrip → AABB for YOLO bbox only (skipped from COCO/seg)
+- COCO writes one `annotations.json`; YOLO writes one `.txt` per image plus `classes.txt`
+- Filename collisions across nested folders are auto-suffixed (`name_2.txt`, `name_3.txt`, ...)
+- Settings persist across sessions
+
+### Keyboard Shortcut Customization (New in v0.17.0)
+- Settings panel → **Keyboard Shortcuts** lists every rebindable action
+- Click ✎ on a row → press your new combo → it binds immediately. Esc cancels capture.
+- Conflict detection shows an inline error with an **Override** button that clears the colliding row
+- ↺ on a row resets it to the default; **Reset all to defaults** at the bottom resets everything
+- `Ctrl+Y` (Redo) and `Backspace` (Delete) remain hardcoded as secondary bindings, even after remapping the primaries
+- Tooltips display the live binding so the help text never disagrees with the active shortcut
+
+### Multi-Language Support (New in v0.17.0)
+- Settings panel → **Language**: English (default) or 简体中文
+- Switches every static section header, modal title, button, dropdown item, and tooltip
+- Dynamic context menu (Rename/Hide/Show/Delete with selection counts) and status notifications also localise
+- Selection persists across sessions
+- Community PRs welcome for additional locales — strings live in `media/i18n.js`
+
 ### SAM Encode Source (New in v0.16.1)
 - Opt-in toggle in the SAM config dialog: **Original** (raw file, default) or **Adjusted View** (Brightness / Contrast / CLAHE / Channel applied as pixels before encoding)
 - Lets SAM see what *you* see — particularly valuable for low-contrast, medical, or microscopy data where CLAHE reveals structure
@@ -224,6 +265,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - **R**: Switch to Rectangle Mode
 - **L**: Switch to Line Mode
 - **O**: Switch to Point Mode
+- **C**: Switch to Circle Mode (New in v0.17.0)
 - **I**: Switch to SAM AI Mode
 - **Ctrl+Z** (`Cmd+Z` on Mac): Undo last action
 - **Ctrl+Shift+Z** or **Ctrl+Y**: Redo action
@@ -277,8 +319,8 @@ Note: `visible` property is not saved to JSON - it's a session-only UI state. `d
 
 This extension is still under active development. Some known limitations include:
 
-- No support for circle/ellipse shape types yet
-- No import from other formats
+- No support for ellipse shape type yet (Circle is shipped — `points: [[cx, cy], [edgeX, edgeY]]`, LabelMe-compatible)
+- No import from other formats (export to COCO and YOLO is supported via the Tools menu)
 - Performance may degrade with very large images (10000x10000+)
 - No support for video frame annotation
 - SAM mode requires a local Python environment with ONNX Runtime
@@ -326,11 +368,11 @@ Planned features for future releases:
 - [x] ~~Instance Description~~ **Added in v0.11.1**
 - [x] ~~ONNX Batch Inference~~ **Added in v0.11.2**
 - [x] ~~SAM AI Annotation~~ **Added in v0.12.0**
-- [ ] Circle shapes
-- [ ] Export to other formats (COCO, YOLO, etc.)
+- [x] ~~Circle shapes~~ **Added in v0.17.0**
+- [x] ~~Export to other formats (COCO, YOLO, etc.)~~ **Added in v0.17.0**
 - [x] ~~Image display adjust (brightness, contrast)~~ **Added in v0.13.4**
-- [ ] Keyboard shortcuts customization
-- [ ] Multi-language support
+- [x] ~~Keyboard shortcuts customization~~ **Added in v0.17.0**
+- [x] ~~Multi-language support~~ **Added in v0.17.0**
 
 ## 🤝 Contributing
 

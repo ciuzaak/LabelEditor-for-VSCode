@@ -367,6 +367,29 @@ if (vscodeState && vscodeState.currentMode) {
     currentMode = vscodeState.currentMode;
 }
 
+// Boot i18n locale from persisted settings before any DOM text is read by
+// users. applyI18n() is called at the end of init so every static label is
+// translated in one pass; subsequent setLocale calls re-run it.
+if (window.i18n && initialGlobalSettings.locale) {
+    try { window.i18n.setLocale(initialGlobalSettings.locale); } catch (_) { /* fallback to default */ }
+}
+
+function applyI18n() {
+    if (!window.i18n) return;
+    const nodes = document.querySelectorAll('[data-i18n]');
+    for (const n of nodes) {
+        const key = n.getAttribute('data-i18n');
+        if (!key) continue;
+        const text = window.i18n.t(key);
+        // Only replace text content — never the inner markup. Elements whose
+        // children include icons should use a <span data-i18n> wrapping just
+        // the textual portion.
+        if (n.children.length === 0) {
+            n.textContent = text;
+        }
+    }
+}
+
 // Boot the keyboard-binding table. Persisted overrides from initialGlobalSettings
 // are merged with the frozen defaults so a stale/partial map still works after
 // new actions are added in a release. window.currentBindings is the single
@@ -2011,7 +2034,10 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     // Reject degenerate circles; keep the center so the user can re-click
                     // a real edge point instead of starting over.
                     if (window.notifyBus) {
-                        window.notifyBus.show('warn', 'Circle too small');
+                        const msg = (window.i18n && window.i18n.t)
+                            ? window.i18n.t('status.circleTooSmall')
+                            : 'Circle too small';
+                        window.notifyBus.show('warn', msg);
                     }
                 } else {
                     finishPolygon();
@@ -2398,9 +2424,13 @@ function showShapeContextMenu(clientX, clientY, shapeIndex) {
     if (contextMenuEdit) {
         contextMenuEdit.style.display = multi ? 'none' : '';
     }
-    // Update labels for multi-selection
+    // Update labels for multi-selection. Strings route through i18n so the
+    // context menu stays localised when the user changes language mid-session.
+    const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
     if (contextMenuRename) {
-        contextMenuRename.textContent = multi ? `Rename (${selectedShapeIndices.size})` : 'Rename';
+        contextMenuRename.textContent = multi
+            ? tt('context.renameCount', { count: selectedShapeIndices.size })
+            : tt('context.rename');
     }
     if (contextMenuMerge) {
         const eligibleForMerge = selectedShapeIndices.size >= 2
@@ -2410,20 +2440,24 @@ function showShapeContextMenu(clientX, clientY, shapeIndex) {
             });
         contextMenuMerge.style.display = eligibleForMerge ? '' : 'none';
         if (eligibleForMerge) {
-            contextMenuMerge.textContent = `Merge (${selectedShapeIndices.size})`;
+            contextMenuMerge.textContent = tt('context.mergeCount', { count: selectedShapeIndices.size });
         }
     }
     if (contextMenuToggleVisible) {
         if (multi) {
             const anyVisible = [...selectedShapeIndices].some(idx => shapes[idx].visible !== false);
-            contextMenuToggleVisible.textContent = anyVisible ? `Hide (${selectedShapeIndices.size})` : `Show (${selectedShapeIndices.size})`;
+            contextMenuToggleVisible.textContent = anyVisible
+                ? tt('context.hideCount', { count: selectedShapeIndices.size })
+                : tt('context.showCount', { count: selectedShapeIndices.size });
         } else {
             const shape = shapes[selectedShapeIndex];
-            contextMenuToggleVisible.textContent = (shape && shape.visible === false) ? 'Show' : 'Hide';
+            contextMenuToggleVisible.textContent = (shape && shape.visible === false) ? tt('context.show') : tt('context.hide');
         }
     }
     if (contextMenuDelete) {
-        contextMenuDelete.textContent = multi ? `Delete (${selectedShapeIndices.size})` : 'Delete';
+        contextMenuDelete.textContent = multi
+            ? tt('context.deleteCount', { count: selectedShapeIndices.size })
+            : tt('context.delete');
     }
 
     // Position the menu at mouse location relative to canvasWrapper
@@ -2542,13 +2576,14 @@ function mergeSelectedShapes() {
         const t = shapes[i] && shapes[i].shape_type;
         return t === 'polygon' || t === 'rectangle';
     });
+    const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
     if (!allEligible) {
-        setMergeStatus('Merge supports polygon/rectangle only', 'orange');
+        setMergeStatus(tt('status.mergePolyRectOnly'), 'orange');
         return;
     }
     const pc = window.polygonClipping || (typeof polygonClipping !== 'undefined' ? polygonClipping : null);
     if (!pc) {
-        setMergeStatus('Polygon clipping unavailable', 'red');
+        setMergeStatus(tt('status.mergeUnavailable'), 'red');
         return;
     }
     const fn = resolveMergeHelpers();
@@ -2559,7 +2594,7 @@ function mergeSelectedShapes() {
 
     const groups = fn.buildOverlapGroups(pc, shapes, indices);
     if (groups.length === 0) {
-        setMergeStatus('No overlapping shapes to merge', 'orange');
+        setMergeStatus(tt('status.mergeNoOverlap'), 'orange');
         return;
     }
 
@@ -5382,7 +5417,12 @@ if (exportAddClassBtn && exportAddClassInput) {
         const name = exportAddClassInput.value.trim();
         if (!name) return;
         if (exportClasses.includes(name)) {
-            if (window.notifyBus) window.notifyBus.show('warn', `Class "${name}" already in list`);
+            if (window.notifyBus) {
+                const msg = (window.i18n && window.i18n.t)
+                    ? window.i18n.t('status.exportClassDuplicate', { name })
+                    : `Class "${name}" already in list`;
+                window.notifyBus.show('warn', msg);
+            }
             return;
         }
         exportClasses.push(name);
@@ -5808,6 +5848,30 @@ if (keybindingsResetAllBtn) {
 }
 
 renderKeybindingsList();
+
+// --- Language picker ---
+const languageSelect = document.getElementById('languageSelect');
+if (languageSelect && window.i18n) {
+    languageSelect.value = window.i18n.getLocale();
+    languageSelect.addEventListener('change', (e) => {
+        try {
+            window.i18n.setLocale(e.target.value);
+        } catch (_) {
+            // Unknown locale — ignore, the select reverts on next render.
+            return;
+        }
+        applyI18n();
+        // Re-render UI sections whose text we render dynamically. Tooltips
+        // re-resolve on next hover automatically.
+        renderShapeList();
+        renderLabelsList();
+        renderKeybindingsList();
+        vscode.postMessage({ command: 'saveGlobalSettings', key: 'locale', value: e.target.value });
+    });
+}
+
+// Apply translations on boot once every static label has been parsed.
+applyI18n();
 
 // Border Width slider
 if (borderWidthSlider) {
