@@ -43,6 +43,7 @@ const pointModeBtn = document.getElementById('pointModeBtn');
 const lineModeBtn = document.getElementById('lineModeBtn');
 const polygonModeBtn = document.getElementById('polygonModeBtn');
 const rectangleModeBtn = document.getElementById('rectangleModeBtn');
+const circleModeBtn = document.getElementById('circleModeBtn');
 const samModeBtn = document.getElementById('samModeBtn');
 
 
@@ -454,6 +455,7 @@ if (viewModeBtn && pointModeBtn && lineModeBtn && polygonModeBtn && rectangleMod
     lineModeBtn.classList.remove('active');
     polygonModeBtn.classList.remove('active');
     rectangleModeBtn.classList.remove('active');
+    if (circleModeBtn) circleModeBtn.classList.remove('active');
     if (samModeBtn) samModeBtn.classList.remove('active');
 
     if (currentMode === 'view') {
@@ -466,6 +468,8 @@ if (viewModeBtn && pointModeBtn && lineModeBtn && polygonModeBtn && rectangleMod
         polygonModeBtn.classList.add('active');
     } else if (currentMode === 'rectangle') {
         rectangleModeBtn.classList.add('active');
+    } else if (currentMode === 'circle') {
+        if (circleModeBtn) circleModeBtn.classList.add('active');
     } else if (currentMode === 'sam') {
         if (samModeBtn) samModeBtn.classList.add('active');
     }
@@ -1622,6 +1626,11 @@ document.addEventListener('keydown', (e) => {
         setMode('rectangle');
     }
 
+    // C: Circle Mode
+    if ((e.key === 'c' || e.key === 'C') && !e.ctrlKey && !e.metaKey) {
+        setMode('circle');
+    }
+
     // I: SAM AI Mode
     if ((e.key === 'i' || e.key === 'I') && !e.ctrlKey && !e.metaKey) {
         setMode('sam');
@@ -1784,11 +1793,31 @@ function deleteSelectedShapes() {
     draw();
 }
 
+// --- Circle helpers ---
+function getCircleRadius(points) {
+    if (!points || points.length < 2) return 0;
+    return Math.hypot(points[1][0] - points[0][0], points[1][1] - points[0][1]);
+}
+
+function polygonizeCircle(cx, cy, r, segments) {
+    const n = segments || 32;
+    const ring = [];
+    for (let i = 0; i < n; i++) {
+        const t = (i / n) * Math.PI * 2;
+        ring.push([cx + r * Math.cos(t), cy + r * Math.sin(t)]);
+    }
+    return ring;
+}
+
 // Get bounding box of a shape
 function getShapeBoundingBox(shape) {
     let points = shape.points;
     if (shape.shape_type === 'rectangle') {
         points = getRectPoints(points);
+    } else if (shape.shape_type === 'circle' && points.length >= 2) {
+        const cx = points[0][0], cy = points[0][1];
+        const r = getCircleRadius(points);
+        return { minX: cx - r, minY: cy - r, maxX: cx + r, maxY: cy + r };
     }
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     for (const p of points) {
@@ -1959,6 +1988,13 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 isDrawing = true;
                 // Rectangle starts with one point, we'll expand it in mousemove
                 currentPoints = [clampImageCoords(x, y)];
+            } else if (currentMode === 'circle') {
+                isDrawing = true;
+                // Circle: first click = center, second click = a point on the circumference.
+                // We store the live edge point as points[1] (initially equal to center) and
+                // refresh it in mousemove until the user clicks again.
+                const center = clampImageCoords(x, y);
+                currentPoints = [center, center];
             }
             // SAM mode is handled separately below
         } else {
@@ -2000,6 +2036,21 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             } else if (currentMode === 'rectangle') {
                 // Second click to finish rectangle
                 finishPolygon();
+            } else if (currentMode === 'circle') {
+                // Second click sets the edge point and finalises the circle.
+                if (currentPoints.length >= 1) {
+                    currentPoints[1] = [x, y];
+                }
+                const r = getCircleRadius(currentPoints);
+                if (r < 0.5) {
+                    // Reject degenerate circles; keep the center so the user can re-click
+                    // a real edge point instead of starting over.
+                    if (window.notifyBus) {
+                        window.notifyBus.show('warn', 'Circle too small');
+                    }
+                } else {
+                    finishPolygon();
+                }
             }
         }
         draw();
@@ -2073,6 +2124,11 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 }
             } else if (currentMode === 'rectangle') {
                 // Cancel rectangle drawing
+                isDrawing = false;
+                currentPoints = [];
+                draw();
+            } else if (currentMode === 'circle') {
+                // Cancel circle drawing
                 isDrawing = false;
                 currentPoints = [];
                 draw();
@@ -2176,6 +2232,14 @@ canvasWrapper.addEventListener('mousemove', (e) => {
                     const startPoint = currentPoints[0];
                     // Update currentPoints to be just the start and end points (2 points)
                     currentPoints = [startPoint, clampImageCoords(x, y)];
+                } else if (currentMode === 'circle' && currentPoints.length >= 1) {
+                    const rect = canvas.getBoundingClientRect();
+                    const mx = e.clientX - rect.left;
+                    const my = e.clientY - rect.top;
+                    const x = mx / zoomLevel;
+                    const y = my / zoomLevel;
+                    // Keep the center fixed; only the edge point follows the cursor.
+                    currentPoints = [currentPoints[0], [x, y]];
                 }
                 draw(e);
                 animationFrameId = null;
@@ -2801,7 +2865,17 @@ document.addEventListener('mousemove', (e) => {
 
         // Move all points by the delta
         const shape = shapes[shapeBeingEdited];
-        shape.points = originalEditPoints.map(p => clampImageCoords(p[0] + dx, p[1] + dy));
+        if (shape.shape_type === 'circle') {
+            // Translate the center but leave the radius alone — the edge point
+            // must travel with the center even if it lands outside the image,
+            // otherwise the circle deforms when dragged near the boundary.
+            const newCenter = clampImageCoords(originalEditPoints[0][0] + dx, originalEditPoints[0][1] + dy);
+            const cdx = newCenter[0] - originalEditPoints[0][0];
+            const cdy = newCenter[1] - originalEditPoints[0][1];
+            shape.points = [newCenter, [originalEditPoints[1][0] + cdx, originalEditPoints[1][1] + cdy]];
+        } else {
+            shape.points = originalEditPoints.map(p => clampImageCoords(p[0] + dx, p[1] + dy));
+        }
 
         draw();
     } else if (isDraggingVertex && activeVertexIndex !== -1) {
@@ -2837,6 +2911,18 @@ document.addEventListener('mousemove', (e) => {
                         clampImageCoords(p2[0], y)
                     ];
                 }
+            }
+        } else if (shape.shape_type === 'circle') {
+            // Circle: center vertex (index 0) translates both points; edge vertex (index 1)
+            // only repositions the edge so the radius follows the cursor.
+            if (activeVertexIndex === 0) {
+                const newCx = clampImageCoords(x, y);
+                const oldCx = originalEditPoints[0];
+                const dx = newCx[0] - oldCx[0];
+                const dy = newCx[1] - oldCx[1];
+                shape.points = [newCx, [originalEditPoints[1][0] + dx, originalEditPoints[1][1] + dy]];
+            } else {
+                shape.points[1] = [x, y];
             }
         } else {
             // For polygon/line/point, just update the vertex directly
@@ -2975,6 +3061,16 @@ function findAllShapesAt(x, y) {
                 const dy = y - p[1];
                 const distance = Math.sqrt(dx * dx + dy * dy);
                 if (distance <= POINT_CLICK_RADIUS) {
+                    overlappingShapes.push(i);
+                }
+            }
+        } else if (shape.shape_type === 'circle') {
+            // Circle: filled-disc hit-test (click anywhere inside)
+            if (points.length >= 2) {
+                const r = getCircleRadius(points);
+                const dx = x - points[0][0];
+                const dy = y - points[0][1];
+                if (dx * dx + dy * dy <= r * r) {
                     overlappingShapes.push(i);
                 }
             }
@@ -3183,6 +3279,53 @@ function performErase(eraserPolygon) {
                         modified = true;
                     } else {
                         // Convert to polygon(s)
+                        shape.shape_type = 'polygon';
+                        shape.points = flatPolys[0];
+                        let inserted = 0;
+                        for (let j = 1; j < flatPolys.length; j++) {
+                            shapes.splice(i + 1 + inserted, 0, {
+                                label: shape.label,
+                                points: flatPolys[j],
+                                group_id: shape.group_id,
+                                shape_type: 'polygon',
+                                flags: { ...shape.flags },
+                                visible: shape.visible,
+                                description: shape.description
+                            });
+                            inserted++;
+                        }
+                        if (inserted > 0) {
+                            adjustSelectionAfterInsert(i, inserted);
+                        }
+                        i += inserted;
+                        modified = true;
+                    }
+                }
+            }
+        } else if (shape.shape_type === 'circle') {
+            // Circle: polygonize to a 32-segment ring, then apply the same
+            // difference + decomposition flow as polygon. The shape decays to
+            // a polygon (or multiple polygons) whenever the eraser changes its area.
+            const circlePoly = polygonizeCircle(shape.points[0][0], shape.points[0][1], getCircleRadius(shape.points), 32);
+            const originalArea = Math.abs(polygonArea(circlePoly));
+            const result = computePolygonDifference(circlePoly, clipGeom);
+            if (result.length === 0) {
+                shapesToRemove.push(i);
+                modified = true;
+            } else {
+                const flatPolys = result.flatMap(poly => {
+                    const rings = poly.map(ring => removeClosingPoint(ring));
+                    return decomposePolygonWithHoles(rings);
+                }).filter(pts => pts.length >= 3);
+
+                if (flatPolys.length === 0) {
+                    shapesToRemove.push(i);
+                    modified = true;
+                } else {
+                    const resultArea = flatPolys.reduce((sum, pts) => sum + Math.abs(polygonArea(pts)), 0);
+                    if (Math.abs(resultArea - originalArea) < 1e-4) {
+                        // No actual overlap with the circle.
+                    } else {
                         shape.shape_type = 'polygon';
                         shape.points = flatPolys[0];
                         let inserted = 0;
@@ -3790,6 +3933,8 @@ function confirmLabel() {
             shapeType = 'linestrip';
         } else if (currentMode === 'rectangle') {
             shapeType = 'rectangle';
+        } else if (currentMode === 'circle') {
+            shapeType = 'circle';
         } else if (currentMode === 'sam') {
             shapeType = 'polygon'; // SAM always produces polygon shapes
         }
@@ -3907,6 +4052,15 @@ function cancelLabelInput() {
 
     // 点模式：取消应当清除点（因为点模式是单击即完成，取消意味着放弃这个点）
     if (currentMode === 'point') {
+        currentPoints = [];
+        isDrawing = false;
+        draw();
+        return;
+    }
+
+    // Circle mode: the label modal is opened after the second click, so cancel
+    // wipes the in-progress circle (analogous to canceling a rectangle).
+    if (currentMode === 'circle') {
         currentPoints = [];
         isDrawing = false;
         draw();
@@ -4593,6 +4747,7 @@ function updateModeButtons() {
         lineModeBtn.classList.remove('active');
         polygonModeBtn.classList.remove('active');
         rectangleModeBtn.classList.remove('active');
+        if (circleModeBtn) circleModeBtn.classList.remove('active');
         if (samModeBtn) samModeBtn.classList.remove('active');
 
         if (currentMode === 'view') {
@@ -4605,6 +4760,8 @@ function updateModeButtons() {
             polygonModeBtn.classList.add('active');
         } else if (currentMode === 'rectangle') {
             rectangleModeBtn.classList.add('active');
+        } else if (currentMode === 'circle') {
+            if (circleModeBtn) circleModeBtn.classList.add('active');
         } else if (currentMode === 'sam') {
             if (samModeBtn) samModeBtn.classList.add('active');
         }
@@ -4915,6 +5072,28 @@ function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = 
             circle.setAttribute('fill', fillColor);
 
             if (shapeIndex !== -1) {
+                circle.style.cursor = 'pointer';
+                circle.style.pointerEvents = 'auto';
+                circle.dataset.shapeIndex = shapeIndex;
+            }
+
+            group.appendChild(circle);
+        }
+    } else if (shapeType === 'circle') {
+        if (points.length >= 2) {
+            const isCompleted = shapeIndex !== -1;
+            const cx = points[0][0];
+            const cy = points[0][1];
+            const r = getCircleRadius(points);
+            const circle = document.createElementNS(SVG_NS, 'circle');
+            circle.setAttribute('cx', cx);
+            circle.setAttribute('cy', cy);
+            circle.setAttribute('r', r);
+            circle.setAttribute('stroke', strokeColor);
+            circle.setAttribute('stroke-width', adjustedStrokeWidth);
+            circle.setAttribute('fill', isCompleted ? fillColor : 'none');
+
+            if (isCompleted) {
                 circle.style.cursor = 'pointer';
                 circle.style.pointerEvents = 'auto';
                 circle.dataset.shapeIndex = shapeIndex;
@@ -5936,6 +6115,11 @@ if (polygonModeBtn) {
 // Rectangle Mode button
 if (rectangleModeBtn) {
     rectangleModeBtn.onclick = () => setMode('rectangle');
+}
+
+// Circle Mode button
+if (circleModeBtn) {
+    circleModeBtn.onclick = () => setMode('circle');
 }
 
 // --- Image Browser Sidebar ---

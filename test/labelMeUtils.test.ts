@@ -105,6 +105,19 @@ describe('buildSvg', () => {
 
         assert.doesNotMatch(svg, /<path id=/);
     });
+
+    it('renders circle shapes as an SVG <circle> with the derived radius', () => {
+        const svg = buildSvg({
+            imageWidth: 100,
+            imageHeight: 80,
+            shapes: [
+                // center = (50, 40), edge = (53, 44) -> radius = hypot(3, 4) = 5
+                { shape_type: 'circle', points: [[50, 40], [53, 44]] }
+            ]
+        });
+
+        assert.match(svg, /<circle id="circle0"[\s\S]*cx="50\.00" cy="40\.00" r="5\.00"/);
+    });
 });
 
 describe('getImageMetadata', () => {

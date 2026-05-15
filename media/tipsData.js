@@ -25,6 +25,7 @@ const TIPS = {
     'mode.rectangle': { title: 'Rectangle Mode', desc: 'Drag to draw an axis-aligned rectangle. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'R' },
     'mode.line':      { title: 'Line Mode', desc: 'Click two points to draw a line. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'L' },
     'mode.point':     { title: 'Point Mode', desc: 'Click to place a single annotation point. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'O' },
+    'mode.circle':    { title: 'Circle Mode', desc: 'Click to set the center, then click again on the circumference. Shift-click to switch to the eraser (short click for polygon eraser, long-press or drag for rectangle eraser).', shortcut: 'C' },
     'mode.sam':       { title: 'SAM AI Mode', desc: 'Use the SAM service to generate a mask. Click to add a positive point; Shift-click to add a negative point once a positive exists, or to switch to the prompt eraser before the first positive.', shortcut: 'I' },
 
     // Sidebar action buttons

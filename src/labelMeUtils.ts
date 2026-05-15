@@ -82,6 +82,16 @@ export function buildSvg(data: AnnotationPayload): string {
             points = [p1, [p2[0], p1[1]], p2, [p1[0], p2[1]]];
         }
 
+        if (shapeType === 'circle' && points.length >= 2) {
+            const cx = points[0][0];
+            const cy = points[0][1];
+            const r = Math.hypot(points[1][0] - cx, points[1][1] - cy);
+            pathElements.push(`  <circle id="circle${idx}"
+        cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${r.toFixed(2)}"
+        fill="none" stroke="black" stroke-width="1" />`);
+            continue;
+        }
+
         if (shapeType === 'point' && points.length >= 1) {
             const px = points[0][0].toFixed(2);
             const py = points[0][1].toFixed(2);
