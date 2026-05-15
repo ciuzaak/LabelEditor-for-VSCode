@@ -27,8 +27,11 @@
         'browser.find':       { key: 'F', ctrl: true }
     };
 
-    // Backwards-compatibility hardcodes — these remain regardless of user
-    // bindings so existing muscle memory keeps working.
+    // Backwards-compatibility alternates — these dispatch alongside the
+    // primary binding, so users keep existing muscle memory (Ctrl+Y for
+    // Redo, Backspace for Delete) even after remapping the primary. They
+    // are suppressed when the primary is explicitly disabled via Override
+    // (null) — matchAction() enforces that, see comment there.
     const ALT_BINDINGS = {
         'edit.redo':   [{ key: 'Y', ctrl: true }],
         'edit.delete': [{ key: 'Backspace' }]

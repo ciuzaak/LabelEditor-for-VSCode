@@ -5440,11 +5440,12 @@ function hideExportDatasetModal() {
     if (exportDatasetModal) exportDatasetModal.style.display = 'none';
 }
 
-// Build the unsaved-shapes override sent to the host for current-scope
-// export. Returns null when scope isn't 'current' or the image hasn't loaded
-// yet so the host falls through to its disk-read path.
+// Build the unsaved-shapes override the host should substitute for the
+// current image. Sent for both 'current' and 'all' scope: when the user is
+// editing image #3 of 100 and runs export-all, we still want #3 to reflect
+// the in-memory shapes, not the stale sidecar JSON. The host decides whether
+// the current image is even in scope before applying the override.
 function buildExportCurrentImageOverride() {
-    if (getExportScope() !== 'current') return null;
     if (!img || !(img.width > 0) || !(img.height > 0)) return null;
     return {
         shapes: shapes.map(shape => {
@@ -5510,14 +5511,14 @@ if (exportCancelBtn) exportCancelBtn.addEventListener('click', hideExportDataset
 // Re-request preparation when the scope flips between "all" and "current".
 document.querySelectorAll('input[name="exportScope"]').forEach(radio => {
     radio.addEventListener('change', () => {
-        // Forward the unsaved-shapes override so the class-detection preview sees
-    // exactly what the run step will write — without it, new labels from a
-    // dirty edit don't show up in the modal's class list.
-    vscode.postMessage({
-        command: 'exportDatasetPrepare',
-        scope: getExportScope(),
-        currentImage: buildExportCurrentImageOverride() || undefined
-    });
+        // Forward the unsaved-shapes override so the class-detection preview
+        // sees exactly what the run step will write — without it, new labels
+        // from a dirty edit don't show up in the modal's class list.
+        vscode.postMessage({
+            command: 'exportDatasetPrepare',
+            scope: getExportScope(),
+            currentImage: buildExportCurrentImageOverride() || undefined
+        });
     });
 });
 
