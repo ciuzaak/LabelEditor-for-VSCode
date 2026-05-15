@@ -1577,3 +1577,25 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .mode-toggle-stack > .segmented-group {
     display: flex;
 }
+
+/* "More Settings" modal — wider than the default to fit the keybindings list */
+.more-settings-content {
+    min-width: 420px;
+    max-width: 560px;
+}
+.more-settings-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+.more-settings-row label {
+    min-width: 96px;
+}
+/* Visual separator above the "More settings…" menu item */
+.settings-dropdown-divider {
+    height: 1px;
+    background: var(--color-border);
+    margin: 4px 0;
+    opacity: 0.6;
+}

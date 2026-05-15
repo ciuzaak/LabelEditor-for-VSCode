@@ -1472,6 +1472,7 @@ document.addEventListener('keydown', (e) => {
     if (colorPickerModal && colorPickerModal.style.display === 'flex') return;
     if (samConfigModal && samConfigModal.style.display === 'flex') return;
     if (exportDatasetModal && exportDatasetModal.style.display === 'flex') return;
+    if (moreSettingsModal && moreSettingsModal.style.display === 'flex') return;
 
     // Capture mode owns the next press — the row in the settings UI is waiting
     // to bind it. The capture handler attaches/detaches itself; this is just a
@@ -5698,6 +5699,28 @@ if (toolsMenuBtn) {
         e.stopPropagation();
         toggleSidebarDropdown(toolsMenuDropdown, settingsMenuDropdown);
     });
+}
+
+// --- More Settings modal (Language + Keyboard Shortcuts) ---
+const moreSettingsMenuItem = document.getElementById('moreSettingsMenuItem');
+const moreSettingsModal = document.getElementById('moreSettingsModal');
+const moreSettingsCloseBtn = document.getElementById('moreSettingsCloseBtn');
+
+function showMoreSettingsModal() {
+    if (settingsMenuDropdown) settingsMenuDropdown.style.display = 'none';
+    if (!moreSettingsModal) return;
+    moreSettingsModal.style.display = 'flex';
+}
+
+function hideMoreSettingsModal() {
+    if (moreSettingsModal) moreSettingsModal.style.display = 'none';
+}
+
+if (moreSettingsMenuItem) {
+    moreSettingsMenuItem.addEventListener('click', showMoreSettingsModal);
+}
+if (moreSettingsCloseBtn) {
+    moreSettingsCloseBtn.addEventListener('click', hideMoreSettingsModal);
 }
 
 // --- Keyboard Shortcuts settings UI ---

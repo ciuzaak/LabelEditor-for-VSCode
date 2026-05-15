@@ -15,6 +15,8 @@
             'settings.annotationStyle': 'Annotation Style',
             'settings.imageAdjustment': 'Image Adjustment',
             'settings.keyboardShortcuts': 'Keyboard Shortcuts',
+            'settings.language': 'Language',
+            'settings.more': 'More settings…',
 
             // Generic form labels
             'label.theme': 'Theme',
@@ -52,6 +54,7 @@
             'button.add': 'Add',
             'button.startService': 'Start Service',
             'button.resetAllDefaults': 'Reset all to defaults',
+            'button.close': 'Close',
 
             // Modals
             'modal.enterLabel': 'Enter Label',
@@ -59,6 +62,7 @@
             'modal.onnxBatchInfer': 'ONNX Batch Inference',
             'modal.samConfig': 'SAM AI Annotation',
             'modal.exportDataset': 'Export Dataset',
+            'modal.moreSettings': 'More Settings',
 
             // Tools menu
             'tools.exportSvg': 'Export SVG',
@@ -111,6 +115,8 @@
             'settings.annotationStyle': '标注样式',
             'settings.imageAdjustment': '图像调整',
             'settings.keyboardShortcuts': '键盘快捷键',
+            'settings.language': '语言',
+            'settings.more': '更多设置…',
 
             'label.theme': '主题',
             'label.zoom': '缩放',
@@ -146,12 +152,14 @@
             'button.add': '添加',
             'button.startService': '启动服务',
             'button.resetAllDefaults': '全部重置为默认',
+            'button.close': '关闭',
 
             'modal.enterLabel': '输入标签',
             'modal.chooseColor': '选择颜色',
             'modal.onnxBatchInfer': 'ONNX 批量推理',
             'modal.samConfig': 'SAM AI 标注',
             'modal.exportDataset': '导出数据集',
+            'modal.moreSettings': '更多设置',
 
             'tools.exportSvg': '导出 SVG',
             'tools.exportDataset': '导出数据集',

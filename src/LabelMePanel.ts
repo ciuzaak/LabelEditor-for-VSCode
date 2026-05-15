@@ -939,13 +939,6 @@ export class LabelMePanel {
                                             <button id="themeAutoBtn" class="theme-btn segmented-item" data-tip-id="theme.auto"><svg class="icon" aria-hidden="true"><use href="#icon-circle-half"/></svg></button>
                                         </div>
                                     </div>
-                                    <div class="theme-control">
-                                        <label data-i18n="label.language">Language</label>
-                                        <select id="languageSelect" class="language-select">
-                                            <option value="en">English</option>
-                                            <option value="zh-CN">中文</option>
-                                        </select>
-                                    </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
                                             <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" data-tip-id="view.zoomReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
@@ -1000,9 +993,8 @@ export class LabelMePanel {
                                             <input type="range" id="claheClipLimitSlider" min="1" max="10" value="2" step="0.5" data-tip-id="image.claheClipLimit">
                                         </div>
                                     </div>
-                                    <div class="settings-group-header" data-i18n="settings.keyboardShortcuts">Keyboard Shortcuts</div>
-                                    <div class="keybindings-list" id="keybindingsList"></div>
-                                    <button id="keybindingsResetAllBtn" class="btn" style="margin-top: 4px;" data-i18n="button.resetAllDefaults">Reset all to defaults</button>
+                                    <div class="settings-dropdown-divider"></div>
+                                    <div class="sidebar-dropdown-item" id="moreSettingsMenuItem" data-i18n="settings.more">More settings…</div>
                                 </div>
                                 <div id="toolsMenuDropdown" class="sidebar-dropdown" style="display: none;">
                                     <div class="sidebar-dropdown-item" id="exportSvgMenuItem" data-tip-id="tools.exportSvg"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-download"/></svg> <span data-i18n="tools.exportSvg">Export SVG</span></div>
@@ -1219,6 +1211,31 @@ export class LabelMePanel {
                         <div class="modal-buttons">
                             <button id="exportRunBtn" class="btn btn-primary" data-i18n="button.run">Run</button>
                             <button id="exportCancelBtn" class="btn" data-i18n="button.cancel">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Modal for More Settings (Language + Keyboard Shortcuts) -->
+                <div id="moreSettingsModal" class="modal">
+                    <div class="modal-content more-settings-content">
+                        <button class="modal-close" data-modal-close="moreSettingsModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg> <span data-i18n="modal.moreSettings">More Settings</span></h3>
+
+                        <div class="settings-group-header" data-i18n="settings.language">Language</div>
+                        <div class="more-settings-row">
+                            <label data-i18n="label.language">Language</label>
+                            <select id="languageSelect" class="language-select">
+                                <option value="en">English</option>
+                                <option value="zh-CN">中文</option>
+                            </select>
+                        </div>
+
+                        <div class="settings-group-header" data-i18n="settings.keyboardShortcuts">Keyboard Shortcuts</div>
+                        <div class="keybindings-list" id="keybindingsList"></div>
+                        <button id="keybindingsResetAllBtn" class="btn" style="margin-top: 4px;" data-i18n="button.resetAllDefaults">Reset all to defaults</button>
+
+                        <div class="modal-buttons">
+                            <button id="moreSettingsCloseBtn" class="btn btn-primary" data-i18n="button.close">Close</button>
                         </div>
                     </div>
                 </div>
