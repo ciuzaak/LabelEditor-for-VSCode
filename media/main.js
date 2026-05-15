@@ -388,6 +388,14 @@ function applyI18n() {
             n.textContent = text;
         }
     }
+    // Placeholder translations on form inputs.
+    const phNodes = document.querySelectorAll('[data-i18n-placeholder]');
+    for (const n of phNodes) {
+        const key = n.getAttribute('data-i18n-placeholder');
+        if (!key) continue;
+        const text = window.i18n.t(key);
+        if (text) n.setAttribute('placeholder', text);
+    }
 }
 
 // Boot the keyboard-binding table. Persisted overrides from initialGlobalSettings
@@ -790,7 +798,10 @@ function handleImageLoad() {
 }
 
 function handleImageError() {
-    if (window.notifyBus) window.notifyBus.show('error', 'Error loading image', { sticky: true, key: 'image.error' });
+    if (window.notifyBus) {
+        const msg = (window.i18n && window.i18n.t) ? window.i18n.t('status.imageLoadError') : 'Error loading image';
+        window.notifyBus.show('error', msg, { sticky: true, key: 'image.error' });
+    }
 }
 
 // Initial image load with stale callback protection
@@ -1304,7 +1315,10 @@ function handleImageUpdate(message) {
         isDrawing = false;
         clearSelection();
         editingShapeIndex = -1;
-        if (window.notifyBus) window.notifyBus.show('warn', 'No images found');
+        if (window.notifyBus) {
+            const msg = (window.i18n && window.i18n.t) ? window.i18n.t('status.noImagesFound') : 'No images found';
+            window.notifyBus.show('warn', msg);
+        }
         draw();
         renderShapeList();
         renderLabelsList();
@@ -4585,7 +4599,12 @@ function confirmColorPicker() {
 
     // 验证颜色格式 - 只接受#XXXXXX格式
     if (!color.startsWith('#') || !/^#[0-9A-Fa-f]{6}$/.test(color)) {
-        if (window.notifyBus) window.notifyBus.show('error', 'Invalid color format. Please use #RRGGBB format (e.g., #FF5733).');
+        if (window.notifyBus) {
+            const msg = (window.i18n && window.i18n.t)
+                ? window.i18n.t('status.invalidColor')
+                : 'Invalid color format. Please use #RRGGBB format (e.g., #FF5733).';
+            window.notifyBus.show('error', msg);
+        }
         return;
     }
 
@@ -5245,7 +5264,12 @@ function exportSvg() {
 
     // Guard: image must be fully loaded so dimensions are available
     if (!img.width || !img.height) {
-        if (window.notifyBus) window.notifyBus.show('warn', 'Cannot export SVG: image has not finished loading yet. Please wait and try again.');
+        if (window.notifyBus) {
+            const msg = (window.i18n && window.i18n.t)
+                ? window.i18n.t('status.svgNotReady')
+                : 'Cannot export SVG: image has not finished loading yet. Please wait and try again.';
+            window.notifyBus.show('warn', msg);
+        }
         return;
     }
 
@@ -7267,7 +7291,8 @@ async function samEncode(imagePath, crop, adjustSig) {
 
     const doEncode = async () => {
         samIsEncoding = true;
-        window.notifyBus.show('info', 'SAM Encoding…', { sticky: true, key: 'sam.status' });
+        const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k, p) => k;
+        window.notifyBus.show('info', tt('status.samEncoding'), { sticky: true, key: 'sam.status' });
         try {
             const payload = { image_path: imagePath };
             if (crop) payload.crop = crop;
@@ -7278,7 +7303,7 @@ async function samEncode(imagePath, crop, adjustSig) {
             if (adjustSig) {
                 const b64 = samBuildAdjustedPngB64();
                 if (!b64) {
-                    window.notifyBus.show('error', 'SAM Adjusted Encode Error');
+                    window.notifyBus.show('error', tt('status.samAdjEncodeError'));
                     window.notifyBus.clearSticky('sam.status');
                     return;
                 }
@@ -7298,13 +7323,13 @@ async function samEncode(imagePath, crop, adjustSig) {
                 samCachedAdjustSig = adjustSig || null;
                 const modeLabel = crop ? 'Local' : 'Full';
                 const adjLabel = adjustSig ? ' • Adjusted' : '';
-                window.notifyBus.show('success', `SAM Ready [${modeLabel}${adjLabel}] (${data.time_ms || 0}ms)`, { sticky: true, key: 'sam.status' });
+                window.notifyBus.show('success', tt('status.samReady', { mode: modeLabel, adj: adjLabel, time: data.time_ms || 0 }), { sticky: true, key: 'sam.status' });
             } else {
-                window.notifyBus.show('error', 'SAM Encode Error');
+                window.notifyBus.show('error', tt('status.samEncodeError'));
                 window.notifyBus.clearSticky('sam.status');
             }
         } catch (err) {
-            window.notifyBus.show('error', 'SAM Service Error');
+            window.notifyBus.show('error', tt('status.samServiceError'));
             window.notifyBus.clearSticky('sam.status');
         } finally {
             samIsEncoding = false;
@@ -7443,7 +7468,8 @@ async function samDecode() {
                 samMaskContour = data.contour;
             }
             const modeLabel = samCachedCrop ? 'Local' : 'Full';
-            window.notifyBus.show('success', `SAM Decoded [${modeLabel}] (${data.time_ms || 0}ms)`, { sticky: true, key: 'sam.status' });
+            const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k, p) => k;
+            window.notifyBus.show('success', tt('status.samDecoded', { mode: modeLabel, time: data.time_ms || 0 }), { sticky: true, key: 'sam.status' });
             draw();
             // Note: don't call updateShiftFeedback here — samDecode doesn't
             // mutate samPrompts, so feedback content is unchanged. Calling it
@@ -7451,7 +7477,8 @@ async function samDecode() {
         }
     } catch (err) {
         if (requestVersion !== samDecodeVersion) return;
-        window.notifyBus.show('error', 'SAM Decode Error');
+        const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
+        window.notifyBus.show('error', tt('status.samDecodeError'));
     } finally {
         samIsDecoding = false;
     }

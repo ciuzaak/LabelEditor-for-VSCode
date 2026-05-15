@@ -65,16 +65,33 @@
     }
 
     function tipFor(el) {
-        const tip = helpers.resolveTipForAttrs({
-            tipId:   el.getAttribute('data-tip-id'),
-            tipText: el.getAttribute('data-tip-text'),
-            tipsDict
-        });
+        const tipId = el.getAttribute('data-tip-id');
+        const tipText = el.getAttribute('data-tip-text');
+        const base = helpers.resolveTipForAttrs({ tipId, tipText, tipsDict });
+        if (!base) return null;
+
+        // Layer in localized strings when i18n is loaded and has entries for
+        // this tip id; otherwise fall through to the English fallback that
+        // already lives in tipsData. Keys: tip.<id>.title and tip.<id>.desc.
+        let tip = base;
+        if (tipId && window.i18n && window.i18n.t) {
+            const titleKey = 'tip.' + tipId + '.title';
+            const descKey = 'tip.' + tipId + '.desc';
+            const t = window.i18n.t(titleKey);
+            const d = window.i18n.t(descKey);
+            const localized = {};
+            if (t && t !== titleKey) localized.title = t;
+            if (d && d !== descKey) localized.desc = d;
+            if (localized.title || localized.desc) {
+                tip = Object.assign({}, base, localized);
+            }
+        }
+
         // If the entry advertises a rebindable action, override its shortcut
         // string with the live binding so users see what's currently active.
         // Falls through to the static `shortcut` field when bindings aren't
         // loaded (early init) or the action has no current binding.
-        if (tip && tip.shortcutAction && window.keybindings && window.currentBindings) {
+        if (tip.shortcutAction && window.keybindings && window.currentBindings) {
             const live = window.currentBindings[tip.shortcutAction];
             if (live) {
                 const display = window.keybindings.display(live);

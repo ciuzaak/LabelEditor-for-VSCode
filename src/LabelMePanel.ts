@@ -876,7 +876,7 @@ export class LabelMePanel {
                         <div id="searchInputContainer" class="search-input-container" style="display: none;">
                             <div class="search-field">
                                 <svg class="icon icon-sm search-field__icon" aria-hidden="true"><use href="#icon-search"/></svg>
-                                <input type="search" id="searchInput" placeholder="Search images…" />
+                                <input type="search" id="searchInput" placeholder="Search images…" data-i18n-placeholder="placeholder.searchImages" />
                                 <button id="searchCloseBtn" class="search-field__clear" data-tip-id="browser.searchClose" aria-label="Clear search"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                             </div>
                         </div>
@@ -941,23 +941,23 @@ export class LabelMePanel {
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Zoom: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" data-tip-id="view.zoomReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
+                                            <label><span data-i18n="label.zoom">Zoom</span>: <span id="zoomPercentage">100%</span> <span id="zoomResetBtn" class="slider-reset-btn" data-tip-id="view.zoomReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
                                             <button id="zoomLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="view.zoomLock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                     </div>
                                     <div class="settings-group-header" data-i18n="settings.annotationStyle">Annotation Style</div>
                                     <div class="slider-control">
-                                        <label>Border Width: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" data-tip-id="style.borderWidthReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
+                                        <label><span data-i18n="label.borderWidth">Border Width</span>: <span id="borderWidthValue">2</span>px <span id="borderWidthResetBtn" class="slider-reset-btn" data-tip-id="style.borderWidthReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
                                         <input type="range" id="borderWidthSlider" min="1" max="5" value="2" step="0.5" data-tip-id="style.borderWidth">
                                     </div>
                                     <div class="slider-control">
-                                        <label>Fill Opacity: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" data-tip-id="style.fillOpacityReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
+                                        <label><span data-i18n="label.fillOpacity">Fill Opacity</span>: <span id="fillOpacityValue">30</span>% <span id="fillOpacityResetBtn" class="slider-reset-btn" data-tip-id="style.fillOpacityReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
                                         <input type="range" id="fillOpacitySlider" min="0" max="100" value="30" step="5" data-tip-id="style.fillOpacity">
                                     </div>
                                     <div class="settings-group-header" data-i18n="settings.imageAdjustment">Image Adjustment</div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Channel:</label>
+                                            <label data-i18n="label.channel">Channel</label>
                                             <button id="channelLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="channel.lock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <div class="onnx-radio-group segmented-group">
@@ -969,27 +969,27 @@ export class LabelMePanel {
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Brightness: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" data-tip-id="image.brightnessReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
+                                            <label><span data-i18n="label.brightness">Brightness</span>: <span id="brightnessValue">100</span>% <span id="brightnessResetBtn" class="slider-reset-btn" data-tip-id="image.brightnessReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
                                             <button id="brightnessLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="image.brightnessLock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <input type="range" id="brightnessSlider" min="10" max="300" value="100" step="5" data-tip-id="image.brightness">
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>Contrast: <span id="contrastValue">100</span>% <span id="contrastResetBtn" class="slider-reset-btn" data-tip-id="image.contrastReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
+                                            <label><span data-i18n="label.contrast">Contrast</span>: <span id="contrastValue">100</span>% <span id="contrastResetBtn" class="slider-reset-btn" data-tip-id="image.contrastReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span></label>
                                             <button id="contrastLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="image.contrastLock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <input type="range" id="contrastSlider" min="10" max="300" value="100" step="5" data-tip-id="image.contrast">
                                     </div>
                                     <div class="zoom-control">
                                         <div class="zoom-header">
-                                            <label>CLAHE:</label>
+                                            <label data-i18n="label.clahe">CLAHE</label>
                                             <button id="claheToggleBtn" class="channel-btn" data-tip-id="image.claheToggle">Off</button>
                                             <span id="claheResetBtn" class="slider-reset-btn" data-tip-id="image.claheReset"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-rotate-ccw"/></svg></span>
                                             <button id="claheLockBtn" class="btn btn-icon zoom-lock-btn" data-tip-id="image.claheLock"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-lock-open"/></svg></button>
                                         </div>
                                         <div id="claheControls" style="display: none;">
-                                            <div style="font-size: 0.8em; margin-top: 4px;">Clip Limit: <span id="claheClipLimitValue">2.0</span></div>
+                                            <div style="font-size: 0.8em; margin-top: 4px;"><span data-i18n="label.clipLimit">Clip Limit</span>: <span id="claheClipLimitValue">2.0</span></div>
                                             <input type="range" id="claheClipLimitSlider" min="1" max="10" value="2" step="0.5" data-tip-id="image.claheClipLimit">
                                         </div>
                                     </div>
@@ -1028,8 +1028,8 @@ export class LabelMePanel {
                     <div class="modal-content">
                         <button class="modal-close" data-modal-close="labelModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3 data-i18n="modal.enterLabel">Enter Label</h3>
-                        <input type="text" id="labelInput" placeholder="Enter label name">
-                        <textarea id="descriptionInput" placeholder="Add description (optional)" rows="2"></textarea>
+                        <input type="text" id="labelInput" placeholder="Enter label name" data-i18n-placeholder="placeholder.enterLabel">
+                        <textarea id="descriptionInput" placeholder="Add description (optional)" rows="2" data-i18n-placeholder="placeholder.addDescription"></textarea>
                         <div id="recentLabels"></div>
                         <div class="modal-buttons">
                             <button id="modalOkBtn" class="btn btn-primary" data-i18n="button.ok">OK</button>
@@ -1059,59 +1059,59 @@ export class LabelMePanel {
                 <div id="onnxInferModal" class="modal">
                     <div class="modal-content onnx-infer-content">
                         <button class="modal-close" data-modal-close="onnxInferModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
-                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> ONNX Batch Inference</h3>
-                        <div class="onnx-note">Output: polygon only</div>
+                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> <span data-i18n="modal.onnxBatchInfer">ONNX Batch Inference</span></h3>
+                        <div class="onnx-note" data-i18n="onnx.outputNote">Output: polygon only</div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="onnx.modelDir">Model Directory</label>
+                            <label data-tip-id="onnx.modelDir" data-i18n="label.modelDir">Model Directory</label>
                             <div class="onnx-path-input">
-                                <input type="text" id="onnxModelDir" placeholder="Path to directory with .onnx and labels.json" />
+                                <input type="text" id="onnxModelDir" placeholder="Path to directory with .onnx and labels.json" data-i18n-placeholder="placeholder.onnxModelDir" />
                                 <button id="onnxModelDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="onnx.modelDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="onnx.pythonPath">Python Interpreter</label>
+                            <label data-tip-id="onnx.pythonPath" data-i18n="label.pythonPath">Python Interpreter</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="onnxPythonPath" placeholder="python" />
                                 <button id="onnxPythonPathBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="onnx.pythonBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="onnx.device">Device</label>
+                            <label data-tip-id="onnx.device" data-i18n="label.device">Device</label>
                             <div class="onnx-radio-group segmented-group">
-                                <label class="onnx-radio"><input type="radio" name="onnxDevice" value="cpu" checked /> CPU</label>
-                                <label class="onnx-radio"><input type="radio" name="onnxDevice" value="gpu" /> GPU</label>
+                                <label class="onnx-radio"><input type="radio" name="onnxDevice" value="cpu" checked /> <span data-i18n="device.cpu">CPU</span></label>
+                                <label class="onnx-radio"><input type="radio" name="onnxDevice" value="gpu" /> <span data-i18n="device.gpu">GPU</span></label>
                             </div>
                             <div id="onnxGpuIndexGroup" style="display:none; margin-top:6px">
-                                <label style="font-size:0.9em" data-tip-id="onnx.gpuIndex">GPU</label>
+                                <label style="font-size:0.9em" data-tip-id="onnx.gpuIndex" data-i18n="label.gpu">GPU</label>
                                 <select id="onnxGpuIndex" style="margin-left:6px; min-width:180px"></select>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="onnx.colorFormat">Color Format</label>
+                            <label data-tip-id="onnx.colorFormat" data-i18n="label.colorFormat">Color Format</label>
                             <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="onnxColor" value="rgb" checked /> RGB</label>
                                 <label class="onnx-radio"><input type="radio" name="onnxColor" value="bgr" /> BGR</label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="onnx.scope">Scope</label>
+                            <label data-tip-id="onnx.scope" data-i18n="label.scope">Scope</label>
                             <div class="onnx-radio-group segmented-group">
-                                <label class="onnx-radio"><input type="radio" name="onnxScope" value="all" checked /> All Images</label>
-                                <label class="onnx-radio"><input type="radio" name="onnxScope" value="current" /> Current Image</label>
+                                <label class="onnx-radio"><input type="radio" name="onnxScope" value="all" checked /> <span data-i18n="scope.all">All Images</span></label>
+                                <label class="onnx-radio"><input type="radio" name="onnxScope" value="current" /> <span data-i18n="scope.current">Current Image</span></label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="onnx.mode">Existing Annotations</label>
+                            <label data-tip-id="onnx.mode" data-i18n="label.existingAnnotations">Existing Annotations</label>
                             <div class="onnx-radio-group segmented-group">
-                                <label class="onnx-radio"><input type="radio" name="onnxMode" value="skip" checked /> Skip</label>
-                                <label class="onnx-radio"><input type="radio" name="onnxMode" value="merge" /> Merge</label>
-                                <label class="onnx-radio"><input type="radio" name="onnxMode" value="overwrite" /> Overwrite</label>
+                                <label class="onnx-radio"><input type="radio" name="onnxMode" value="skip" checked /> <span data-i18n="onnxMode.skip">Skip</span></label>
+                                <label class="onnx-radio"><input type="radio" name="onnxMode" value="merge" /> <span data-i18n="onnxMode.merge">Merge</span></label>
+                                <label class="onnx-radio"><input type="radio" name="onnxMode" value="overwrite" /> <span data-i18n="onnxMode.overwrite">Overwrite</span></label>
                             </div>
                         </div>
-                        <div class="onnx-image-count">Images to process: <strong id="onnxImageCount">0</strong></div>
+                        <div class="onnx-image-count"><span data-i18n="onnx.imagesToProcess">Images to process</span>: <strong id="onnxImageCount">0</strong></div>
                         <div class="modal-buttons">
-                            <button id="onnxInferOkBtn" class="btn btn-primary">Run</button>
-                            <button id="onnxInferCancelBtn" class="btn">Cancel</button>
+                            <button id="onnxInferOkBtn" class="btn btn-primary" data-i18n="button.run">Run</button>
+                            <button id="onnxInferCancelBtn" class="btn" data-i18n="button.cancel">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -1120,54 +1120,54 @@ export class LabelMePanel {
                 <div id="samConfigModal" class="modal">
                     <div class="modal-content onnx-infer-content">
                         <button class="modal-close" data-modal-close="samConfigModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
-                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> SAM AI Annotation</h3>
-                        <div class="onnx-note">Configure SAM service for interactive annotation</div>
+                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> <span data-i18n="modal.samConfig">SAM AI Annotation</span></h3>
+                        <div class="onnx-note" data-i18n="sam.configNote">Configure SAM service for interactive annotation</div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="sam.modelDir">Model Directory</label>
+                            <label data-tip-id="sam.modelDir" data-i18n="label.modelDir">Model Directory</label>
                             <div class="onnx-path-input">
-                                <input type="text" id="samModelDir" placeholder="Path to directory with encoder.onnx and decoder.onnx" />
+                                <input type="text" id="samModelDir" placeholder="Path to directory with encoder.onnx and decoder.onnx" data-i18n-placeholder="placeholder.samModelDir" />
                                 <button id="samModelDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="sam.modelDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="sam.pythonPath">Python Interpreter</label>
+                            <label data-tip-id="sam.pythonPath" data-i18n="label.pythonPath">Python Interpreter</label>
                             <div class="onnx-path-input">
                                 <input type="text" id="samPythonPath" placeholder="python" />
                                 <button id="samPythonPathBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="sam.pythonBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="sam.device">Device</label>
+                            <label data-tip-id="sam.device" data-i18n="label.device">Device</label>
                             <div class="onnx-radio-group segmented-group">
-                                <label class="onnx-radio"><input type="radio" name="samDevice" value="cpu" checked /> CPU</label>
-                                <label class="onnx-radio"><input type="radio" name="samDevice" value="gpu" /> GPU</label>
+                                <label class="onnx-radio"><input type="radio" name="samDevice" value="cpu" checked /> <span data-i18n="device.cpu">CPU</span></label>
+                                <label class="onnx-radio"><input type="radio" name="samDevice" value="gpu" /> <span data-i18n="device.gpu">GPU</span></label>
                             </div>
                             <div id="samGpuIndexGroup" style="display:none; margin-top:6px">
-                                <label style="font-size:0.9em" data-tip-id="sam.gpuIndex">GPU</label>
+                                <label style="font-size:0.9em" data-tip-id="sam.gpuIndex" data-i18n="label.gpu">GPU</label>
                                 <select id="samGpuIndex" style="margin-left:6px; min-width:180px"></select>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="sam.encodeMode">Encode Mode</label>
+                            <label data-tip-id="sam.encodeMode" data-i18n="label.encodeMode">Encode Mode</label>
                             <div class="onnx-radio-group segmented-group">
-                                <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="full" checked /> Full Image</label>
-                                <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="local" /> Local Crop</label>
+                                <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="full" checked /> <span data-i18n="encodeMode.full">Full Image</span></label>
+                                <label class="onnx-radio"><input type="radio" name="samEncodeMode" value="local" /> <span data-i18n="encodeMode.local">Local Crop</span></label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="sam.encodeAdjusted">Encode Source</label>
+                            <label data-tip-id="sam.encodeAdjusted" data-i18n="label.encodeSource">Encode Source</label>
                             <div class="onnx-radio-group segmented-group">
-                                <label class="onnx-radio"><input type="radio" name="samEncodeSource" value="original" checked /> Original</label>
-                                <label class="onnx-radio"><input type="radio" name="samEncodeSource" value="adjusted" /> Adjusted View</label>
+                                <label class="onnx-radio"><input type="radio" name="samEncodeSource" value="original" checked /> <span data-i18n="encodeSource.original">Original</span></label>
+                                <label class="onnx-radio"><input type="radio" name="samEncodeSource" value="adjusted" /> <span data-i18n="encodeSource.adjusted">Adjusted View</span></label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label data-tip-id="sam.port">Port</label>
+                            <label data-tip-id="sam.port" data-i18n="label.port">Port</label>
                             <input type="number" id="samPort" value="8765" min="1024" max="65535" style="width:80px" />
                         </div>
                         <div class="modal-buttons">
-                            <button id="samConfigOkBtn" class="btn btn-primary">Start Service</button>
-                            <button id="samConfigCancelBtn" class="btn">Cancel</button>
+                            <button id="samConfigOkBtn" class="btn btn-primary" data-i18n="button.startService">Start Service</button>
+                            <button id="samConfigCancelBtn" class="btn" data-i18n="button.cancel">Cancel</button>
                         </div>
                     </div>
                 </div>
@@ -1180,22 +1180,22 @@ export class LabelMePanel {
                         <div class="onnx-form-group">
                             <label data-tip-id="export.format" data-i18n="label.format">Format</label>
                             <div class="onnx-radio-group segmented-group">
-                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="coco" checked /> COCO</label>
-                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="yolo-bbox" /> YOLO bbox</label>
-                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="yolo-seg" /> YOLO seg</label>
+                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="coco" checked /> <span data-i18n="format.coco">COCO</span></label>
+                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="yolo-bbox" /> <span data-i18n="format.yoloBbox">YOLO bbox</span></label>
+                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="yolo-seg" /> <span data-i18n="format.yoloSeg">YOLO seg</span></label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="export.scope" data-i18n="label.scope">Scope</label>
                             <div class="onnx-radio-group segmented-group">
-                                <label class="onnx-radio"><input type="radio" name="exportScope" value="all" checked /> All Images</label>
-                                <label class="onnx-radio"><input type="radio" name="exportScope" value="current" /> Current Image</label>
+                                <label class="onnx-radio"><input type="radio" name="exportScope" value="all" checked /> <span data-i18n="scope.all">All Images</span></label>
+                                <label class="onnx-radio"><input type="radio" name="exportScope" value="current" /> <span data-i18n="scope.current">Current Image</span></label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="export.outputDir" data-i18n="label.outputDir">Output Directory</label>
                             <div class="onnx-path-input">
-                                <input type="text" id="exportOutputDir" placeholder="Folder to write the converted files" />
+                                <input type="text" id="exportOutputDir" placeholder="Folder to write the converted files" data-i18n-placeholder="placeholder.exportOutputDir" />
                                 <button id="exportOutputDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
@@ -1203,7 +1203,7 @@ export class LabelMePanel {
                             <label data-tip-id="export.classes"><span data-i18n="label.classes">Classes</span> <span style="font-weight:normal; opacity:0.7">(<span data-i18n="label.classOrderHint">order = class index</span>)</span></label>
                             <ul id="exportClassList" class="export-class-list"></ul>
                             <div class="export-add-class">
-                                <input type="text" id="exportAddClassInput" placeholder="Add class name" />
+                                <input type="text" id="exportAddClassInput" placeholder="Add class name" data-i18n-placeholder="placeholder.addClass" />
                                 <button id="exportAddClassBtn" class="btn" data-i18n="button.add">Add</button>
                             </div>
                         </div>
