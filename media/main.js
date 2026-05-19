@@ -4207,14 +4207,17 @@ document.addEventListener('keydown', (e) => {
         }
         return;
     }
-    // Export dataset modal — Enter submits, Escape cancels. Skip Enter when
-    // the user is in the add-class input so they can keep typing.
+    // Export dataset modal — Enter submits, Escape cancels. Only the
+    // add-class input swallows Enter (so the user can keep typing class
+    // names); other inputs like the output-dir path still submit on Enter.
     if (exportDatasetModal && exportDatasetModal.style.display === 'flex') {
         if (e.key === 'Escape') {
             e.preventDefault();
             e.stopPropagation();
             hideExportDatasetModal();
-        } else if (e.key === 'Enter' && activeTag !== 'BUTTON' && activeTag !== 'INPUT') {
+        } else if (e.key === 'Enter'
+                   && activeTag !== 'BUTTON'
+                   && document.activeElement !== exportAddClassInput) {
             e.preventDefault();
             e.stopPropagation();
             submitExportDataset();
