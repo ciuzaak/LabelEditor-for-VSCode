@@ -187,6 +187,57 @@ describe('buildClassesTxt', () => {
     });
 });
 
+describe('COCO segmentation ring closure', () => {
+    it('closes the ring by repeating the first vertex at the end', () => {
+        const images: ExportImage[] = [{
+            fileName: 'a.png', width: 100, height: 100,
+            shapes: [
+                { label: 'cat', shape_type: 'rectangle', points: [[0, 0], [10, 20]] }
+            ]
+        }];
+        const { document } = buildCocoDocument(images, ['cat']);
+        const seg = (document as any).annotations[0].segmentation[0] as number[];
+        // 4 vertices + repeated first = 10 numbers.
+        assert.equal(seg.length, 10);
+        assert.equal(seg[0], seg[seg.length - 2]);
+        assert.equal(seg[1], seg[seg.length - 1]);
+    });
+});
+
+describe('malformed shape points', () => {
+    const badShapes = [
+        { label: 'cat', shape_type: 'polygon', points: null as any },
+        { label: 'cat', shape_type: 'polygon', points: [[1, 2], [3, 'four' as any]] },
+        { label: 'cat', shape_type: 'polygon', points: [[NaN, 0], [10, 0], [10, 10]] },
+        { label: 'cat', shape_type: 'polygon', points: [[Infinity, 0], [10, 0], [10, 10]] }
+    ];
+
+    it('COCO skips malformed shapes and warns instead of crashing', () => {
+        const images: ExportImage[] = [{ fileName: 'a.png', width: 100, height: 100, shapes: badShapes }];
+        const { document, warnings } = buildCocoDocument(images, ['cat']);
+        assert.equal((document as any).annotations.length, 0);
+        assert.equal(warnings.length, badShapes.length);
+        assert.ok(warnings.every(w => w.reason === 'invalid points'));
+    });
+
+    it('YOLO bbox skips malformed shapes', () => {
+        const image: ExportImage = { fileName: 'a.png', width: 100, height: 100, shapes: badShapes };
+        const { text, warnings } = buildYoloBboxLines(image, ['cat']);
+        assert.equal(text, '');
+        assert.equal(warnings.length, badShapes.length);
+        // No "NaN" tokens leak into the output.
+        assert.ok(!text.includes('NaN'));
+    });
+
+    it('YOLO seg skips malformed shapes', () => {
+        const image: ExportImage = { fileName: 'a.png', width: 100, height: 100, shapes: badShapes };
+        const { text, warnings } = buildYoloSegLines(image, ['cat']);
+        assert.equal(text, '');
+        assert.equal(warnings.length, badShapes.length);
+        assert.ok(!text.includes('NaN'));
+    });
+});
+
 describe('degenerate geometry rejection', () => {
     it('COCO drops a zero-radius circle with a zero-area warning', () => {
         const images: ExportImage[] = [{

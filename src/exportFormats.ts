@@ -109,6 +109,34 @@ function ringToFlat(points: number[][]): number[] {
     return flat;
 }
 
+// Most modern COCO consumers (pycocotools, FiftyOne, the ultralytics
+// importer) accept open rings, but several older or naive parsers expect
+// the ring to be closed — first vertex repeated at the end. Closing adds
+// only two coordinates and silences every variant. Used at the COCO
+// segmentation serialisation site only; YOLO seg keeps the open form.
+function ringToFlatClosed(points: number[][]): number[] {
+    const flat = ringToFlat(points);
+    if (points.length > 0) {
+        flat.push(points[0][0], points[0][1]);
+    }
+    return flat;
+}
+
+// Check that a points array is well-formed: every element is a [x, y] pair
+// with finite numeric coordinates. Returns true only when the entire array
+// is usable; downstream converters can trust `points[i][0/1]` afterwards.
+function isValidPointList(points: unknown): points is number[][] {
+    if (!Array.isArray(points)) return false;
+    for (const p of points) {
+        if (!Array.isArray(p) || p.length < 2) return false;
+        const x = (p as number[])[0];
+        const y = (p as number[])[1];
+        if (typeof x !== 'number' || typeof y !== 'number') return false;
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+    }
+    return true;
+}
+
 export function buildCocoDocument(images: ExportImage[], classes: string[]): {
     document: object;
     warnings: ExportWarning[];
@@ -137,6 +165,13 @@ export function buildCocoDocument(images: ExportImage[], classes: string[]): {
                 warnings.push({ image: image.fileName, label, shape_type: shape.shape_type, reason: 'label not in class list' });
                 continue;
             }
+            // Reject shapes with malformed points up front so we never let a
+            // NaN or non-array slip into the JSON. Without this guard a
+            // corrupt sidecar JSON would crash the entire export.
+            if (!isValidPointList(shape.points)) {
+                warnings.push({ image: image.fileName, label, shape_type: shape.shape_type, reason: 'invalid points' });
+                continue;
+            }
             const t = shape.shape_type || 'polygon';
             if (t === 'point' || t === 'linestrip') {
                 warnings.push({ image: image.fileName, label, shape_type: t, reason: 'shape type not supported by COCO Instances' });
@@ -157,7 +192,10 @@ export function buildCocoDocument(images: ExportImage[], classes: string[]): {
                 id: nextAnnId++,
                 image_id: imageId,
                 category_id: catId,
-                segmentation: [ringToFlat(ring)],
+                // Close the ring at the COCO serialisation site to maximise
+                // compatibility with picky consumers (some parsers reject
+                // open rings even though pycocotools accepts them).
+                segmentation: [ringToFlatClosed(ring)],
                 bbox: [bbox.x, bbox.y, bbox.w, bbox.h],
                 area,
                 iscrowd: 0
@@ -181,6 +219,12 @@ export function buildCocoDocument(images: ExportImage[], classes: string[]): {
 }
 
 function clamp01(v: number): number {
+    // NaN/Infinity collapse to 0 — without this guard, a single malformed
+    // coordinate would emit "NaN" into a YOLO line and the entire file
+    // would be rejected by trainers (ultralytics, darknet, ...). Returning
+    // 0 keeps the file parseable; the upstream isValidPointList guard
+    // makes sure non-finite values never reach here in practice anyway.
+    if (!Number.isFinite(v)) return 0;
     if (v < 0) return 0;
     if (v > 1) return 1;
     return v;
@@ -197,6 +241,12 @@ export function buildYoloBboxLines(image: ExportImage, classes: string[]): { tex
         const idx = classIndex.get(label);
         if (idx === undefined) {
             warnings.push({ image: image.fileName, label, shape_type: shape.shape_type, reason: 'label not in class list' });
+            continue;
+        }
+        // Block malformed points before reaching division — same rationale
+        // as the COCO path: one NaN coordinate poisons the entire .txt.
+        if (!isValidPointList(shape.points)) {
+            warnings.push({ image: image.fileName, label, shape_type: shape.shape_type, reason: 'invalid points' });
             continue;
         }
         const box = shapeAabb(shape);
@@ -242,6 +292,10 @@ export function buildYoloSegLines(image: ExportImage, classes: string[]): { text
         const idx = classIndex.get(label);
         if (idx === undefined) {
             warnings.push({ image: image.fileName, label, shape_type: shape.shape_type, reason: 'label not in class list' });
+            continue;
+        }
+        if (!isValidPointList(shape.points)) {
+            warnings.push({ image: image.fileName, label, shape_type: shape.shape_type, reason: 'invalid points' });
             continue;
         }
         const t = shape.shape_type || 'polygon';

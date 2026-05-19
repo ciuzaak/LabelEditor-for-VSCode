@@ -1386,13 +1386,22 @@ export class LabelMePanel {
         const currentRel = path.relative(this._rootPath, this._imageUri.fsPath);
         const relPaths = scope === 'current' ? [currentRel] : this._workspaceImages.slice();
 
+        // On case-insensitive filesystems (Windows/macOS) the path the user
+        // opened may differ in case from the workspace-scan entry, so a
+        // strict equality check could miss the current-image substitution
+        // during an all-scope export. Compare case-folded keys on those
+        // platforms; keep the strict comparison on POSIX.
+        const caseInsensitivePaths = process.platform === 'win32' || process.platform === 'darwin';
+        const sameImage = (a: string, b: string) =>
+            caseInsensitivePaths ? a.toLowerCase() === b.toLowerCase() : a === b;
+
         const images: ExportImage[] = [];
         for (const rel of relPaths) {
             // Prefer the in-memory shapes for the current image when the caller
             // supplied them — otherwise an unsaved edit silently exports the
             // stale sidecar JSON, which is the opposite of what a user
             // re-running export expects after tweaking annotations.
-            if (currentOverride && rel === currentRel) {
+            if (currentOverride && sameImage(rel, currentRel)) {
                 images.push({
                     fileName: rel.replace(/\\/g, '/'),
                     width: currentOverride.width,
@@ -1504,17 +1513,22 @@ export class LabelMePanel {
                 // FINAL chosen names — counting by base alone would still
                 // collide when an input happens to be named `foo_2.jpg`
                 // alongside a `foo.jpg` (the manual suffix consumes the slot
-                // that the auto-suffix would have wanted).
+                // that the auto-suffix would have wanted). On Windows / macOS
+                // the underlying filesystem is case-insensitive, so the
+                // collision key is case-folded too — otherwise `foo.txt` and
+                // `FOO.txt` would silently overwrite each other on disk.
+                const caseInsensitiveFs = process.platform === 'win32' || process.platform === 'darwin';
+                const collisionKey = (s: string) => caseInsensitiveFs ? s.toLowerCase() : s;
                 const usedFinal = new Set<string>();
                 for (const img of usable) {
                     const base = path.basename(img.fileName, path.extname(img.fileName));
                     let finalName = base;
                     let n = 2;
-                    while (usedFinal.has(finalName)) {
+                    while (usedFinal.has(collisionKey(finalName))) {
                         finalName = `${base}_${n}`;
                         n++;
                     }
-                    usedFinal.add(finalName);
+                    usedFinal.add(collisionKey(finalName));
                     const out = config.format === 'yolo-bbox'
                         ? buildYoloBboxLines(img, config.classes)
                         : buildYoloSegLines(img, config.classes);
@@ -1546,16 +1560,26 @@ export class LabelMePanel {
             await this._globalState.update('exportOutputDir', config.outputDir);
             await this._globalState.update('exportClasses', config.classes);
 
-            const skipMsg = skippedImages > 0 ? ` · ${skippedImages} skipped (no dimensions)` : '';
-            const warnMsg = totalWarnings > 0 ? ` · ${totalWarnings} annotation warnings` : '';
-            // Skip/warning counts get appended only to the English fallback. The
-            // localised version stays clean ({count} images to {path}); the
-            // detailed counts also surface in the modal status next to Run.
+            // Success toast: localised base message only ("Exported N images
+            // to <path>"). When something was skipped or warned about, a
+            // second info toast surfaces the counts — keeps the primary
+            // success message clean across locales while still giving the
+            // user visibility into what didn't make it into the output.
             this._notify(
                 'success',
-                `Exported ${usable.length} images to ${config.outputDir}${skipMsg}${warnMsg}`,
+                `Exported ${usable.length} images to ${config.outputDir}`,
                 { i18nKey: 'status.exportDone', i18nParams: { count: usable.length, path: config.outputDir } }
             );
+            if (skippedImages > 0 || totalWarnings > 0) {
+                this._notify(
+                    'info',
+                    `Export details: ${skippedImages} skipped, ${totalWarnings} warnings`,
+                    {
+                        i18nKey: 'status.exportDetails',
+                        i18nParams: { skipped: skippedImages, warnings: totalWarnings }
+                    }
+                );
+            }
             this._safePost({ command: 'exportDatasetRunResult', ok: true });
         } catch (err) {
             this._notify(
