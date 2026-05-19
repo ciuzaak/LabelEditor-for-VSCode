@@ -2,7 +2,9 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
-## [0.17.0] - 2026-05-15
+## [1.0.0] - 2026-05-19
+
+**1.0 milestone — every item on the original roadmap is now shipped.** The four new features below close the last open boxes (Circle shapes, Export to other formats, Keyboard shortcut customisation, Multi-language support). Two rounds of Codex review hardened the export, keyboard, and i18n paths before tagging.
 
 ### Added
 - **Circle Shapes**: New mode for round annotations.

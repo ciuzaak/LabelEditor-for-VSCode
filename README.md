@@ -17,7 +17,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
   - ▭ **Rectangle Mode**: Create new rectangle annotations
   - ⟋ **Line Mode**: Create polyline annotations
   - • **Point Mode**: Create point landmarks
-  - ◯ **Circle Mode** (New in v0.17.0): Click center, then circumference — saved as `circle` shape (LabelMe center+edge points)
+  - ◯ **Circle Mode** (New in v1.0.0): Click center, then circumference — saved as `circle` shape (LabelMe center+edge points)
 - **Unified Edit Mode** (New in v0.10.0): seamlessly move shapes or adjust vertices by simply clicking on them
 - **Context Menu** (New in v0.10.0): Right-click any shape to Edit, Rename, Hide, or Delete
 - **Label Management**: Assign and edit labels for each annotated region
@@ -172,7 +172,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - 500 ms hover delay; clicking does not pop a tooltip; keyboard `Tab` still gets immediate tooltips for accessibility
 - Eraser gesture (Shift-click) is documented in every drawing-mode tip
 
-### Circle Shapes (New in v0.17.0)
+### Circle Shapes (New in v1.0.0)
 - Press `C` or click the ◯ button to enter Circle Mode
 - Click once to set the center, click again on the circumference; live radius preview between clicks
 - Stored in LabelMe JSON as `shape_type: "circle"` with `points: [[cx, cy], [edgeX, edgeY]]`
@@ -181,7 +181,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - Excluded from Merge (which remains polygon/rectangle only)
 - SVG export emits a real `<circle cx cy r>`
 
-### Dataset Export — COCO / YOLO (New in v0.17.0)
+### Dataset Export — COCO / YOLO (New in v1.0.0)
 - Tools menu → **Export Dataset** opens a modal:
   - **Format**: COCO Instances, YOLO bbox (detection), YOLO seg (segmentation)
   - **Scope**: every workspace image, or just the current one
@@ -197,7 +197,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - Filename collisions across nested folders are auto-suffixed (`name_2.txt`, `name_3.txt`, ...)
 - Settings persist across sessions
 
-### Keyboard Shortcut Customization (New in v0.17.0)
+### Keyboard Shortcut Customization (New in v1.0.0)
 - Settings panel → **Keyboard Shortcuts** lists every rebindable action
 - Click ✎ on a row → press your new combo → it binds immediately. Esc cancels capture.
 - Conflict detection shows an inline error with an **Override** button that clears the colliding row
@@ -205,7 +205,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - `Ctrl+Y` (Redo) and `Backspace` (Delete) remain hardcoded as secondary bindings, even after remapping the primaries
 - Tooltips display the live binding so the help text never disagrees with the active shortcut
 
-### Multi-Language Support (New in v0.17.0)
+### Multi-Language Support (New in v1.0.0)
 - Settings panel → **Language**: English (default) or 简体中文
 - Switches every static section header, modal title, button, dropdown item, and tooltip
 - Dynamic context menu (Rename/Hide/Show/Delete with selection counts) and status notifications also localise
@@ -265,7 +265,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - **R**: Switch to Rectangle Mode
 - **L**: Switch to Line Mode
 - **O**: Switch to Point Mode
-- **C**: Switch to Circle Mode (New in v0.17.0)
+- **C**: Switch to Circle Mode (New in v1.0.0)
 - **I**: Switch to SAM AI Mode
 - **Ctrl+Z** (`Cmd+Z` on Mac): Undo last action
 - **Ctrl+Shift+Z** or **Ctrl+Y**: Redo action
@@ -368,11 +368,11 @@ Planned features for future releases:
 - [x] ~~Instance Description~~ **Added in v0.11.1**
 - [x] ~~ONNX Batch Inference~~ **Added in v0.11.2**
 - [x] ~~SAM AI Annotation~~ **Added in v0.12.0**
-- [x] ~~Circle shapes~~ **Added in v0.17.0**
-- [x] ~~Export to other formats (COCO, YOLO, etc.)~~ **Added in v0.17.0**
+- [x] ~~Circle shapes~~ **Added in v1.0.0**
+- [x] ~~Export to other formats (COCO, YOLO, etc.)~~ **Added in v1.0.0**
 - [x] ~~Image display adjust (brightness, contrast)~~ **Added in v0.13.4**
-- [x] ~~Keyboard shortcuts customization~~ **Added in v0.17.0**
-- [x] ~~Multi-language support~~ **Added in v0.17.0**
+- [x] ~~Keyboard shortcuts customization~~ **Added in v1.0.0**
+- [x] ~~Multi-language support~~ **Added in v1.0.0**
 
 ## 🤝 Contributing
 
