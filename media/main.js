@@ -4207,6 +4207,31 @@ document.addEventListener('keydown', (e) => {
         }
         return;
     }
+    // Export dataset modal — Enter submits, Escape cancels. Skip Enter when
+    // the user is in the add-class input so they can keep typing.
+    if (exportDatasetModal && exportDatasetModal.style.display === 'flex') {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            hideExportDatasetModal();
+        } else if (e.key === 'Enter' && activeTag !== 'BUTTON' && activeTag !== 'INPUT') {
+            e.preventDefault();
+            e.stopPropagation();
+            submitExportDataset();
+        }
+        return;
+    }
+    // More settings modal — Escape closes. hideMoreSettingsModal also tears
+    // down any in-progress keybinding capture, so this path doesn't leave a
+    // stuck capture listener attached.
+    if (moreSettingsModal && moreSettingsModal.style.display === 'flex') {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            hideMoreSettingsModal();
+        }
+        return;
+    }
 });
 
 // --- Sidebar Logic ---

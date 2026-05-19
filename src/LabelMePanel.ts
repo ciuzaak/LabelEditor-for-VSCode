@@ -1571,8 +1571,14 @@ export class LabelMePanel {
                 { i18nKey: 'status.exportDone', i18nParams: { count: usable.length, path: config.outputDir } }
             );
             if (skippedImages > 0 || totalWarnings > 0) {
+                // Use `warn` so the notification bus preempts the success
+                // toast's minimum-residency window — `info` would be silently
+                // dropped because the bus blocks lower-severity messages
+                // during a higher-severity transient. Skip/warn details
+                // indicate some shapes didn't reach the output, which is a
+                // genuine warning even when the overall run succeeded.
                 this._notify(
-                    'info',
+                    'warn',
                     `Export details: ${skippedImages} skipped, ${totalWarnings} warnings`,
                     {
                         i18nKey: 'status.exportDetails',
