@@ -5107,9 +5107,21 @@ function drawShapeLabel(shape, points, color) {
     try { box = text.getBBox(); } catch (e) { box = null; }
     if (!box || box.width === 0) { svgOverlay.removeChild(text); return; } // not measurable yet; skip this frame
 
+    // Keep the label inside the image: if the pill would overflow the top or
+    // left edge (shapes touching y=0 / x=0), shift the text + pill back in by
+    // the overflow so it stays visible instead of rendering outside the viewBox.
+    const pillX = box.x - padX;
+    const pillY = box.y - padY;
+    const dx = pillX < 0 ? -pillX : 0;
+    const dy = pillY < 0 ? -pillY : 0;
+    if (dx || dy) {
+        text.setAttribute('x', anchor.x + padX + dx);
+        text.setAttribute('y', anchor.y - padY + dy);
+    }
+
     const rect = document.createElementNS(SVG_NS, 'rect');
-    rect.setAttribute('x', box.x - padX);
-    rect.setAttribute('y', box.y - padY);
+    rect.setAttribute('x', pillX + dx);
+    rect.setAttribute('y', pillY + dy);
     rect.setAttribute('width', box.width + padX * 2);
     rect.setAttribute('height', box.height + padY * 2);
     rect.setAttribute('rx', 2 / zoomLevel);
@@ -6102,6 +6114,8 @@ if (languageSelect && window.i18n) {
         renderKeybindingsList();
         updateImageInfoPopup();
         updateClaheToggleUI();
+        updateDrawClickThroughToggleUI();
+        updateShowShapeLabelsToggleUI();
         draw();
         vscode.postMessage({ command: 'saveGlobalSettings', key: 'locale', value: e.target.value });
     });
