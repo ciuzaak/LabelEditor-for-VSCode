@@ -126,6 +126,7 @@ let samBoxSecondClick = false;    // 框选模式等待第二次点击
 let samMouseDownTime = 0;         // mousedown 时间戳，用于长按检测
 const SAM_LONG_PRESS_MS = 300;    // SAM 长按阈值（ms）
 let samEncodeMode = 'full';       // 'full' | 'local' — encode entire image or visible viewport
+let samOutputFormat = 'polygon'; // 'polygon' | 'rectangle' — SAM result shape type
 let samEncodeAdjusted = false;    // When true, encode the brightness/contrast/CLAHE/channel-adjusted view instead of the original file
 let samCachedCrop = null;         // { x, y, w, h } — crop region of the currently cached encoding (null = full image)
 let samCachedAdjustSig = null;    // Signature of the adjustment state used for the current cached encoding (null when raw original was encoded)
@@ -277,6 +278,8 @@ let vscodeThemeKind = 2; // 1=Light, 2=Dark, 3=HighContrast, 4=HighContrastLight
 
 // Lock View state - preserves zoom and position when navigating between images
 let lockViewEnabled = false;
+let drawClickThrough = false; // when true, clicks in non-view modes start drawing over existing instances
+let showShapeLabels = false;  // when true, draw each instance's class name on the canvas
 let lockedViewState = null; // { zoomFactor, imageCenterX, imageCenterY } - normalized view state
 
 // Initialize from global settings injected by extension
@@ -418,6 +421,16 @@ if (vscodeState && vscodeState.lockViewEnabled !== undefined) {
 } else if (initialGlobalSettings.lockViewEnabled !== undefined) {
     lockViewEnabled = initialGlobalSettings.lockViewEnabled;
 }
+if (vscodeState && vscodeState.drawClickThrough !== undefined) {
+    drawClickThrough = vscodeState.drawClickThrough;
+} else if (initialGlobalSettings.drawClickThrough !== undefined) {
+    drawClickThrough = initialGlobalSettings.drawClickThrough;
+}
+if (vscodeState && vscodeState.showShapeLabels !== undefined) {
+    showShapeLabels = vscodeState.showShapeLabels;
+} else if (initialGlobalSettings.showShapeLabels !== undefined) {
+    showShapeLabels = initialGlobalSettings.showShapeLabels;
+}
 if (vscodeState && vscodeState.lockedViewState) {
     lockedViewState = vscodeState.lockedViewState;
 }
@@ -427,6 +440,11 @@ if (vscodeState && vscodeState.samEncodeMode) {
     samEncodeMode = vscodeState.samEncodeMode;
 } else if (initialGlobalSettings.samEncodeMode) {
     samEncodeMode = initialGlobalSettings.samEncodeMode;
+}
+if (vscodeState && vscodeState.samOutputFormat) {
+    samOutputFormat = vscodeState.samOutputFormat;
+} else if (initialGlobalSettings.samOutputFormat) {
+    samOutputFormat = initialGlobalSettings.samOutputFormat;
 }
 if (vscodeState && vscodeState.samEncodeAdjusted !== undefined) {
     samEncodeAdjusted = !!vscodeState.samEncodeAdjusted;

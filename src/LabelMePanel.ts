@@ -796,6 +796,10 @@ export class LabelMePanel {
         const mergeHelpersPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'mergeShapesHelpers.js');
         const mergeHelpersUri = webview.asWebviewUri(mergeHelpersPath);
 
+        // Shape helpers (pure functions, must load before main.js)
+        const shapeHelpersPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'shapeHelpers.js');
+        const shapeHelpersUri = webview.asWebviewUri(shapeHelpersPath);
+
         // Notification bus (pure helpers + DOM wrapper, must load before main.js)
         const notifyHelpersUri = webview.asWebviewUri(
             vscode.Uri.joinPath(this._extensionUri, 'media', 'notifyBusHelpers.js')
@@ -1293,6 +1297,9 @@ export class LabelMePanel {
                         samPort: ${this._globalState.get('samPort') ?? 8765},
                         samEncodeMode: ${JSON.stringify(this._globalState.get('samEncodeMode') || 'full')},
                         samEncodeAdjusted: ${this._globalState.get('samEncodeAdjusted') ?? false},
+                        samOutputFormat: ${JSON.stringify(this._globalState.get('samOutputFormat') || 'polygon')},
+                        drawClickThrough: ${this._globalState.get('drawClickThrough') ?? false},
+                        showShapeLabels: ${this._globalState.get('showShapeLabels') ?? false},
                         samGpuIndex: ${this._globalState.get('samGpuIndex') ?? -1},
                         onnxGpuIndex: ${this._globalState.get('onnxGpuIndex') ?? -1},
                         exportFormat: ${JSON.stringify(this._globalState.get('exportFormat') || 'coco')},
@@ -1306,6 +1313,7 @@ export class LabelMePanel {
                 <script src="${polyClipUri}"></script>
                 <script src="${samHelpersUri}"></script>
                 <script src="${mergeHelpersUri}"></script>
+                <script src="${shapeHelpersUri}"></script>
                 <script src="${notifyHelpersUri}"></script>
                 <script src="${notifyBusUri}"></script>
                 <script src="${tipsDataUri}"></script>
