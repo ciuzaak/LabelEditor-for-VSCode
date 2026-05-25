@@ -4900,6 +4900,9 @@ function drawSVGAnnotations(mouseEvent) {
         }
 
         drawSVGShape(shape.shape_type, points, strokeColor, fillColor, false, index);
+        if (showShapeLabels && shape.label) {
+            drawShapeLabel(shape, points, colors.stroke);
+        }
     });
 
     // Draw SAM overlay (prompts and mask)
@@ -5071,6 +5074,46 @@ function drawSVGAnnotations(mouseEvent) {
     if (zoomLevel >= PIXEL_VALUES_ZOOM && img.width > 0 && img.height > 0) {
         drawPixelValues();
     }
+}
+
+// Draw an instance's class name as a small colored pill at its top-left.
+// `points` is already rect-expanded by the caller; `color` is the shape's stroke.
+function drawShapeLabel(shape, points, color) {
+    const label = shape && shape.label;
+    if (!label) return;
+    const anchor = labelAnchorFromPoints(points);
+    if (!anchor) return;
+
+    const fontSize = 12 / zoomLevel;
+    const padX = 4 / zoomLevel;
+    const padY = 2 / zoomLevel;
+
+    // Text first, so we can measure it, then put the pill behind it.
+    const text = document.createElementNS(SVG_NS, 'text');
+    text.setAttribute('x', anchor.x + padX);
+    text.setAttribute('y', anchor.y - padY);
+    text.setAttribute('fill', '#ffffff');
+    text.setAttribute('font-size', fontSize);
+    text.setAttribute('font-family', 'sans-serif');
+    text.setAttribute('dominant-baseline', 'alphabetic');
+    text.style.pointerEvents = 'none';
+    text.textContent = label;
+    svgOverlay.appendChild(text);
+
+    let box;
+    try { box = text.getBBox(); } catch (e) { box = null; }
+    if (!box || box.width === 0) return; // not measurable yet; skip pill this frame
+
+    const rect = document.createElementNS(SVG_NS, 'rect');
+    rect.setAttribute('x', box.x - padX);
+    rect.setAttribute('y', box.y - padY);
+    rect.setAttribute('width', box.width + padX * 2);
+    rect.setAttribute('height', box.height + padY * 2);
+    rect.setAttribute('rx', 2 / zoomLevel);
+    rect.setAttribute('fill', color);
+    rect.style.pointerEvents = 'none';
+    // Insert the pill BEHIND the text.
+    svgOverlay.insertBefore(rect, text);
 }
 
 // Draw pixel RGB value labels on the SVG overlay
@@ -5835,6 +5878,7 @@ function showMoreSettingsModal() {
     if (settingsMenuDropdown) settingsMenuDropdown.style.display = 'none';
     if (!moreSettingsModal) return;
     updateDrawClickThroughToggleUI();
+    updateShowShapeLabelsToggleUI();
     moreSettingsModal.style.display = 'flex';
 }
 
@@ -6408,6 +6452,23 @@ if (drawClickThroughToggleBtn) {
         drawClickThrough = !drawClickThrough;
         updateDrawClickThroughToggleUI();
         saveGlobalSettings('drawClickThrough', drawClickThrough);
+    };
+}
+
+// Show-shape-labels toggle button
+const showShapeLabelsToggleBtn = document.getElementById('showShapeLabelsToggleBtn');
+function updateShowShapeLabelsToggleUI() {
+    if (!showShapeLabelsToggleBtn) return;
+    const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
+    showShapeLabelsToggleBtn.textContent = showShapeLabels ? tt('toggle.on') : tt('toggle.off');
+    showShapeLabelsToggleBtn.classList.toggle('active', showShapeLabels);
+}
+if (showShapeLabelsToggleBtn) {
+    showShapeLabelsToggleBtn.onclick = () => {
+        showShapeLabels = !showShapeLabels;
+        updateShowShapeLabelsToggleUI();
+        saveGlobalSettings('showShapeLabels', showShapeLabels);
+        draw(); // re-render the canvas to show/hide labels
     };
 }
 

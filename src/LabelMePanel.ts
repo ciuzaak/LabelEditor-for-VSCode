@@ -1252,6 +1252,10 @@ export class LabelMePanel {
                                 <option value="zh-CN">中文</option>
                             </select>
                         </div>
+                        <div class="more-settings-row">
+                            <label data-i18n="label.showShapeLabels">Show class names</label>
+                            <button id="showShapeLabelsToggleBtn" class="channel-btn">Off</button>
+                        </div>
 
                         <div class="settings-group-header" data-i18n="settings.annotationBehavior">Annotation Behavior</div>
                         <div class="more-settings-row">
