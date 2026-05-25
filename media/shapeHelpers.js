@@ -3,8 +3,10 @@
 // tests. No DOM access here.
 
 // Feature 1: whether a left-click should be allowed to SELECT an existing
-// instance. View mode is always selectable; other (drawing) modes only when
-// the "draw over instances" guard is off.
+// instance. `drawClickThrough` true means clicks "pass through" existing
+// instances to start drawing, so selection is suppressed. View mode is always
+// selectable; other (drawing) modes are selectable only when drawClickThrough
+// is false.
 function allowSelectByClick(currentMode, drawClickThrough) {
     return currentMode === 'view' || !drawClickThrough;
 }

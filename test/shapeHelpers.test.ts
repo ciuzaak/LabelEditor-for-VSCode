@@ -64,4 +64,7 @@ describe('labelAnchorFromPoints', () => {
             { x: 3, y: 5 }
         );
     });
+    it('returns null when no point is usable', () => {
+        assert.equal(labelAnchorFromPoints([[NaN, NaN], [3]]), null);
+    });
 });
