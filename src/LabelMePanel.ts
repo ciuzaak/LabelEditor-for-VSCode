@@ -1246,6 +1246,12 @@ export class LabelMePanel {
                             </select>
                         </div>
 
+                        <div class="settings-group-header" data-i18n="settings.annotationBehavior">Annotation Behavior</div>
+                        <div class="more-settings-row">
+                            <label data-i18n="label.drawClickThrough">Draw over instances</label>
+                            <button id="drawClickThroughToggleBtn" class="channel-btn">Off</button>
+                        </div>
+
                         <div class="settings-group-header" data-i18n="settings.keyboardShortcuts">Keyboard Shortcuts</div>
                         <div class="keybindings-list" id="keybindingsList"></div>
                         <button id="keybindingsResetAllBtn" class="btn" style="margin-top: 4px;" data-i18n="button.resetAllDefaults">Reset all to defaults</button>

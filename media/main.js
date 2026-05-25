@@ -1953,7 +1953,9 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             const isSameLocation = distance < CLICK_THRESHOLD_DISTANCE && timeDiff < CLICK_THRESHOLD_TIME;
 
             // 获取点击位置的所有重叠实例
-            const overlappingShapes = findAllShapesAt(x, y);
+            const overlappingShapes = allowSelectByClick(currentMode, drawClickThrough)
+                ? findAllShapesAt(x, y)
+                : [];
 
             if (overlappingShapes.length > 0) {
                 let targetShape;
@@ -5830,6 +5832,7 @@ const moreSettingsCloseBtn = document.getElementById('moreSettingsCancelBtn');
 function showMoreSettingsModal() {
     if (settingsMenuDropdown) settingsMenuDropdown.style.display = 'none';
     if (!moreSettingsModal) return;
+    updateDrawClickThroughToggleUI();
     moreSettingsModal.style.display = 'flex';
 }
 
@@ -6387,6 +6390,22 @@ if (claheToggleBtn) {
         updateClaheResetBtn();
         draw();
         saveGlobalSettings('claheEnabled', claheEnabled);
+    };
+}
+
+// Draw-click-through toggle button
+const drawClickThroughToggleBtn = document.getElementById('drawClickThroughToggleBtn');
+function updateDrawClickThroughToggleUI() {
+    if (!drawClickThroughToggleBtn) return;
+    const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
+    drawClickThroughToggleBtn.textContent = drawClickThrough ? tt('toggle.on') : tt('toggle.off');
+    drawClickThroughToggleBtn.classList.toggle('active', drawClickThrough);
+}
+if (drawClickThroughToggleBtn) {
+    drawClickThroughToggleBtn.onclick = () => {
+        drawClickThrough = !drawClickThrough;
+        updateDrawClickThroughToggleUI();
+        saveGlobalSettings('drawClickThrough', drawClickThrough);
     };
 }
 
@@ -7812,7 +7831,8 @@ canvasWrapper.addEventListener('mousedown', (e) => {
 
     // If SAM is idle (no prompts, no mask, no pending click), check if clicking
     // on an existing shape. If so, let the main mousedown handler select it.
-    if (samPrompts.length === 0 && !samMaskContour && !samPendingClick && !samClickTimer) {
+    if (samPrompts.length === 0 && !samMaskContour && !samPendingClick && !samClickTimer
+        && allowSelectByClick('sam', drawClickThrough)) {
         const overlappingShapes = findAllShapesAt(x, y);
         if (overlappingShapes.length > 0) {
             return; // Don't stopPropagation — main handler will select the shape
