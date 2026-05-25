@@ -2297,7 +2297,7 @@ canvasWrapper.addEventListener('mousemove', (e) => {
         // Skip cursor refresh while Shift feedback owns the cursor.
         if (shiftPressed) return;
 
-        const hoveredIndex = findShapeIndexAt(x, y);
+        const hoveredIndex = allowSelectByClick(currentMode, drawClickThrough) ? findShapeIndexAt(x, y) : -1;
         const desiredCursor = hoveredIndex !== -1 ? 'pointer' :
             (currentMode === 'view' ? 'default' : 'crosshair');
 
@@ -5184,6 +5184,11 @@ function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = 
 
     const group = document.createElementNS(SVG_NS, 'g');
 
+    // When click-through is on in a drawing mode, completed shapes must not
+    // capture pointer events — otherwise hovering shows a pointer cursor and
+    // the svgOverlay click-delegation would still select/highlight them.
+    const shapeSelectable = allowSelectByClick(currentMode, drawClickThrough);
+
     // 根据zoomLevel调整线宽，使视觉上保持恒定粗细
     const adjustedStrokeWidth = borderWidth / zoomLevel;
     const adjustedPointRadius = 3 / zoomLevel;
@@ -5202,8 +5207,8 @@ function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = 
             circle.setAttribute('fill', fillColor);
 
             if (shapeIndex !== -1) {
-                circle.style.cursor = 'pointer';
-                circle.style.pointerEvents = 'auto';
+                circle.style.cursor = shapeSelectable ? 'pointer' : 'crosshair';
+                circle.style.pointerEvents = shapeSelectable ? 'auto' : 'none';
                 circle.dataset.shapeIndex = shapeIndex;
             }
 
@@ -5224,8 +5229,8 @@ function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = 
             circle.setAttribute('fill', isCompleted ? fillColor : 'none');
 
             if (isCompleted) {
-                circle.style.cursor = 'pointer';
-                circle.style.pointerEvents = 'auto';
+                circle.style.cursor = shapeSelectable ? 'pointer' : 'crosshair';
+                circle.style.pointerEvents = shapeSelectable ? 'auto' : 'none';
                 circle.dataset.shapeIndex = shapeIndex;
             }
 
@@ -5262,8 +5267,8 @@ function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = 
 
         // 为完成的形状添加data属性用于事件委托
         if (shapeIndex !== -1) {
-            pathElement.style.cursor = 'pointer';
-            pathElement.style.pointerEvents = 'auto';
+            pathElement.style.cursor = shapeSelectable ? 'pointer' : 'crosshair';
+            pathElement.style.pointerEvents = shapeSelectable ? 'auto' : 'none';
             pathElement.dataset.shapeIndex = shapeIndex;
         }
 
@@ -6452,6 +6457,7 @@ if (drawClickThroughToggleBtn) {
         drawClickThrough = !drawClickThrough;
         updateDrawClickThroughToggleUI();
         saveGlobalSettings('drawClickThrough', drawClickThrough);
+        draw();
     };
 }
 
