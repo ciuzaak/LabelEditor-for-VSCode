@@ -1173,6 +1173,13 @@ export class LabelMePanel {
                             <label data-tip-id="sam.port" data-i18n="label.port">Port</label>
                             <input type="number" id="samPort" value="8765" min="1024" max="65535" style="width:80px" />
                         </div>
+                        <div class="onnx-form-group">
+                            <label data-i18n="label.samOutputFormat">Output Shape</label>
+                            <div class="onnx-radio-group segmented-group">
+                                <label class="onnx-radio"><input type="radio" name="samOutputFormat" value="polygon" checked /> <span data-i18n="sam.outputPolygon">Polygon</span></label>
+                                <label class="onnx-radio"><input type="radio" name="samOutputFormat" value="rectangle" /> <span data-i18n="sam.outputRectangle">Rectangle</span></label>
+                            </div>
+                        </div>
                         <div class="modal-buttons">
                             <button id="samConfigOkBtn" class="btn btn-primary" data-i18n="button.startService">Start Service</button>
                             <button id="samConfigCancelBtn" class="btn" data-i18n="button.cancel">Cancel</button>

@@ -3988,7 +3988,9 @@ function confirmLabel() {
         } else if (currentMode === 'circle') {
             shapeType = 'circle';
         } else if (currentMode === 'sam') {
-            shapeType = 'polygon'; // SAM always produces polygon shapes
+            // SAM produces a polygon by default; rectangle when the user chose
+            // that output shape AND currentPoints is the 2-point bbox form.
+            shapeType = (samOutputFormat === 'rectangle' && currentPoints.length === 2) ? 'rectangle' : 'polygon';
         }
 
         const newShape = {
@@ -7196,6 +7198,7 @@ function showSamConfigModal() {
     };
     restoreRadio('samDevice', savedState.samDevice ?? gs.samDevice);
     restoreRadio('samEncodeMode', savedState.samEncodeMode ?? gs.samEncodeMode ?? 'full');
+    restoreRadio('samOutputFormat', savedState.samOutputFormat ?? gs.samOutputFormat ?? 'polygon');
     const encodeAdjustedSaved = savedState.samEncodeAdjusted ?? gs.samEncodeAdjusted ?? false;
     restoreRadio('samEncodeSource', encodeAdjustedSaved ? 'adjusted' : 'original');
 
@@ -7227,6 +7230,7 @@ function submitSamConfig() {
     const port = parseInt(document.getElementById('samPort')?.value) || 8765;
     const encodeMode = document.querySelector('input[name="samEncodeMode"]:checked')?.value || 'full';
     const encodeAdjusted = (document.querySelector('input[name="samEncodeSource"]:checked')?.value === 'adjusted');
+    const outputFormat = document.querySelector('input[name="samOutputFormat"]:checked')?.value || 'polygon';
     const gpuSelect = document.getElementById('samGpuIndex');
     const gpuGroup = document.getElementById('samGpuIndexGroup');
     // Use dropdown value if populated, otherwise fall back to saved/persisted index
@@ -7244,7 +7248,7 @@ function submitSamConfig() {
     }
 
     // Persist settings
-    const settings = { samModelDir: modelDir, samPythonPath: pythonPath, samDevice: device, samPort: port, samEncodeMode: encodeMode, samEncodeAdjusted: encodeAdjusted, samGpuIndex: gpuIndex ?? -1 };
+    const settings = { samModelDir: modelDir, samPythonPath: pythonPath, samDevice: device, samPort: port, samEncodeMode: encodeMode, samEncodeAdjusted: encodeAdjusted, samGpuIndex: gpuIndex ?? -1, samOutputFormat: outputFormat };
     const state = vscode.getState() || {};
     Object.assign(state, settings);
     vscode.setState(state);
@@ -7254,6 +7258,7 @@ function submitSamConfig() {
 
     samServicePort = port;
     samEncodeMode = encodeMode;
+    samOutputFormat = outputFormat;
     // If the toggle changed, invalidate the cache so the next click re-encodes
     // with (or without) the adjusted view.
     if (samEncodeAdjusted !== encodeAdjusted) {
@@ -7738,8 +7743,13 @@ function samConfirmAnnotation() {
         currentImagePath: samCurrentImagePath
     };
 
-    // Convert mask contour to polygon points
-    currentPoints = samMaskContour.map(p => [p[0], p[1]]);
+    // Convert mask contour to polygon points (or bbox rect if output format is rectangle)
+    if (samOutputFormat === 'rectangle') {
+        const rect = contourToBBoxRect(samMaskContour);
+        currentPoints = rect ? rect : samMaskContour.map(p => [p[0], p[1]]);
+    } else {
+        currentPoints = samMaskContour.map(p => [p[0], p[1]]);
+    }
     currentMode = 'sam'; // Stay in SAM mode
 
     // Clear SAM prompt state but keep service running
@@ -7985,8 +7995,13 @@ function drawSAMOverlay() {
 
     // Draw mask contour
     if (samMaskContour && samMaskContour.length >= 3) {
+        let previewPoints = samMaskContour;
+        if (samOutputFormat === 'rectangle') {
+            const rect = contourToBBoxRect(samMaskContour);
+            if (rect) previewPoints = getRectPoints(rect); // expand 2-point bbox to 4 corners
+        }
         const polygon = document.createElementNS(SVG_NS, 'polygon');
-        const pointsStr = samMaskContour.map(p => `${p[0]},${p[1]}`).join(' ');
+        const pointsStr = previewPoints.map(p => `${p[0]},${p[1]}`).join(' ');
         polygon.setAttribute('points', pointsStr);
         polygon.setAttribute('fill', 'rgba(30, 144, 255, 0.35)');
         polygon.setAttribute('stroke', 'rgba(30, 144, 255, 0.9)');
