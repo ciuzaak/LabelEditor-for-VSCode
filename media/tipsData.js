@@ -37,6 +37,8 @@ const TIPS = {
     'theme.light': { title: 'Light Theme', desc: 'Use the light theme regardless of the VS Code appearance.' },
     'theme.dark':  { title: 'Dark Theme', desc: 'Use the dark theme regardless of the VS Code appearance.' },
     'theme.auto':  { title: 'Follow VS Code', desc: 'Match the current VS Code color theme.' },
+    'appearance.showShapeLabels': { title: 'Show Class Names', desc: "Show each instance's class name as a colored label at its top-left corner." },
+    'behavior.drawClickThrough':  { title: 'Draw Over Instances', desc: 'When on, clicking inside an existing instance in a drawing mode starts a new annotation instead of selecting it. Right-click still selects.' },
 
     // View / zoom
     'view.zoomReset': { title: 'Reset Zoom', desc: 'Fit the image to the canvas.' },
@@ -117,6 +119,7 @@ const TIPS = {
     'sam.encodeMode':     { title: 'Encode Mode', desc: 'Full Image is the default. Local Crop encodes only the visible viewport when zoomed in for better small-target accuracy.' },
     'sam.encodeAdjusted': { title: 'Encode Source', desc: 'Original (default): SAM always sees the raw image file. Adjusted View: SAM encodes the image with current Brightness/Contrast/CLAHE/Channel applied as pixels — changing any adjustment triggers a re-encode on the next click.' },
     'sam.port':           { title: 'Service Port', desc: 'Local port for the SAM HTTP service.' },
+    'sam.outputFormat':   { title: 'Output Shape', desc: 'Save each SAM result as a polygon (mask outline) or a rectangle (its bounding box).' },
     'sam.modelDirBrowse': { title: 'Browse', desc: 'Pick the SAM model directory.' },
     'sam.pythonBrowse':   { title: 'Browse', desc: 'Pick the Python executable.' }
 };

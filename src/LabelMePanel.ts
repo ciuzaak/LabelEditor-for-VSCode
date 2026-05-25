@@ -1174,7 +1174,7 @@ export class LabelMePanel {
                             <input type="number" id="samPort" value="8765" min="1024" max="65535" style="width:80px" />
                         </div>
                         <div class="onnx-form-group">
-                            <label data-i18n="label.samOutputFormat">Output Shape</label>
+                            <label data-tip-id="sam.outputFormat" data-i18n="label.samOutputFormat">Output Shape</label>
                             <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="samOutputFormat" value="polygon" checked /> <span data-i18n="sam.outputPolygon">Polygon</span></label>
                                 <label class="onnx-radio"><input type="radio" name="samOutputFormat" value="rectangle" /> <span data-i18n="sam.outputRectangle">Rectangle</span></label>
@@ -1254,13 +1254,13 @@ export class LabelMePanel {
                         </div>
                         <div class="more-settings-row">
                             <label data-i18n="label.showShapeLabels">Show class names</label>
-                            <button id="showShapeLabelsToggleBtn" class="channel-btn">Off</button>
+                            <button id="showShapeLabelsToggleBtn" class="channel-btn" data-tip-id="appearance.showShapeLabels">Off</button>
                         </div>
 
                         <div class="settings-group-header" data-i18n="settings.annotationBehavior">Annotation Behavior</div>
                         <div class="more-settings-row">
                             <label data-i18n="label.drawClickThrough">Draw over instances</label>
-                            <button id="drawClickThroughToggleBtn" class="channel-btn">Off</button>
+                            <button id="drawClickThroughToggleBtn" class="channel-btn" data-tip-id="behavior.drawClickThrough">Off</button>
                         </div>
 
                         <div class="settings-group-header" data-i18n="settings.keyboardShortcuts">Keyboard Shortcuts</div>
