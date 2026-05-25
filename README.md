@@ -218,6 +218,20 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - Lazy re-encode: moving any adjustment slider triggers a single re-encode on the next SAM click; in Local Crop mode the cached crop is preserved so existing prompts remain valid
 - Cache is keyed on `(image path, crop, adjustment signature)` so the original-image embedding is never overwritten
 
+### Draw Over Instances (New in v1.1.0)
+- Settings → **More Settings → Annotation Behavior**: optional toggle (default off)
+- When on, clicking inside an existing instance in a drawing mode starts a **new** annotation instead of selecting it — handy when you need to begin labelling from an already-annotated region
+- Hover keeps the drawing crosshair and clicks no longer highlight the shape underneath; **right-click still selects/deletes** as an escape hatch. View mode is unaffected
+
+### SAM Rectangle Output (New in v1.1.0)
+- SAM config dialog → **Output Shape**: **Polygon** (default) or **Rectangle**
+- In Rectangle mode the SAM mask is reduced to its axis-aligned bounding box and saved as a `rectangle`; the live preview shows that box before you confirm (WYSIWYG)
+- Client-side conversion — the Python SAM service is unchanged, so it works with an already-running service
+
+### On-Canvas Class Names (New in v1.1.0)
+- Settings → **More Settings → Appearance → Show class names**: optional toggle (default off)
+- Draws each instance's label as a colour-matched pill at its top-left corner, scaled to stay readable at any zoom and clamped inside the image near the edges; labels never intercept clicks
+
 ## 📦 Installation
 
 ### From OpenVSX

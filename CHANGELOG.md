@@ -2,6 +2,20 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [1.1.0] - 2026-05-25
+
+Three opt-in workflow features, all defaulting to the previous behaviour so existing projects are unaffected. Built test-first behind a shared pure-helper module (`media/shapeHelpers.js`) and hardened with a Codex review pass before tagging.
+
+### Added
+- **Draw Over Instances** (Settings → More Settings → Annotation Behavior): optional toggle (default off). When on, clicking inside an existing instance in a drawing mode (polygon / rectangle / line / point / circle / SAM) starts a new annotation instead of selecting it — so you can begin labelling from an already-annotated region.
+  - Hover keeps the drawing crosshair and clicks no longer highlight the shape underneath (the selection hit-test, the hover cursor, and the shapes' SVG `pointer-events` are all gated on the toggle); **right-click still selects/deletes** as an escape hatch. View mode is unaffected.
+- **SAM Rectangle Output** (SAM config dialog → Output Shape): choose **Polygon** (default, mask outline) or **Rectangle**. In Rectangle mode the SAM mask is reduced to its axis-aligned bounding box and saved as a `rectangle` shape; the live preview shows the bounding box (WYSIWYG) before you confirm.
+  - The Python SAM service is unchanged — the contour→bbox conversion is client-side, so it works with an already-running service. Falls back to a polygon if the mask is degenerate.
+- **On-Canvas Class Names** (Settings → More Settings → Appearance → Show class names): optional toggle (default off) that draws each instance's label as a white-on-colour pill at the shape's top-left corner, scaled to stay readable at any zoom and clamped inside the image near the edges. Labels never intercept clicks.
+
+### Changed
+- The three new options are fully localised (English / 简体中文), carry hover tooltips, and persist across sessions via `globalState`.
+
 ## [1.0.0] - 2026-05-19
 
 **1.0 milestone — every item on the original roadmap is now shipped.** The four new features below close the last open boxes (Circle shapes, Export to other formats, Keyboard shortcut customisation, Multi-language support). Two rounds of Codex review hardened the export, keyboard, and i18n paths before tagging.
