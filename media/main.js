@@ -5102,7 +5102,7 @@ function drawShapeLabel(shape, points, color) {
 
     let box;
     try { box = text.getBBox(); } catch (e) { box = null; }
-    if (!box || box.width === 0) return; // not measurable yet; skip pill this frame
+    if (!box || box.width === 0) { svgOverlay.removeChild(text); return; } // not measurable yet; skip this frame
 
     const rect = document.createElementNS(SVG_NS, 'rect');
     rect.setAttribute('x', box.x - padX);
