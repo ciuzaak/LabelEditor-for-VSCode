@@ -4825,6 +4825,9 @@ function setMode(mode) {
 
     // 更新按钮状态
     updateModeButtons();
+
+    // Re-render so shape interactivity (pointer-events) reflects the new mode
+    draw();
 }
 
 function updateModeButtons() {
