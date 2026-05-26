@@ -1719,6 +1719,10 @@ function clearSelection() {
     selectedShapeIndex = -1;
     selectedShapeIndices.clear();
     hideShapeContextMenu();
+    // Clearing selection invalidates any in-progress overlap cycle (covers
+    // empty-area clicks, deletes, and undo/redo in one place).
+    overlapCycleState = { members: [], pos: -1 };
+    hideCycleBadge();
 }
 
 function selectShape(index) {
@@ -1946,10 +1950,6 @@ canvasWrapper.addEventListener('mousedown', (e) => {
 
         if (!isDrawing) {
             const now = Date.now();
-            const dx = x - lastClickX;
-            const dy = y - lastClickY;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            const timeDiff = now - lastClickTime;
 
             // (Same-location detection for selection cycling was replaced by the
             // candidate-set cycle group in resolveOverlapSelection.)
@@ -1992,8 +1992,6 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     // Ctrl+click on empty: don't clear selection
                 } else {
                     clearSelection();
-                    overlapCycleState = { members: [], pos: -1 };
-                    hideCycleBadge();
                 }
                 renderShapeList();
 
