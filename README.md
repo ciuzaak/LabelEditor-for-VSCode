@@ -232,6 +232,14 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - Settings → **More Settings → Appearance → Show class names**: optional toggle (default off)
 - Draws each instance's label as a colour-matched pill at its top-left corner, scaled to stay readable at any zoom and clamped inside the image near the edges; labels never intercept clicks
 
+### Smarter Overlapping-Instance Selection (New in v1.2.0)
+- Clicking where instances overlap selects the **smallest / most specific** one (points and lines win over filled shapes) instead of whatever was drawn last
+- **Click again in the same spot to cycle down** through the stack — a small `N / M` badge by the cursor shows which one you're on, wrapping back to the smallest after the last
+- **Hover preview**: moving the cursor over an overlap outlines the instance a click *would* select with a white dashed border, so there's no guesswork (selection styling always takes priority)
+
+### SAM under Remote-SSH (Fixed in v1.2.0)
+- Entering SAM mode with an already-running service no longer pops the config dialog over a Remote-SSH connection — the "is the service running?" check now runs from the extension host (co-located with the service) instead of the webview, so it works regardless of where the VS Code UI runs
+
 ## 📦 Installation
 
 ### From OpenVSX

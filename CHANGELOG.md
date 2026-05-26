@@ -2,6 +2,19 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [1.2.0] - 2026-05-26
+
+Overlapping-instance selection is now predictable, plus a Remote-SSH fix for SAM mode entry. Built test-first on the shared pure-helper module (`media/shapeHelpers.js`) and hardened with a Codex review pass before tagging.
+
+### Added
+- **Smarter Overlapping-Instance Selection**: clicking where instances overlap now selects the **smallest / most specific** one (points and linestrips rank ahead of filled shapes; filled shapes by ascending area) instead of whatever was drawn last.
+  - **Click-to-cycle**: repeat clicks on the same overlap step down through the stack and wrap back to the smallest; a lightweight `N / M` badge by the cursor shows the current position. The cycle group is keyed on the candidate set (not a pixel-exact position) and self-heals when the selection changes elsewhere (list click, keyboard, delete).
+  - **Hover preview**: hovering an overlap outlines the would-be-selected instance with a white dashed border — redrawn only when the target changes, and cleared on mouse-leave, shape delete, Shift, mode switch, and the draw-through toggle. Selection styling always takes priority over hover.
+  - The ordering and cycling logic live in pure, unit-tested helpers (`shapeArea`, `sortOverlapCandidates`, `resolveOverlapSelection`).
+
+### Fixed
+- **SAM mode entry under Remote-SSH**: clicking the SAM button with the service already running popped the config dialog, because the pre-check pinged `127.0.0.1` from the webview — which under Remote-SSH is the local machine, not the remote host running the service. The check now runs from the **extension host** (co-located with the service), so it works locally and over Remote-SSH, is a real liveness check (a crashed-but-terminal-open service is detected), and also recognises services started outside the extension. Hardened with a re-entry guard, port-validated replies, and an extension-side ping that settles on every error path.
+
 ## [1.1.0] - 2026-05-25
 
 Three opt-in workflow features, all defaulting to the previous behaviour so existing projects are unaffected. Built test-first behind a shared pure-helper module (`media/shapeHelpers.js`) and hardened with a Codex review pass before tagging.
