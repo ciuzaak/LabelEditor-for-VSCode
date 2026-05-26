@@ -2307,7 +2307,21 @@ canvasWrapper.addEventListener('mousemove', (e) => {
             canvasWrapper.style.cursor = desiredCursor;
             currentCursor = desiredCursor;
         }
+
+        // Hover preview: redraw only when the would-be-selected shape changes.
+        if (hoveredIndex !== hoveredShapeIndex) {
+            hoveredShapeIndex = hoveredIndex;
+            draw();
+        }
     }
+});
+
+canvasWrapper.addEventListener('mouseleave', () => {
+    if (hoveredShapeIndex !== -1) {
+        hoveredShapeIndex = -1;
+        draw();
+    }
+    hideCycleBadge();
 });
 
 // Mouseup handler for box selection completion (document-level so it fires
@@ -4918,16 +4932,23 @@ function drawSVGAnnotations(mouseEvent) {
         if (shape.visible === false) return; // Skip hidden shapes
 
         const isSelected = isShapeSelected(index);
+        const isHovered = !isDrawing && index === hoveredShapeIndex && !isSelected;
         const colors = getColorsForLabel(shape.label);
 
         let strokeColor = colors.stroke;
         let fillColor = colors.fill;
+        let strokeDash = null;
 
         if (isSelected) {
             strokeColor = 'rgba(255, 255, 0, 1)';
             // Use global fillOpacity but ensure at least 0.1 visibility for selection
             const selectionOpacity = Math.max(0.1, fillOpacity);
             fillColor = `rgba(255, 255, 0, ${selectionOpacity})`;
+        } else if (isHovered) {
+            // Hover preview: white dashed outline over the normal fill — distinct
+            // from the solid-yellow selection state.
+            strokeColor = 'rgba(255, 255, 255, 0.95)';
+            strokeDash = `${6 / zoomLevel},${4 / zoomLevel}`;
         }
 
         let points = shape.points;
@@ -4935,7 +4956,7 @@ function drawSVGAnnotations(mouseEvent) {
             points = getRectPoints(points);
         }
 
-        drawSVGShape(shape.shape_type, points, strokeColor, fillColor, false, index);
+        drawSVGShape(shape.shape_type, points, strokeColor, fillColor, false, index, strokeDash);
         if (showShapeLabels && shape.label) {
             drawShapeLabel(shape, points, colors.stroke);
         }
@@ -5227,7 +5248,7 @@ function drawPixelValues() {
     svgOverlay.appendChild(pvGroup);
 }
 
-function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = false, shapeIndex = -1) {
+function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = false, shapeIndex = -1, strokeDashArray = null) {
     if (points.length === 0) return;
 
     const group = document.createElementNS(SVG_NS, 'g');
@@ -5252,6 +5273,7 @@ function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = 
             circle.setAttribute('r', largePointRadius);
             circle.setAttribute('stroke', strokeColor);
             circle.setAttribute('stroke-width', adjustedStrokeWidth);
+            if (strokeDashArray) circle.setAttribute('stroke-dasharray', strokeDashArray);
             circle.setAttribute('fill', fillColor);
 
             if (shapeIndex !== -1) {
@@ -5274,6 +5296,7 @@ function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = 
             circle.setAttribute('r', r);
             circle.setAttribute('stroke', strokeColor);
             circle.setAttribute('stroke-width', adjustedStrokeWidth);
+            if (strokeDashArray) circle.setAttribute('stroke-dasharray', strokeDashArray);
             circle.setAttribute('fill', isCompleted ? fillColor : 'none');
 
             if (isCompleted) {
@@ -5312,6 +5335,7 @@ function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = 
 
         pathElement.setAttribute('stroke', strokeColor);
         pathElement.setAttribute('stroke-width', adjustedStrokeWidth);
+        if (strokeDashArray) pathElement.setAttribute('stroke-dasharray', strokeDashArray);
 
         // 为完成的形状添加data属性用于事件委托
         if (shapeIndex !== -1) {
