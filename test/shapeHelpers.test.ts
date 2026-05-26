@@ -112,3 +112,30 @@ describe('sortOverlapCandidates', () => {
         assert.deepEqual(input, [0, 1]);
     });
 });
+
+describe('resolveOverlapSelection', () => {
+    it('selects the smallest (pos 0) on a fresh stack', () => {
+        const r = resolveOverlapSelection({ ordered: [2, 1, 0], prevMembers: [], prevPos: -1, currentSelectedIndex: -1 });
+        assert.deepEqual(r, { targetIndex: 2, members: [2, 1, 0], pos: 0 });
+    });
+    it('advances one step when re-clicking the same stack on our own target', () => {
+        const r = resolveOverlapSelection({ ordered: [2, 1, 0], prevMembers: [2, 1, 0], prevPos: 0, currentSelectedIndex: 2 });
+        assert.deepEqual(r, { targetIndex: 1, members: [2, 1, 0], pos: 1 });
+    });
+    it('wraps back to the smallest after the last member', () => {
+        const r = resolveOverlapSelection({ ordered: [2, 1, 0], prevMembers: [2, 1, 0], prevPos: 2, currentSelectedIndex: 0 });
+        assert.deepEqual(r, { targetIndex: 2, members: [2, 1, 0], pos: 0 });
+    });
+    it('resets to smallest when selection changed elsewhere (selection mismatch)', () => {
+        const r = resolveOverlapSelection({ ordered: [2, 1, 0], prevMembers: [2, 1, 0], prevPos: 0, currentSelectedIndex: 5 });
+        assert.deepEqual(r, { targetIndex: 2, members: [2, 1, 0], pos: 0 });
+    });
+    it('resets to smallest when the candidate set differs from last click', () => {
+        const r = resolveOverlapSelection({ ordered: [3, 1], prevMembers: [2, 1, 0], prevPos: 0, currentSelectedIndex: 2 });
+        assert.deepEqual(r, { targetIndex: 3, members: [3, 1], pos: 0 });
+    });
+    it('returns no target for an empty candidate list', () => {
+        const r = resolveOverlapSelection({ ordered: [], prevMembers: [], prevPos: -1, currentSelectedIndex: -1 });
+        assert.deepEqual(r, { targetIndex: -1, members: [], pos: -1 });
+    });
+});

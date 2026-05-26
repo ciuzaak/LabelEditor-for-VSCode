@@ -99,6 +99,34 @@ function sortOverlapCandidates(indices, shapes) {
         .map(e => e.idx);
 }
 
+// Shallow element-wise array equality.
+function arraysEqual(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return false;
+    }
+    return true;
+}
+
+// Decide the target shape and the next cycle state from this click's ordered
+// candidates and the previous cycle state. Pure — no DOM, no globals.
+//   ordered             : number[]  smallest-first candidate indices (this click)
+//   prevMembers         : number[]  ordered candidates from the previous click
+//   prevPos             : number    position within prevMembers we landed on
+//   currentSelectedIndex: number    currently-selected shape (-1 if none)
+// Returns { targetIndex, members, pos }; targetIndex is -1 when ordered is empty.
+function resolveOverlapSelection({ ordered, prevMembers, prevPos, currentSelectedIndex }) {
+    if (!Array.isArray(ordered) || ordered.length === 0) {
+        return { targetIndex: -1, members: [], pos: -1 };
+    }
+    const continuing =
+        arraysEqual(ordered, prevMembers) &&
+        prevPos >= 0 &&
+        prevMembers[prevPos] === currentSelectedIndex;
+    const pos = continuing ? (prevPos + 1) % ordered.length : 0;
+    return { targetIndex: ordered[pos], members: ordered, pos };
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { allowSelectByClick, contourToBBoxRect, labelAnchorFromPoints, shapeArea, sortOverlapCandidates };
+    module.exports = { allowSelectByClick, contourToBBoxRect, labelAnchorFromPoints, shapeArea, sortOverlapCandidates, resolveOverlapSelection };
 }
