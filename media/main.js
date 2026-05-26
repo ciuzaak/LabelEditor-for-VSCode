@@ -1173,6 +1173,11 @@ window.addEventListener('message', event => {
             }
             break;
         }
+        case 'samRunningStatus':
+            // Reply to samQueryExtensionRunning (pre-check). Pass the port so the
+            // resolver can reject a stale reply meant for an earlier query.
+            if (samRunningQueryResolver) samRunningQueryResolver(!!message.running, message.port);
+            break;
         case 'exportBrowseResult': {
             const input = document.getElementById('exportOutputDir');
             if (input) input.value = message.value;
@@ -7506,6 +7511,32 @@ async function samPingService() {
     }
 }
 
+// Ask the extension host to ping the SAM service on `port`. The extension is
+// co-located with the service, so this is authoritative and works under
+// remote-SSH, where the webview can't reach 127.0.0.1. Resolves false if the
+// extension doesn't answer within the fallback window. The reply's port is
+// validated so a late/stale response can't resolve a newer query.
+let samRunningQueryResolver = null;
+function samQueryExtensionRunning(port) {
+    return new Promise((resolve) => {
+        let done = false;
+        const finish = (val) => {
+            if (done) return;
+            done = true;
+            samRunningQueryResolver = null;
+            resolve(val);
+        };
+        samRunningQueryResolver = (running, replyPort) => {
+            if (replyPort !== port) return; // ignore stale/mismatched replies
+            finish(running);
+        };
+        vscode.postMessage({ command: 'samQueryRunning', port });
+        // Fallback must exceed the extension-side ping timeout (1500ms) so the
+        // real reply wins; only fires if the extension never answers.
+        setTimeout(() => finish(false), 2500);
+    });
+}
+
 let samEncodePromise = null; // Serialization chain for encode requests
 
 // Adjustment signature: a stable string the cache can key on. Null when the
@@ -7825,25 +7856,37 @@ function samClearState() {
     updateShiftFeedback();
 }
 
+let samCheckInProgress = false;
 async function samCheckAndEnterMode() {
-    // Restore port and encode mode from saved state
-    const savedState = vscode.getState() || {};
-    const gs = (typeof initialGlobalSettings !== 'undefined') ? initialGlobalSettings : {};
-    samServicePort = savedState.samPort ?? gs.samPort ?? 8765;
-    samEncodeMode = savedState.samEncodeMode ?? gs.samEncodeMode ?? 'full';
-    samEncodeAdjusted = !!(savedState.samEncodeAdjusted ?? gs.samEncodeAdjusted ?? false);
+    // Guard against re-entry: setMode('sam') fires this without awaiting, so a
+    // rapid second SAM-mode click could overlap and race the single query
+    // resolver. Ignore re-entrant calls while one check is already in flight.
+    if (samCheckInProgress) return;
+    samCheckInProgress = true;
+    try {
+        // Restore port and encode mode from saved state
+        const savedState = vscode.getState() || {};
+        const gs = (typeof initialGlobalSettings !== 'undefined') ? initialGlobalSettings : {};
+        samServicePort = savedState.samPort ?? gs.samPort ?? 8765;
+        samEncodeMode = savedState.samEncodeMode ?? gs.samEncodeMode ?? 'full';
+        samEncodeAdjusted = !!(savedState.samEncodeAdjusted ?? gs.samEncodeAdjusted ?? false);
 
-    // Try to ping the service
-    const ok = await samPingService();
-    if (ok) {
-        samServiceRunning = true;
-        currentMode = 'sam';
-        saveState();
-        updateModeButtons();
-        draw();
-    } else {
-        // Show config modal
-        showSamConfigModal();
+        // Ask the extension host to ping the service — an authoritative liveness
+        // check that works under remote-SSH (see samQueryExtensionRunning). Enter
+        // SAM mode if it's alive; otherwise show the config modal.
+        const ok = await samQueryExtensionRunning(samServicePort);
+        if (ok) {
+            samServiceRunning = true;
+            currentMode = 'sam';
+            saveState();
+            updateModeButtons();
+            draw();
+        } else {
+            // Show config modal
+            showSamConfigModal();
+        }
+    } finally {
+        samCheckInProgress = false;
     }
 }
 

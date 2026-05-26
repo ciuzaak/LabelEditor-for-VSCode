@@ -371,6 +371,22 @@ export class LabelMePanel {
                     case 'samStartService':
                         await this._runSamService(message.config);
                         return;
+                    case 'samQueryRunning': {
+                        // Pre-check: ping the SAM service from the EXTENSION HOST. It
+                        // is co-located with the service, so this works under remote-SSH
+                        // (where the webview's 127.0.0.1 can't reach it) and is a real
+                        // liveness check — unlike _samServicePorts, which only tracks
+                        // whether a launch terminal is still open (the process may have
+                        // crashed). Also detects services started outside the extension.
+                        const queryPort = message.port;
+                        const running = await this._samPing(queryPort);
+                        this._safePost({
+                            command: 'samRunningStatus',
+                            port: queryPort,
+                            running
+                        });
+                        return;
+                    }
                     case 'detectGpuCount': {
                         // Run nvidia-smi -L to detect GPU list (async to avoid blocking extension host)
                         const { exec } = require('child_process');
@@ -1747,6 +1763,44 @@ export class LabelMePanel {
             `ONNX Batch Infer started: ${absoluteImagePaths.length} images. Check the terminal for progress.`,
             { i18nKey: 'status.onnxStarted', i18nParams: { count: absoluteImagePaths.length } }
         );
+    }
+
+    /**
+     * Ping a SAM service on 127.0.0.1:<port>/ping from the extension host (Node,
+     * co-located with the service — reaches it even under remote-SSH). Resolves
+     * true only if the service answers with { ok: true }. Any error/timeout =>
+     * false. This is the authoritative "is the service alive" check.
+     */
+    private _samPing(port: number): Promise<boolean> {
+        return new Promise((resolve) => {
+            let settled = false;
+            const done = (val: boolean) => { if (!settled) { settled = true; resolve(val); } };
+            // Reject non-integer / out-of-range ports before touching http.get,
+            // which can throw synchronously on a bad port.
+            if (!Number.isInteger(port) || port < 1 || port > 65535) {
+                done(false);
+                return;
+            }
+            try {
+                const http = require('http');
+                const req = http.get({ host: '127.0.0.1', port, path: '/ping', timeout: 1500 }, (res: any) => {
+                    let body = '';
+                    res.on('data', (c: any) => { body += c; });
+                    res.on('end', () => {
+                        try { done(JSON.parse(body).ok === true); }
+                        catch { done(false); }
+                    });
+                    // Guard the response stream too: a mid-stream error/abort must
+                    // still settle the promise (otherwise it would hang).
+                    res.on('error', () => done(false));
+                    res.on('aborted', () => done(false));
+                });
+                req.on('error', () => done(false));
+                req.on('timeout', () => { req.destroy(); done(false); });
+            } catch {
+                done(false);
+            }
+        });
     }
 
     /**
