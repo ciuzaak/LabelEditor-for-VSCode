@@ -4875,6 +4875,10 @@ function setMode(mode) {
 
     // If entering SAM mode, check service availability
     if (mode === 'sam') {
+        // Paint the just-cleared hover/badge state synchronously: this path
+        // returns early and samCheckAndEnterMode only redraws asynchronously on
+        // success (and not at all when the service check fails).
+        draw();
         samCheckAndEnterMode();
         return; // samCheckAndEnterMode will call the rest of setMode internally
     }
