@@ -9,236 +9,75 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 
 ## ✨ Features
 
-### Core Annotation
-- **Multiple Shape Types**: Draw polygon, rectangle, line, point, and circle annotations
-- **Multiple Drawing Modes**: Toggle between viewing and editing modes
-  - 👁️ **View Mode**: Browse and select without accidental edits (default)
-  - ⬠ **Polygon Mode**: Create new polygon annotations
-  - ▭ **Rectangle Mode**: Create new rectangle annotations
-  - ⟋ **Line Mode**: Create polyline annotations
-  - • **Point Mode**: Create point landmarks
-  - ◯ **Circle Mode** (New in v1.0.0): Click center, then circumference — saved as `circle` shape (LabelMe center+edge points)
-- **Unified Edit Mode** (New in v0.10.0): seamlessly move shapes or adjust vertices by simply clicking on them
-- **Context Menu** (New in v0.10.0): Right-click any shape to Edit, Rename, Hide, or Delete
-- **Label Management**: Assign and edit labels for each annotated region
-- **Undo/Redo Support**: Full undo/redo functionality with up to 50 history states
+### Annotation Tools
+- **Shape types**: polygon, rectangle, line, point, and circle — all saved in LabelMe JSON (circle as center + edge `points`)
+- **Drawing modes**: 👁️ View (browse/select, default) · ⬠ Polygon · ▭ Rectangle · ⟋ Line · • Point · ◯ Circle
+- **Unified edit mode**: click a shape to move it or drag its vertices; circle handles translate (center) or resize (edge)
+- **Context menu**: right-click any shape to Edit, Rename, Hide, or Delete
+- **Labels & descriptions**: assign and edit a label per region, plus an optional description shown in the sidebar (omitted from JSON when empty)
+- **Undo / redo** with up to 50 history states
 
-### Image Browser (New in v0.7.0)
-- **Sidebar Image List**: Browse all images in the workspace from a dedicated sidebar
-  - Toggle with the panel-left button in toolbar
-  - Shows all images organized by folder structure
-  - Click any image to navigate instantly
-  - Current image is highlighted
-  - Resizable sidebar width
-  - 🔄 **Refresh button** to rescan images (New in v0.9.0)
-- **Open Folder for Annotation** (New in v0.9.0): Right-click any folder to open only images within that folder
-- **Multi-Panel Support** (New in v0.14.0): Open multiple images or folders side-by-side in separate panels; re-opening the same image/folder reveals the existing panel to avoid conflicting edits
-- **Virtual Scrolling**: Handles 8000+ images without performance issues
-  - Only renders visible items for smooth performance
-  - No lag when resizing sidebar even with thousands of images
+### Selecting & Editing Instances
+- **Smart overlap selection**: clicking overlapping instances picks the **smallest / most specific** one (points and lines before filled shapes); click again in place to **cycle down** the stack with an `N / M` badge; hovering shows a dashed outline of what a click would select
+- **Multi-select**: Ctrl+Click to toggle (canvas or list), Shift+Click to range-select in the list, Ctrl+A for all, drag a box in View mode (Ctrl+Drag to add), Esc to clear
+- **Batch operations**: Rename, Hide/Show, or Delete the whole selection from the context menu or sidebar
+- **Eraser**: Shift+Click for a polygon eraser, Shift+Long-press+Drag for a rectangle eraser — boolean-subtracts the area from all overlapping shapes (interior cut-outs become hole-free polygons); right-click / Esc to cancel
+- **Merge** (`Ctrl+G`): union multi-selected overlapping polygons/rectangles (all-rectangles → bounding box; otherwise → polygon); a single undo restores the originals
+- **Draw Over Instances** (opt-in): when on, clicking inside an existing instance in a drawing mode starts a **new** annotation instead of selecting it; right-click still selects/deletes
+- Per-instance visibility toggle, in-place label editing, and delete
 
-### Labels Management Panel
-- **Label Overview**: See all label categories with instance counts
-- **Batch Visibility Toggle**: Show/hide all instances of a specific label
-- **Custom Colors**: 
-  - 24 preset colors + custom hex input (#XXXXXX)
-  - Colors persist globally (saved to VS Code global state)
-  - Per-label reset to default color
-- **Global Persistence**: Settings maintained even after closing VS Code
+### AI-Assisted Annotation (SAM)
+- **Interactive segmentation** with the Segment Anything Model — enter via the ✨ button or `I`
+  - **Left click** positive prompt · **Shift+Left click** negative · **Left-drag** box prompt · **Right click** undo last · **Double click** confirm
+  - Point and box prompts combine (a new box replaces the previous one); real-time mask preview
+- **Encode mode**: Full Image (default) or Local Crop — Local Crop encodes only the zoomed viewport for far better accuracy on small targets (encoded region shown as a yellow dashed box)
+- **Encode source**: Original file (default) or Adjusted View — encodes with Brightness/Contrast/CLAHE/Channel baked in, useful for low-contrast / medical / microscopy data
+- **Output shape**: Polygon (default) or Rectangle (mask reduced to its bounding box, with a WYSIWYG preview)
+- Supports SAM1 & SAM2 ONNX models (auto-detected); runs as a standalone Python HTTP server in a VS Code terminal and works over **Remote-SSH**
+- Requires Python with `onnxruntime`, `opencv-python`, `numpy`
 
-### Advanced Options
-- **Theme Switching** (New in v0.8.0):
-  - ☀️ Light mode for bright environments
-  - 🌙 Dark mode matching VS Code dark themes
-  - ◐ Auto mode — follows VS Code's current theme
-- **Image Info Popup** (New in v0.13.5): Click ℹ in the toolbar to view image metadata (dimensions, file size, DPI, bit depth)
-- **Brightness & Contrast Control** (New in v0.13.4): Adjust image display without modifying original data
-  - Sliders with individual reset (↺) and lock (🔓/🔒) buttons
-  - Lock preserves value across images; unlock resets to 100% on each new image
-- **Border Width Control**: Adjust polygon outline thickness (1-5px)
-- **Fill Opacity Control**: Adjust polygon fill transparency (0-100%)
-- **Settings Persistence**: All preferences saved globally
-- **Individual Reset Buttons**: Reset each setting independently
-
-### Navigation & Workflow
-- **LabelMe Format**: Compatible with LabelMe JSON format for ML pipelines
-- **Zoom & Pan**: Smooth zooming with mouse-centered pivot and full scrolling
-- **Image Browser**: Quick access to all workspace images via the sidebar (panel-left toolbar button)
-- **Image Navigation**: Quick prev/next buttons + keyboard shortcuts (A/D)
-- **Copy Image Path** (New in v0.9.0): Click filename in toolbar to copy absolute path; right-click to copy filename only
-- **Manual Save**: Control when to save annotations (Ctrl+S)
-- **Unsaved Changes Protection**: Warning dialog when navigating with unsaved changes
-
-### Instance Management
-- **Multi-Instance Selection** (New in v0.13.3): Select and operate on multiple instances at once
-  - **Ctrl+Click**: Toggle individual shapes in/out of selection (canvas or instance list)
-  - **Shift+Click**: Range select in instance list
-  - **Ctrl+A**: Select all instances
-  - **View Mode Box Select**: Drag to draw a selection rectangle; Ctrl+Drag to add to selection
-  - **Batch Operations**: Right-click context menu or sidebar buttons to batch Rename, Hide/Show, or Delete
-  - **ESC**: Clear multi-selection
-- **Visibility Toggle**: Show/hide individual shapes (👁️)
-- **Edit Labels**: In-place label editing (✎)
-- **Instance Description** (New in v0.11.1): Optional description text for each annotation
-  - Add descriptions when creating or editing annotations
-  - Shown as subtitle in the sidebar instances list
-  - Omitted from JSON when empty (backward compatible)
-- **Delete Annotations**: Remove unwanted shapes (×)
-- **Visual Feedback**: Category-based color coding and smooth rendering
-
-### ONNX Batch Inference (New in v0.11.2)
-- **Automated Annotation**: Run ONNX segmentation models on workspace images
-  - Access via the Tools (wrench) menu → ONNX Batch Infer
-  - Configurable: model directory, Python interpreter, CPU/GPU, RGB/BGR
-  - Scope: infer on all images or current image only
-  - Existing annotations: skip / merge / overwrite
-  - Browse buttons (📂) for path selection via native dialog
-  - All settings persist across sessions
-  - Progress displayed in VS Code terminal with tqdm
-  - Requires: Python with `onnxruntime`, `opencv-python`, `numpy`, `tqdm`
-  - Output: polygon annotations only (currently)
-
-### SAM AI Annotation (New in v0.12.0)
-- **Interactive Segmentation**: Annotate with the Segment Anything Model (SAM)
-  - Enter SAM mode via the toolbar button (✨ sparkles) or keyboard shortcut (`I`)
-  - **Left click**: Positive point prompt
-  - **Shift+Left click**: Negative point prompt (requires at least one positive prompt; otherwise Shift starts the eraser, just like in non-SAM modes)
-  - **Left click + Drag**: Rectangle (box) prompt
-  - **Right click**: Undo last prompt
-  - **Double click**: Confirm annotation and enter label
-  - **Prompt Combination** (New in v0.15.0): Point and rectangle prompts can coexist; adding a new box replaces only the previous box
-  - Real-time mask preview with SVG overlay
-  - Lazy encoding: image embedding computed on first interaction for efficiency
-  - Supports SAM1 and SAM2 ONNX models with automatic detection
-  - **Encode Mode** (since v0.12.1): pick **Full Image** (default) or **Local Crop** in the SAM config dialog
-    - Local Crop encodes only the visible viewport when zoomed in, dramatically improving accuracy on small targets
-    - A yellow dashed rectangle marks the currently encoded region; in-progress sequences stick to the cached crop until prompts fall outside it
-  - **Encode Source** (New in v0.16.1): pick **Original** (default) or **Adjusted View** in the SAM config dialog
-    - Original: SAM always sees the raw image file (cheapest; embedding is reusable across sessions)
-    - Adjusted View: SAM encodes the image with current Brightness / Contrast / CLAHE / Channel applied as pixels; useful for low-contrast / medical / microscopy data where adjustments reveal structure
-    - Changes to any adjustment slider trigger a re-encode lazily on the next SAM click — same pattern as scrolling out of the cached crop in Local mode
-  - Configuration: model directory, Python interpreter, device (CPU/GPU), port, encode mode, encode source
-  - All settings persist across sessions
-  - SAM service runs as a standalone Python HTTP server in VS Code terminal
-  - Requires: Python with `onnxruntime`, `opencv-python`, `numpy`
-
-#### SAM Model Setup
+**SAM model setup**
 1. Download SAM2 ONNX models from [HuggingFace](https://huggingface.co/vietanhdev/segment-anything-2-onnx-models)
-2. Place the encoder and decoder `.onnx` files in the same folder:
-   ```
-   sam_model/
-   ├── encoder.onnx    (or any filename containing "encoder")
-   └── decoder.onnx    (or any filename containing "decoder")
-   ```
-   > If the filenames don't contain "encoder"/"decoder", the service will assume the larger file is the encoder.
-3. In VS Code, press `I` to enter SAM mode
-4. If the SAM service is not running, a configuration modal will appear — select the model folder and Python interpreter, then click OK to start the service
-5. The service runs in a terminal tab and persists until you manually close it
+2. Put the encoder and decoder `.onnx` files in one folder (filenames containing "encoder"/"decoder"; otherwise the larger file is assumed to be the encoder)
+3. Press `I` to enter SAM mode; if the service isn't running, a config modal lets you pick the model folder and Python interpreter and starts it in a terminal tab
 
-### Eraser Tool (New in v0.13.2)
-- **Erase Portions of Annotations**: Remove parts of existing annotations using polygon or rectangle erasers
-  - **Shift+Click**: Start a polygon eraser (click to add points, close to apply)
-  - **Shift+Long-press+Drag**: Start a rectangle eraser (second click to confirm)
-  - Works in all editing modes (Polygon, Rectangle, Line, Point)
-  - Boolean subtraction removes the erased area from all overlapping annotations
-  - Interior punch-outs are decomposed into hole-free polygons (LabelMe compatible)
-  - Right-click or ESC to cancel
+### ONNX Batch Inference
+- Tools menu → **ONNX Batch Infer**: run an ONNX segmentation model across all images or just the current one
+- Configurable model directory, Python interpreter, CPU/GPU, and RGB/BGR; existing annotations can skip / merge / overwrite; progress shown in the terminal
+- Requires Python with `onnxruntime`, `opencv-python`, `numpy`, `tqdm` (outputs polygons)
 
-### Annotation Merging (New in v0.15.0)
-- **Merge Overlapping Instances**: Combine multi-selected polygon/rectangle shapes whose geometries overlap
-  - Right-click → **Merge** or `Ctrl+G`
-  - Only overlapping pairs are merged; disjoint groups are merged independently; isolated shapes are untouched
-  - **All-rectangle selection** → single rectangle (axis-aligned bounding box)
-  - **Mixed or any-polygon selection** → polygon (rectangles treated as polygons), via boolean union with holes dropped
-  - Mixed labels prompt the user once via the label modal; unanimous-label groups commit silently
-  - Single undo step restores all originals
+### Image Browser & Navigation
+- **Sidebar image list**: every workspace image organized by folder, click to jump, current image highlighted, resizable — virtual scrolling handles 8000+ images smoothly
+- **Open Folder for Annotation**: right-click a folder to work with just its images
+- **Multi-panel**: open several images/folders side-by-side; re-opening the same one reveals its existing panel
+- **Zoom & pan** with mouse-centered pivot; prev/next buttons and `A` / `D`
+- **Copy image path**: click the filename to copy the absolute path, right-click for the name only
+- **Manual save** (`Ctrl+S`) with an unsaved-changes warning on navigation
 
-### Image Adjustment (New / expanded in v0.15.0)
-- **RGB Channel Selection**: Inspect a single color channel as grayscale (R / G / B) in the ⚙️ Image Adjustment group; lock to preserve across image switches
-- **CLAHE (Contrast Limited Adaptive Histogram Equalization)**: Brighten low-contrast images without color distortion (luminance-only YCbCr); explicit Off/On toggle, clip-limit slider, independent lock
+### Display & Image Adjustment
+- **Theme**: ☀️ Light / 🌙 Dark / ◐ Auto (follows VS Code)
+- **Brightness & Contrast** sliders and **RGB channel** isolation (view R/G/B as grayscale), each with reset and a lock that preserves the value across images
+- **CLAHE**: brighten low-contrast images without color distortion (luminance-only), with a clip-limit slider
+- **On-canvas class names** (opt-in): draw each instance's label as a colour-matched pill at its corner, readable at any zoom
+- **Image info** popup (dimensions, file size, DPI, bit depth); border width (1–5px) and fill opacity (0–100%) controls
+- All adjustments affect display only — never the original file
 
-### macOS-Style UI Refresh (New in v0.16.0)
-- Toolbar, sidebar, modals, and dropdowns restyled with macOS design tokens — SVG icons replace emoji glyphs, blur-backdrop modals with close (×) button, click-outside-dismiss popovers for the Settings and Tools menus
-- Compact `.btn` / `.btn-icon` / `.btn-primary` / `.segmented-*` atoms across mode toggles, theme picker, channel selector, and radio groups
-- macOS-style search field with leading icon and inline clear button
+### Dataset Export — COCO / YOLO
+- Tools menu → **Export Dataset**: COCO Instances, YOLO bbox, or YOLO seg, over all images or the current one
+- Classes auto-detected from labels in scope; reorder / rename / remove rows to control class indices (first row = `0` for YOLO, `1` for COCO)
+- Polygons, rectangles, and circles convert to each format's geometry; points and linestrips export to YOLO bbox only; filename collisions across nested folders are auto-suffixed
 
-### In-Webview Notifications (New in v0.16.0)
-- Non-actionable messages (saves, refreshes, exports, ONNX/SAM startup, validation errors) appear inline in the toolbar status area instead of stacking as native VS Code popups; severity-aware colors (info / success / warn / error) with minimum residency so errors are not overwritten before you read them
-- Persistent state like `SAM Ready` survives transient interruptions and is restored automatically
-- Native dialogs are reserved for prompts that need a Save / Discard / Cancel decision
+### Labels Panel
+- All label categories with live instance counts; show/hide every instance of a label at once
+- 24 preset colors + custom hex, with per-label reset; colors persist globally
 
-### Discoverability: Rich Hover Tooltips (New in v0.16.0)
-- Every interactive control — buttons, sliders, radios, list-row actions, modal form fields — has a rich tooltip with title, description, and (where applicable) keyboard shortcut
-- 500 ms hover delay; clicking does not pop a tooltip; keyboard `Tab` still gets immediate tooltips for accessibility
-- Eraser gesture (Shift-click) is documented in every drawing-mode tip
-
-### Circle Shapes (New in v1.0.0)
-- Press `C` or click the ◯ button to enter Circle Mode
-- Click once to set the center, click again on the circumference; live radius preview between clicks
-- Stored in LabelMe JSON as `shape_type: "circle"` with `points: [[cx, cy], [edgeX, edgeY]]`
-- Vertex-edit handles: center translates the whole circle, edge handle resizes the radius
-- Eraser overlapping a circle decays it to one or more polygons
-- Excluded from Merge (which remains polygon/rectangle only)
-- SVG export emits a real `<circle cx cy r>`
-
-### Dataset Export — COCO / YOLO (New in v1.0.0)
-- Tools menu → **Export Dataset** opens a modal:
-  - **Format**: COCO Instances, YOLO bbox (detection), YOLO seg (segmentation)
-  - **Scope**: every workspace image, or just the current one
-  - **Output Directory**: native folder picker
-  - **Classes**: auto-detected from labels in scope; reorder/rename/remove rows control class indices (first row = `0` for YOLO, `1` for COCO)
-- Conversions:
-  - Polygon → segmentation ring + bbox for COCO; full polygon for YOLO seg; AABB for YOLO bbox
-  - Rectangle → expanded to 4 corners for COCO seg / YOLO seg; direct bbox for YOLO bbox
-  - Circle → polygonised to 32 segments for segmentation; AABB (cx-r, cy-r, 2r, 2r) for bbox
-  - Point → 1×1 px bbox for YOLO bbox only (skipped from COCO/seg)
-  - Linestrip → AABB for YOLO bbox only (skipped from COCO/seg)
-- COCO writes one `annotations.json`; YOLO writes one `.txt` per image plus `classes.txt`
-- Filename collisions across nested folders are auto-suffixed (`name_2.txt`, `name_3.txt`, ...)
-- Settings persist across sessions
-
-### Keyboard Shortcut Customization (New in v1.0.0)
-- Settings panel → **Keyboard Shortcuts** lists every rebindable action
-- Click ✎ on a row → press your new combo → it binds immediately. Esc cancels capture.
-- Conflict detection shows an inline error with an **Override** button that clears the colliding row
-- ↺ on a row resets it to the default; **Reset all to defaults** at the bottom resets everything
-- `Ctrl+Y` (Redo) and `Backspace` (Delete) remain hardcoded as secondary bindings, even after remapping the primaries
-- Tooltips display the live binding so the help text never disagrees with the active shortcut
-
-### Multi-Language Support (New in v1.0.0)
-- Settings panel → **Language**: English (default) or 简体中文
-- Switches every static section header, modal title, button, dropdown item, and tooltip
-- Dynamic context menu (Rename/Hide/Show/Delete with selection counts) and status notifications also localise
-- Selection persists across sessions
-- Community PRs welcome for additional locales — strings live in `media/i18n.js`
-
-### SAM Encode Source (New in v0.16.1)
-- Opt-in toggle in the SAM config dialog: **Original** (raw file, default) or **Adjusted View** (Brightness / Contrast / CLAHE / Channel applied as pixels before encoding)
-- Lets SAM see what *you* see — particularly valuable for low-contrast, medical, or microscopy data where CLAHE reveals structure
-- Lazy re-encode: moving any adjustment slider triggers a single re-encode on the next SAM click; in Local Crop mode the cached crop is preserved so existing prompts remain valid
-- Cache is keyed on `(image path, crop, adjustment signature)` so the original-image embedding is never overwritten
-
-### Draw Over Instances (New in v1.1.0)
-- Settings → **More Settings → Annotation Behavior**: optional toggle (default off)
-- When on, clicking inside an existing instance in a drawing mode starts a **new** annotation instead of selecting it — handy when you need to begin labelling from an already-annotated region
-- Hover keeps the drawing crosshair and clicks no longer highlight the shape underneath; **right-click still selects/deletes** as an escape hatch. View mode is unaffected
-
-### SAM Rectangle Output (New in v1.1.0)
-- SAM config dialog → **Output Shape**: **Polygon** (default) or **Rectangle**
-- In Rectangle mode the SAM mask is reduced to its axis-aligned bounding box and saved as a `rectangle`; the live preview shows that box before you confirm (WYSIWYG)
-- Client-side conversion — the Python SAM service is unchanged, so it works with an already-running service
-
-### On-Canvas Class Names (New in v1.1.0)
-- Settings → **More Settings → Appearance → Show class names**: optional toggle (default off)
-- Draws each instance's label as a colour-matched pill at its top-left corner, scaled to stay readable at any zoom and clamped inside the image near the edges; labels never intercept clicks
-
-### Smarter Overlapping-Instance Selection (New in v1.2.0)
-- Clicking where instances overlap selects the **smallest / most specific** one (points and lines win over filled shapes) instead of whatever was drawn last
-- **Click again in the same spot to cycle down** through the stack — a small `N / M` badge by the cursor shows which one you're on, wrapping back to the smallest after the last
-- **Hover preview**: moving the cursor over an overlap outlines the instance a click *would* select with a white dashed border, so there's no guesswork (selection styling always takes priority)
-
-### SAM under Remote-SSH (Fixed in v1.2.0)
-- Entering SAM mode with an already-running service no longer pops the config dialog over a Remote-SSH connection — the "is the service running?" check now runs from the extension host (co-located with the service) instead of the webview, so it works regardless of where the VS Code UI runs
+### Workspace & UX
+- **Rebindable keyboard shortcuts** (Settings → Keyboard Shortcuts) with conflict detection and per-row / global reset; `Ctrl+Y` and `Backspace` stay as secondary Redo / Delete
+- **Multi-language**: English / 简体中文 (Settings → Language) — strings live in `media/i18n.js`, PRs for more locales welcome
+- **In-webview notifications**: status messages appear inline in the toolbar (severity-colored) instead of stacking as native popups; native dialogs are reserved for Save / Discard / Cancel prompts
+- **Rich hover tooltips** on every control (title, description, and the live keyboard shortcut)
+- **macOS-style UI**: SVG icons, blur-backdrop modals, click-outside-dismiss menus, and segmented controls
+- All settings persist globally across sessions
 
 ## 📦 Installation
 
