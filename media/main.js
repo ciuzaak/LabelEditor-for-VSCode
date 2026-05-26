@@ -4468,7 +4468,12 @@ function deleteShape(index) {
 
     shapes.splice(index, 1);
     adjustSelectionAfterDelete(index);
-    hoveredShapeIndex = -1; // hovered index is stale once a shape is spliced
+    // Hover index and any overlap-cycle stack/badge are stale once a shape is
+    // spliced. deleteSelectedShapes gets this via clearSelection(); deleteShape
+    // keeps the selection, so reset them explicitly here.
+    hoveredShapeIndex = -1;
+    overlapCycleState = { members: [], pos: -1 };
+    hideCycleBadge();
     markDirty();
     saveHistory(); // 保存历史记录以支持撤销/恢复
     renderShapeList();
