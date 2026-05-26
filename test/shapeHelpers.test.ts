@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 // Test runs from out-test/test/, so resolve to <repo-root>/media/shapeHelpers.js
 const helpers = require(path.resolve(__dirname, '..', '..', 'media', 'shapeHelpers.js'));
-const { allowSelectByClick, contourToBBoxRect, labelAnchorFromPoints } = helpers;
+const { allowSelectByClick, contourToBBoxRect, labelAnchorFromPoints, shapeArea, sortOverlapCandidates, resolveOverlapSelection } = helpers;
 
 describe('allowSelectByClick', () => {
     it('always allows selection in view mode, regardless of the guard', () => {
@@ -66,5 +66,49 @@ describe('labelAnchorFromPoints', () => {
     });
     it('returns null when no point is usable', () => {
         assert.equal(labelAnchorFromPoints([[NaN, NaN], [3]]), null);
+    });
+});
+
+describe('shapeArea', () => {
+    it('returns 0 for point and linestrip (proximity targets, always most specific)', () => {
+        assert.equal(shapeArea({ shape_type: 'point', points: [[5, 5]] }), 0);
+        assert.equal(shapeArea({ shape_type: 'linestrip', points: [[0, 0], [10, 0]] }), 0);
+    });
+    it('returns w*h for a rectangle regardless of corner order', () => {
+        assert.equal(shapeArea({ shape_type: 'rectangle', points: [[0, 0], [4, 3]] }), 12);
+        assert.equal(shapeArea({ shape_type: 'rectangle', points: [[4, 3], [0, 0]] }), 12);
+    });
+    it('returns pi*r^2 for a circle ([center, edge])', () => {
+        const a = shapeArea({ shape_type: 'circle', points: [[0, 0], [2, 0]] });
+        assert.ok(Math.abs(a - Math.PI * 4) < 1e-9);
+    });
+    it('returns the shoelace area for a polygon', () => {
+        assert.equal(shapeArea({ shape_type: 'polygon', points: [[0, 0], [4, 0], [4, 3], [0, 3]] }), 12);
+    });
+});
+
+describe('sortOverlapCandidates', () => {
+    it('orders smallest-area first, points/lines ahead of filled shapes', () => {
+        const shapes = [
+            { shape_type: 'polygon', points: [[0, 0], [10, 0], [10, 10], [0, 10]] }, // idx0 area 100
+            { shape_type: 'rectangle', points: [[0, 0], [2, 2]] },                    // idx1 area 4
+            { shape_type: 'point', points: [[1, 1]] },                                // idx2 area 0
+        ];
+        assert.deepEqual(sortOverlapCandidates([0, 1, 2], shapes), [2, 1, 0]);
+    });
+    it('keeps the input order (topmost-first) among equal areas', () => {
+        const eq = [
+            { shape_type: 'rectangle', points: [[0, 0], [2, 2]] }, // idx0 area 4
+            { shape_type: 'rectangle', points: [[0, 0], [2, 2]] }, // idx1 area 4
+        ];
+        assert.deepEqual(sortOverlapCandidates([1, 0], eq), [1, 0]);
+    });
+    it('does not mutate the input array', () => {
+        const input = [0, 1];
+        sortOverlapCandidates(input, [
+            { shape_type: 'rectangle', points: [[0, 0], [9, 9]] },
+            { shape_type: 'rectangle', points: [[0, 0], [1, 1]] },
+        ]);
+        assert.deepEqual(input, [0, 1]);
     });
 });

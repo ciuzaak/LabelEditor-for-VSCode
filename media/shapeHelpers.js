@@ -51,6 +51,54 @@ function labelAnchorFromPoints(points) {
     return { x: minX, y: minY };
 }
 
+// Overlapping-instance selection ------------------------------------------
+
+// Polygon area via the shoelace formula (absolute value). 0 for degenerate
+// input (< 3 points).
+function polygonArea(points) {
+    if (!Array.isArray(points) || points.length < 3) return 0;
+    let sum = 0;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+        sum += points[j][0] * points[i][1] - points[i][0] * points[j][1];
+    }
+    return Math.abs(sum) / 2;
+}
+
+// Area of a shape in image coordinates (zoom-independent). Points and
+// linestrips have no fill and are the hardest to click, so they get area 0
+// and always sort ahead of filled shapes.
+function shapeArea(shape) {
+    if (!shape) return Infinity;
+    const pts = shape.points || [];
+    switch (shape.shape_type) {
+        case 'point':
+        case 'linestrip':
+        case 'line':
+            return 0;
+        case 'circle': {
+            if (pts.length < 2) return 0;
+            const r = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]);
+            return Math.PI * r * r;
+        }
+        case 'rectangle': {
+            if (pts.length < 2) return 0;
+            return Math.abs(pts[1][0] - pts[0][0]) * Math.abs(pts[1][1] - pts[0][1]);
+        }
+        default:
+            return polygonArea(pts);
+    }
+}
+
+// Stable ascending-by-area sort of candidate indices. An explicit tie-break
+// on original position keeps topmost-first (the input is reverse draw order)
+// without relying on Array.sort stability.
+function sortOverlapCandidates(indices, shapes) {
+    return indices
+        .map((idx, ord) => ({ idx, ord, area: shapeArea(shapes[idx]) }))
+        .sort((a, b) => (a.area - b.area) || (a.ord - b.ord))
+        .map(e => e.idx);
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { allowSelectByClick, contourToBBoxRect, labelAnchorFromPoints };
+    module.exports = { allowSelectByClick, contourToBBoxRect, labelAnchorFromPoints, shapeArea, sortOverlapCandidates };
 }
