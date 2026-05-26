@@ -3141,7 +3141,7 @@ function findAllShapesAt(x, y) {
             }
         }
     }
-    return overlappingShapes;
+    return sortOverlapCandidates(overlappingShapes, shapes);
 }
 
 // 查找指定位置的第一个形状（为了保持向后兼容）
