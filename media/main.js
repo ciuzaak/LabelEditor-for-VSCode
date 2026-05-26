@@ -4862,6 +4862,12 @@ function setMode(mode) {
     // 隐藏上下文菜单
     hideShapeContextMenu();
 
+    // Overlap cycling, its badge, and the hover preview don't carry across a
+    // mode switch — reset them so nothing stale lingers in the new mode.
+    overlapCycleState = { members: [], pos: -1 };
+    hideCycleBadge();
+    hoveredShapeIndex = -1;
+
     // Clear SAM state when leaving SAM mode
     if (currentMode === 'sam' && mode !== 'sam') {
         samClearState();
@@ -5387,21 +5393,12 @@ function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = 
     svgOverlay.appendChild(group);
 }
 
-// SVG事件委托 - 只绑定一次，避免内存泄漏
-svgOverlay.addEventListener('click', (e) => {
-    const target = e.target;
-    if (target.dataset && target.dataset.shapeIndex !== undefined) {
-        e.stopPropagation();
-        const idx = parseInt(target.dataset.shapeIndex);
-        if (e.ctrlKey || e.metaKey) {
-            toggleShapeSelection(idx);
-        } else {
-            selectShape(idx);
-        }
-        renderShapeList();
-        draw();
-    }
-});
+// Shape selection is handled entirely by the canvasWrapper 'mousedown' handler
+// (coordinate-based hit-test → smallest-first ordering + click-to-cycle + badge).
+// A legacy svgOverlay 'click' delegation used to live here; it selected the
+// topmost dataset.shapeIndex directly, bypassing and overriding that logic, so it
+// was removed. Vertex editing is coordinate-based (findVertexAt) and edit mode is
+// entered via the context menu, so neither depended on this handler.
 
 function getRectPoints(points) {
     if (points.length !== 2) return points;
@@ -6539,6 +6536,11 @@ if (drawClickThroughToggleBtn) {
         drawClickThrough = !drawClickThrough;
         updateDrawClickThroughToggleUI();
         saveGlobalSettings('drawClickThrough', drawClickThrough);
+        // Selection-allowed state just changed; drop any hover preview / cycle
+        // state so a stale dashed outline or badge can't linger after the redraw.
+        hoveredShapeIndex = -1;
+        overlapCycleState = { members: [], pos: -1 };
+        hideCycleBadge();
         draw();
     };
 }
