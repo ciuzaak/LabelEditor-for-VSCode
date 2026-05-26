@@ -1488,6 +1488,12 @@ document.addEventListener('keydown', (e) => {
         if (focusedTag === 'INPUT' || focusedTag === 'TEXTAREA' || focusedTag === 'SELECT') return;
         if (eraserActive) return;
         shiftPressed = true;
+        // Shift owns the cursor and suppresses hover preview (the mousemove
+        // handler early-returns while Shift is held); drop any stale hover.
+        if (hoveredShapeIndex !== -1) {
+            hoveredShapeIndex = -1;
+            draw();
+        }
         updateShiftFeedback();
     }
 });
@@ -1823,6 +1829,7 @@ function deleteSelectedShapes() {
         shapes.splice(idx, 1);
     }
     clearSelection();
+    hoveredShapeIndex = -1; // hovered index is stale once shapes are spliced
     markDirty();
     saveHistory();
     renderShapeList();
@@ -4461,6 +4468,7 @@ function deleteShape(index) {
 
     shapes.splice(index, 1);
     adjustSelectionAfterDelete(index);
+    hoveredShapeIndex = -1; // hovered index is stale once a shape is spliced
     markDirty();
     saveHistory(); // 保存历史记录以支持撤销/恢复
     renderShapeList();
