@@ -95,6 +95,8 @@ let currentPoints = [];
 let isDrawing = false;
 let selectedShapeIndex = -1;
 let selectedShapeIndices = new Set(); // Multi-selection set
+let hoveredShapeIndex = -1;                       // index of the would-be-selected shape under the cursor (-1 = none)
+let overlapCycleState = { members: [], pos: -1 }; // current click-to-cycle stack + position within it
 let isBatchRenaming = false; // Whether label modal is renaming multiple shapes
 // Box selection state (view mode drag-to-select)
 let isBoxSelecting = false;
@@ -1949,8 +1951,8 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             const distance = Math.sqrt(dx * dx + dy * dy);
             const timeDiff = now - lastClickTime;
 
-            // 检测是否是在同一位置的连续点击
-            const isSameLocation = distance < CLICK_THRESHOLD_DISTANCE && timeDiff < CLICK_THRESHOLD_TIME;
+            // (Same-location detection for selection cycling was replaced by the
+            // candidate-set cycle group in resolveOverlapSelection.)
 
             // 获取点击位置的所有重叠实例
             const overlappingShapes = allowSelectByClick(currentMode, drawClickThrough)
@@ -1958,23 +1960,22 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                 : [];
 
             if (overlappingShapes.length > 0) {
-                let targetShape;
                 if (e.ctrlKey || e.metaKey) {
-                    // Ctrl+click: always target topmost shape (no cycling)
-                    targetShape = overlappingShapes[0];
-                    toggleShapeSelection(targetShape);
-                } else if (isSameLocation && overlappingShapes.length > 1) {
-                    // 如果在同一位置连续点击，且有多个重叠实例，则循环选择下一个
-                    const currentIndex = overlappingShapes.indexOf(selectedShapeIndex);
-                    if (currentIndex !== -1 && currentIndex < overlappingShapes.length - 1) {
-                        targetShape = overlappingShapes[currentIndex + 1];
-                    } else {
-                        targetShape = overlappingShapes[0];
-                    }
-                    selectShape(targetShape);
+                    // Ctrl+click: toggle the smallest (most specific) shape; no cycling
+                    toggleShapeSelection(overlappingShapes[0]);
+                    overlapCycleState = { members: [], pos: -1 };
+                    hideCycleBadge();
                 } else {
-                    targetShape = overlappingShapes[0];
-                    selectShape(targetShape);
+                    // Smallest-first selection; repeat clicks on the same stack cycle down
+                    const r = resolveOverlapSelection({
+                        ordered: overlappingShapes,
+                        prevMembers: overlapCycleState.members,
+                        prevPos: overlapCycleState.pos,
+                        currentSelectedIndex: selectedShapeIndex,
+                    });
+                    selectShape(r.targetIndex);
+                    overlapCycleState = { members: r.members, pos: r.pos };
+                    updateCycleBadge(e.clientX, e.clientY, r.pos, r.members.length);
                 }
 
                 // 更新点击位置和时间
@@ -1991,6 +1992,8 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     // Ctrl+click on empty: don't clear selection
                 } else {
                     clearSelection();
+                    overlapCycleState = { members: [], pos: -1 };
+                    hideCycleBadge();
                 }
                 renderShapeList();
 
@@ -3148,6 +3151,38 @@ function findAllShapesAt(x, y) {
 function findShapeIndexAt(x, y) {
     const overlapping = findAllShapesAt(x, y);
     return overlapping.length > 0 ? overlapping[0] : -1;
+}
+
+// --- Overlap cycle badge: a small "pos / total" hint shown near the cursor
+// while cycling through a stack of overlapping instances (total > 1). It is
+// position:fixed on <body> so the canvas zoom transform doesn't scale it. ---
+let cycleBadgeEl = null;
+let cycleBadgeTimer = null;
+
+function getCycleBadge() {
+    if (!cycleBadgeEl) {
+        cycleBadgeEl = document.createElement('div');
+        cycleBadgeEl.id = 'overlapCycleBadge';
+        cycleBadgeEl.style.display = 'none';
+        document.body.appendChild(cycleBadgeEl);
+    }
+    return cycleBadgeEl;
+}
+
+function updateCycleBadge(clientX, clientY, pos, total) {
+    if (total <= 1) { hideCycleBadge(); return; }
+    const badge = getCycleBadge();
+    badge.textContent = `${pos + 1} / ${total}`;
+    badge.style.left = Math.min(clientX + 14, window.innerWidth - 48) + 'px';
+    badge.style.top = Math.min(clientY + 14, window.innerHeight - 28) + 'px';
+    badge.style.display = 'block';
+    if (cycleBadgeTimer) clearTimeout(cycleBadgeTimer);
+    cycleBadgeTimer = setTimeout(hideCycleBadge, 1500);
+}
+
+function hideCycleBadge() {
+    if (cycleBadgeTimer) { clearTimeout(cycleBadgeTimer); cycleBadgeTimer = null; }
+    if (cycleBadgeEl) cycleBadgeEl.style.display = 'none';
 }
 
 function isPointInPolygon(point, vs) {
