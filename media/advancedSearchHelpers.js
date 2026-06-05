@@ -11,7 +11,7 @@
             if (c.type === 'class') {
                 const values = Array.isArray(c.classes) ? c.classes.filter(v => v && v.trim()) : [];
                 if (values.length) out.push({ type: 'class', values: values.slice() });
-            } else if (c.type === 'name' || c.type === 'description') {
+            } else if (c.type === 'name' || c.type === 'nameRegex') {
                 const value = (c.value || '').trim();
                 if (value) out.push({ type: c.type, value: value });
             }

@@ -1677,6 +1677,10 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 }
 .adv-search-add-label { font-size: 12px; opacity: 0.7; }
 .adv-search-add-row .btn { padding: 2px 10px; font-size: 12px; }
+.adv-search-add-row .btn:disabled { opacity: 0.5; cursor: default; }
+.adv-search-index-status { font-size: 11px; opacity: 0.7; }
+
+.adv-cond__value.invalid { border-color: var(--color-danger); }
 
 .adv-cond {
     display: flex;

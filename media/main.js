@@ -87,8 +87,9 @@ const advancedSearchModal = document.getElementById('advancedSearchModal');
 const advSearchConditions = document.getElementById('advSearchConditions');
 const advSearchClassDatalist = document.getElementById('advSearchClassDatalist');
 const advSearchAddName = document.getElementById('advSearchAddName');
+const advSearchAddNameRegex = document.getElementById('advSearchAddNameRegex');
 const advSearchAddClass = document.getElementById('advSearchAddClass');
-const advSearchAddDescription = document.getElementById('advSearchAddDescription');
+const advSearchIndexStatus = document.getElementById('advSearchIndexStatus');
 const advSearchRunBtn = document.getElementById('advSearchRunBtn');
 const advSearchResetBtn = document.getElementById('advSearchResetBtn');
 const advSearchCancelBtn = document.getElementById('advSearchCancelBtn');
@@ -1204,6 +1205,10 @@ window.addEventListener('message', event => {
             if (message.ok) hideExportDatasetModal();
             break;
         }
+        case 'advancedSearchIndexProgress': {
+            if (advIndexing) setIndexStatus(tt('advSearch.indexing', { done: message.done, total: message.total }));
+            break;
+        }
         case 'advancedSearchPrepareResult': {
             applyAdvancedPrepareResult(message);
             break;
@@ -1417,10 +1422,14 @@ let scanComplete = false;
 // Handle refreshed image list from extension
 function handleUpdateImageList(message) {
     scanComplete = message.hasOwnProperty('isScanFinished') ? !!message.isScanFinished : true;
-    // A refreshed/rescanned list invalidates the advanced results (the index changed).
+    // A refreshed/rescanned list invalidates the advanced results AND the cached
+    // class universe (the host's index was dropped), so reset both.
     if (advancedFilterActive) {
         clearAdvancedFilter();
     }
+    if (advIndexing) cancelIndexing();
+    advClassUniverseLoaded = false;
+    advSearchClassData = [];
     // Update the global workspaceImages array
     // Note: workspaceImages is defined in the HTML as a const, so we need to modify it in place
     if (typeof workspaceImages !== 'undefined' && Array.isArray(workspaceImages)) {
@@ -6980,6 +6989,7 @@ let advancedFilterActive = false;
 let advancedResults = [];          // ranked relative paths
 let advSearchClassData = [];       // [{name, count}] from the extension (lazy)
 let advClassUniverseLoaded = false;
+let advIndexing = false;           // true while the class index is being built
 let advConditions = [];            // [{ id, type, value, classes:[] }]
 let advCondSeq = 0;
 
@@ -7052,19 +7062,41 @@ function filterImages(query) {
 function openAdvancedSearchModal() {
     if (!advancedSearchModal) return;
     advancedSearchModal.style.display = 'flex';
-    if (advConditions.length === 0) addAdvCondition('name'); // start with one name row
-    else renderAdvConditions();
+    renderAdvConditions(); // opens with whatever conditions exist (none on first open)
 }
 
 function hideAdvancedSearchModal() {
     if (advancedSearchModal) advancedSearchModal.style.display = 'none';
+    // Leaving the filter UI stops any in-flight class indexing.
+    if (advIndexing) cancelIndexing();
+}
+
+function setIndexStatus(text) {
+    if (!advSearchIndexStatus) return;
+    advSearchIndexStatus.textContent = text || '';
+    advSearchIndexStatus.style.display = text ? 'inline' : 'none';
+}
+
+function updateAddClassButtonState() {
+    if (advSearchAddClass) advSearchAddClass.disabled = advIndexing;
 }
 
 // The class universe (for autocomplete) requires reading every sidecar JSON, so
 // it is fetched only the first time a class condition is added.
 function ensureClassUniverse() {
-    if (advClassUniverseLoaded) return;
+    if (advClassUniverseLoaded || advIndexing) return;
+    advIndexing = true;
+    updateAddClassButtonState();
+    setIndexStatus(tt('advSearch.indexingStart'));
     vscode.postMessage({ command: 'advancedSearchPrepare' });
+}
+
+function cancelIndexing() {
+    if (!advIndexing) return;
+    advIndexing = false;
+    vscode.postMessage({ command: 'advancedSearchCancelIndex' });
+    setIndexStatus('');
+    updateAddClassButtonState();
 }
 
 function addAdvCondition(type) {
@@ -7076,6 +7108,8 @@ function addAdvCondition(type) {
 function removeAdvCondition(id) {
     advConditions = advConditions.filter(c => c.id !== id);
     renderAdvConditions();
+    // If the class condition that triggered indexing is gone, stop indexing.
+    if (advIndexing && !advConditions.some(c => c.type === 'class')) cancelIndexing();
 }
 
 function renderAdvConditions() {
@@ -7112,8 +7146,9 @@ function buildAdvConditionRow(cond) {
     const label = document.createElement('span');
     label.className = 'adv-cond__label';
     label.textContent = cond.type === 'name' ? tt('advSearch.typeName')
+        : cond.type === 'nameRegex' ? tt('advSearch.typeNameRegex')
         : cond.type === 'class' ? tt('advSearch.typeClass')
-        : tt('advSearch.typeDescription');
+        : tt('advSearch.typeName');
     row.appendChild(label);
 
     if (cond.type === 'class') {
@@ -7152,13 +7187,21 @@ function buildAdvConditionRow(cond) {
         input.type = 'text';
         input.className = 'adv-cond__value';
         input.value = cond.value || '';
-        input.placeholder = cond.type === 'name'
-            ? tt('advSearch.nameInputPlaceholder')
-            : tt('advSearch.descInputPlaceholder');
-        input.addEventListener('input', () => { cond.value = input.value; });
+        input.placeholder = cond.type === 'nameRegex'
+            ? tt('advSearch.nameRegexPlaceholder')
+            : tt('advSearch.nameInputPlaceholder');
+        const validateRegex = () => {
+            if (cond.type !== 'nameRegex') return;
+            const v = input.value;
+            if (!v) { input.classList.remove('invalid'); return; }
+            try { new RegExp(v); input.classList.remove('invalid'); }
+            catch { input.classList.add('invalid'); }
+        };
+        input.addEventListener('input', () => { cond.value = input.value; validateRegex(); });
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') { e.preventDefault(); runAdvancedSearchQuery(); }
         });
+        validateRegex();
         row.appendChild(input);
     }
 
@@ -7176,6 +7219,9 @@ function buildAdvConditionRow(cond) {
 function applyAdvancedPrepareResult(message) {
     advSearchClassData = message.classes || [];
     advClassUniverseLoaded = true;
+    advIndexing = false;
+    setIndexStatus('');
+    updateAddClassButtonState();
     if (advSearchClassDatalist) {
         advSearchClassDatalist.innerHTML = '';
         const frag = document.createDocumentFragment();
@@ -7233,13 +7279,13 @@ function clearAdvancedFilter() {
 
 function resetAdvancedSearchForm() {
     advConditions = [];
-    addAdvCondition('name');
+    renderAdvConditions();
 }
 
 if (advancedSearchBtn) advancedSearchBtn.onclick = openAdvancedSearchModal;
 if (advSearchAddName) advSearchAddName.onclick = () => addAdvCondition('name');
+if (advSearchAddNameRegex) advSearchAddNameRegex.onclick = () => addAdvCondition('nameRegex');
 if (advSearchAddClass) advSearchAddClass.onclick = () => addAdvCondition('class');
-if (advSearchAddDescription) advSearchAddDescription.onclick = () => addAdvCondition('description');
 if (advSearchRunBtn) advSearchRunBtn.onclick = runAdvancedSearchQuery;
 if (advSearchResetBtn) advSearchResetBtn.onclick = resetAdvancedSearchForm;
 if (advSearchCancelBtn) advSearchCancelBtn.onclick = hideAdvancedSearchModal;

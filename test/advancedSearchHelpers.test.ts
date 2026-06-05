@@ -6,17 +6,17 @@ const helpers = require(path.resolve(__dirname, '..', '..', 'media', 'advancedSe
 const { buildQuery, hasActiveConditions, formatBanner } = helpers;
 
 describe('buildQuery', () => {
-    it('trims name/description values and shapes class values', () => {
+    it('trims name/regex values and shapes class values', () => {
         const q = buildQuery([
             { type: 'name', value: '  cat ' },
             { type: 'class', classes: ['car', 'person'] },
-            { type: 'description', value: ' edge ' },
+            { type: 'nameRegex', value: ' ^img_\\d+ ' },
         ]);
         assert.deepEqual(q, {
             conditions: [
                 { type: 'name', value: 'cat' },
                 { type: 'class', values: ['car', 'person'] },
-                { type: 'description', value: 'edge' },
+                { type: 'nameRegex', value: '^img_\\d+' },
             ],
         });
     });
@@ -25,7 +25,7 @@ describe('buildQuery', () => {
         const q = buildQuery([
             { type: 'name', value: '   ' },
             { type: 'class', classes: [] },
-            { type: 'description', value: '' },
+            { type: 'nameRegex', value: '' },
             { type: 'class', classes: ['', '  '] },
         ]);
         assert.deepEqual(q, { conditions: [] });
