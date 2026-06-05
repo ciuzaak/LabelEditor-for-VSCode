@@ -37,6 +37,7 @@ export class LabelMePanel {
     private _scanGeneration = 0; // Incremented on each scan start to detect stale results
     private _annotationIndex: AnnotationRecord[] | null = null;
     private _annotationIndexGeneration = -1; // matches _scanGeneration when the index is valid
+    private _indexBuildToken = 0; // bumped to cancel an in-flight class-index build
     private _isScanFinished = false; // Tracks if the initial background scan has completed
     private _disposed = false; // Guards async callbacks from posting to a disposed webview
     private _webviewReady = false; // Set when the webview signals 'webviewReady'
@@ -470,6 +471,9 @@ export class LabelMePanel {
                     case 'advancedSearchRun':
                         await this._handleAdvancedSearchRun(message.query);
                         return;
+                    case 'advancedSearchCancelIndex':
+                        this._cancelIndexBuild();
+                        return;
                 }
             },
             null,
@@ -751,6 +755,8 @@ export class LabelMePanel {
         LabelMePanel.panels.delete(this);
         // Bump scan generation so any in-flight scan discards its results.
         this._scanGeneration++;
+        // Stop any in-flight annotation-index build.
+        this._indexBuildToken++;
 
         // Clean up our resources
         this._panel.dispose();
@@ -1277,8 +1283,9 @@ export class LabelMePanel {
                         <div class="adv-search-add-row">
                             <span class="adv-search-add-label" data-i18n="advSearch.addCondition">Add condition:</span>
                             <button id="advSearchAddName" class="btn" data-i18n="advSearch.addName">Name</button>
+                            <button id="advSearchAddNameRegex" class="btn" data-i18n="advSearch.addNameRegex">Name (regex)</button>
                             <button id="advSearchAddClass" class="btn" data-i18n="advSearch.addClass">Class</button>
-                            <button id="advSearchAddDescription" class="btn" data-i18n="advSearch.addDescription">Description</button>
+                            <span id="advSearchIndexStatus" class="adv-search-index-status" style="display: none;"></span>
                         </div>
                         <datalist id="advSearchClassDatalist"></datalist>
                         <div class="modal-buttons">
@@ -1427,18 +1434,33 @@ export class LabelMePanel {
         return { relPath: rel, labels, descriptions };
     }
 
-    private async _buildAnnotationIndex(): Promise<AnnotationRecord[]> {
-        if (this._workspaceImages.length === 0) {
-            await this._scanWorkspaceImages();
-        }
-        const rels = this._workspaceImages.slice();
+    /**
+     * Read every sidecar JSON into an in-memory index. When `opts.token` is given,
+     * the build aborts (returning null) as soon as `_indexBuildToken` moves past it
+     * — that is how the webview cancels an in-flight class-index build. When
+     * `opts.progress` is set, a progress message is posted after each batch.
+     */
+    private async _readAllRecords(
+        rels: string[],
+        opts?: { token?: number; progress?: boolean }
+    ): Promise<AnnotationRecord[] | null> {
+        const total = rels.length;
         const records: AnnotationRecord[] = [];
         const BATCH = 32;
-        for (let i = 0; i < rels.length; i += BATCH) {
+        for (let i = 0; i < total; i += BATCH) {
+            if (opts?.token !== undefined && opts.token !== this._indexBuildToken) return null;
             const batch = rels.slice(i, i + BATCH);
             const recs = await Promise.all(batch.map(rel => this._readAnnotationRecord(rel)));
             records.push(...recs);
+            if (opts?.progress) {
+                this._safePost({
+                    command: 'advancedSearchIndexProgress',
+                    done: Math.min(i + BATCH, total),
+                    total
+                });
+            }
         }
+        if (opts?.token !== undefined && opts.token !== this._indexBuildToken) return null;
         return records;
     }
 
@@ -1446,10 +1468,18 @@ export class LabelMePanel {
         if (this._annotationIndex && this._annotationIndexGeneration === this._scanGeneration) {
             return this._annotationIndex;
         }
-        const idx = await this._buildAnnotationIndex();
+        if (this._workspaceImages.length === 0) {
+            await this._scanWorkspaceImages();
+        }
+        // Non-cancellable build (used by the search-run fallback); always completes.
+        const idx = (await this._readAllRecords(this._workspaceImages.slice())) as AnnotationRecord[];
         this._annotationIndex = idx;
         this._annotationIndexGeneration = this._scanGeneration;
         return idx;
+    }
+
+    private _cancelIndexBuild(): void {
+        this._indexBuildToken++; // any in-flight _readAllRecords sees the bump and bails
     }
 
     private _updateIndexForCurrentImage(shapes: any[]): void {
@@ -1471,7 +1501,25 @@ export class LabelMePanel {
     }
 
     private async _handleAdvancedSearchPrepare(): Promise<void> {
-        const index = await this._getAnnotationIndex();
+        // Serve the cached index immediately when it is still valid.
+        if (this._annotationIndex && this._annotationIndexGeneration === this._scanGeneration) {
+            this._postClassUniverse(this._annotationIndex);
+            return;
+        }
+        if (this._workspaceImages.length === 0) {
+            await this._scanWorkspaceImages();
+        }
+        // Cancellable, progress-reporting build. The webview cancels by posting
+        // 'advancedSearchCancelIndex' (which bumps _indexBuildToken).
+        const token = ++this._indexBuildToken;
+        const idx = await this._readAllRecords(this._workspaceImages.slice(), { token, progress: true });
+        if (idx === null) return; // cancelled — don't cache, don't post a result
+        this._annotationIndex = idx;
+        this._annotationIndexGeneration = this._scanGeneration;
+        this._postClassUniverse(idx);
+    }
+
+    private _postClassUniverse(index: AnnotationRecord[]): void {
         const classCounts = new Map<string, number>();
         for (const rec of index) {
             for (const [label, count] of rec.labels) {
@@ -1489,12 +1537,10 @@ export class LabelMePanel {
     }
 
     private async _handleAdvancedSearchRun(query: SearchQuery): Promise<void> {
-        // Name-only queries match on the relative path the host already holds, so they
-        // need zero sidecar reads. Only build the (cached) annotation index when a class
-        // or description condition is present.
-        const needsAnnotations = (query.conditions || []).some(
-            c => c.type === 'class' || c.type === 'description'
-        );
+        // Name / regex queries match on the relative path the host already holds, so
+        // they need zero sidecar reads. Only build the (cached) annotation index when a
+        // class condition is present.
+        const needsAnnotations = (query.conditions || []).some(c => c.type === 'class');
         let index: AnnotationRecord[];
         if (needsAnnotations) {
             index = await this._getAnnotationIndex();

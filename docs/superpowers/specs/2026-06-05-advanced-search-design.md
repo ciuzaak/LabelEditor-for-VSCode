@@ -21,6 +21,16 @@ Date: 2026-06-05
 >
 > Sections below describe the original (superseded) ALL/ANY-toggle design; read them with the
 > revision in mind.
+>
+> **Revision 2026-06-05c (second smoke pass).**
+> 1. The modal **opens with no conditions** by default.
+> 2. The **description** condition is removed; a **name (regex)** condition is added — matches a
+>    user regex (case-insensitive) against the filename. Like substring-name it reads **no**
+>    sidecar JSON, so it is cheap; an invalid pattern matches nothing and the input is flagged.
+> 3. Building the **class index shows progress** (`advancedSearchIndexProgress {done,total}`) and
+>    **disables the "+ Class" button** while it runs. Removing the class condition or leaving the
+>    modal mid-build **cancels** the index (`advancedSearchCancelIndex`, host-side via a build
+>    token). Only the class condition still needs the sidecar scan; name and regex never do.
 
 The file-navigation sidebar currently offers only a substring filter over image paths
 ([media/main.js:6984](../../../media/main.js#L6984)). This adds an **advanced search** that

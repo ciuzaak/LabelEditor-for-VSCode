@@ -3,16 +3,16 @@ import { comparePathsNaturally } from './labelMeUtils';
 export interface AnnotationRecord {
     relPath: string;
     labels: Map<string, number>;   // class name -> instance count
-    descriptions: string[];        // non-empty shape descriptions
+    descriptions: string[];        // kept for index shape compatibility; unused by matching
 }
 
 export type AnnotationIndex = AnnotationRecord[];
 
-// A single user-added condition. name/description carry one substring value;
-// class carries a set of class names that are OR'd among themselves.
+// A single user-added condition. name/nameRegex carry one value matched against
+// the filename; class carries a set of class names that are OR'd among themselves.
 export type SearchCondition =
     | { type: 'name'; value: string }
-    | { type: 'description'; value: string }
+    | { type: 'nameRegex'; value: string }
     | { type: 'class'; values: string[] };
 
 // Conditions are AND'd together. (No global ALL/ANY toggle — see spec revision.)
@@ -23,24 +23,22 @@ export interface SearchQuery {
 export interface SearchResult {
     relPath: string;
     score: number;
-    nameMatchKind: 'exact' | 'prefix' | 'substr' | 'none'; // best across name conditions
+    nameMatchKind: 'exact' | 'prefix' | 'substr' | 'regex' | 'none'; // best across name conditions
     matchedClasses: string[];     // union across class conditions
     classInstanceCount: number;
-    descMatchCount: number;
 }
 
 const WEIGHTS = {
     nameExact: 1000,
     namePrefix: 500,
+    nameRegex: 400,
     nameSubstr: 200,
     classPresent: 100,
     classInstance: 10,
-    descHit: 50,
-    descPrefixBonus: 20,
 };
 
 const NAME_KIND_RANK: Record<SearchResult['nameMatchKind'], number> = {
-    none: 0, substr: 1, prefix: 2, exact: 3,
+    none: 0, substr: 1, regex: 2, prefix: 3, exact: 4,
 };
 
 function basename(relPath: string): string {
@@ -75,26 +73,7 @@ function classScore(record: AnnotationRecord, values: string[]): { satisfied: bo
     };
 }
 
-function descScore(record: AnnotationRecord, rawValue: string): { satisfied: boolean; count: number; contribution: number } {
-    const descQ = rawValue.trim().toLowerCase();
-    if (!descQ) return { satisfied: false, count: 0, contribution: 0 };
-    let count = 0;
-    let prefixCount = 0;
-    for (const d of record.descriptions) {
-        const dl = d.toLowerCase();
-        if (dl.includes(descQ)) {
-            count++;
-            if (dl === descQ || dl.startsWith(descQ)) prefixCount++;
-        }
-    }
-    return {
-        satisfied: count > 0,
-        count,
-        contribution: count * WEIGHTS.descHit + prefixCount * WEIGHTS.descPrefixBonus,
-    };
-}
-
-// Drop conditions with no usable value (empty name/description, empty class set).
+// Drop conditions with no usable value (empty name/regex, empty class set).
 function activeConditions(conditions: SearchCondition[]): SearchCondition[] {
     return (conditions || []).filter(c => {
         if (c.type === 'class') return Array.isArray(c.values) && c.values.length > 0;
@@ -102,9 +81,27 @@ function activeConditions(conditions: SearchCondition[]): SearchCondition[] {
     });
 }
 
+// Compiled form of an active condition. A nameRegex with an invalid pattern
+// gets regex:null, which makes it match nothing (so the AND yields no results).
+interface Compiled {
+    cond: SearchCondition;
+    regex?: RegExp | null;
+}
+
 export function runAdvancedSearch(index: AnnotationIndex, query: SearchQuery): SearchResult[] {
     const active = activeConditions(query.conditions || []);
     if (active.length === 0) return [];
+
+    const compiled: Compiled[] = active.map(cond => {
+        if (cond.type === 'nameRegex') {
+            try {
+                return { cond, regex: new RegExp(cond.value.trim(), 'i') };
+            } catch {
+                return { cond, regex: null };
+            }
+        }
+        return { cond };
+    });
 
     const out: SearchResult[] = [];
     for (const record of index) {
@@ -113,25 +110,23 @@ export function runAdvancedSearch(index: AnnotationIndex, query: SearchQuery): S
         let bestName: SearchResult['nameMatchKind'] = 'none';
         const matchedClasses = new Set<string>();
         let classInstanceCount = 0;
-        let descMatchCount = 0;
 
-        for (const cond of active) {
+        for (const { cond, regex } of compiled) {
             if (cond.type === 'name') {
                 const r = nameScore(record.relPath, cond.value);
                 if (r.kind === 'none') { ok = false; break; }
                 score += r.contribution;
                 if (NAME_KIND_RANK[r.kind] > NAME_KIND_RANK[bestName]) bestName = r.kind;
-            } else if (cond.type === 'class') {
+            } else if (cond.type === 'nameRegex') {
+                if (!regex || !regex.test(basename(record.relPath))) { ok = false; break; }
+                score += WEIGHTS.nameRegex;
+                if (NAME_KIND_RANK.regex > NAME_KIND_RANK[bestName]) bestName = 'regex';
+            } else {
                 const r = classScore(record, cond.values);
                 if (!r.satisfied) { ok = false; break; }
                 score += r.contribution;
                 r.matched.forEach(c => matchedClasses.add(c));
                 classInstanceCount += r.instanceCount;
-            } else {
-                const r = descScore(record, cond.value);
-                if (!r.satisfied) { ok = false; break; }
-                score += r.contribution;
-                descMatchCount += r.count;
             }
         }
         if (!ok) continue;
@@ -142,7 +137,6 @@ export function runAdvancedSearch(index: AnnotationIndex, query: SearchQuery): S
             nameMatchKind: bestName,
             matchedClasses: Array.from(matchedClasses),
             classInstanceCount,
-            descMatchCount,
         });
     }
 
