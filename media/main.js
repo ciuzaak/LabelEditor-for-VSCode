@@ -84,12 +84,11 @@ const searchInput = document.getElementById('searchInput');
 const searchCloseBtn = document.getElementById('searchCloseBtn');
 const advancedSearchBtn = document.getElementById('advancedSearchBtn');
 const advancedSearchModal = document.getElementById('advancedSearchModal');
-const advSearchName = document.getElementById('advSearchName');
-const advSearchDescription = document.getElementById('advSearchDescription');
-const advSearchClassFilter = document.getElementById('advSearchClassFilter');
-const advSearchClassList = document.getElementById('advSearchClassList');
-const advSearchClassAll = document.getElementById('advSearchClassAll');
-const advSearchClassNone = document.getElementById('advSearchClassNone');
+const advSearchConditions = document.getElementById('advSearchConditions');
+const advSearchClassDatalist = document.getElementById('advSearchClassDatalist');
+const advSearchAddName = document.getElementById('advSearchAddName');
+const advSearchAddClass = document.getElementById('advSearchAddClass');
+const advSearchAddDescription = document.getElementById('advSearchAddDescription');
 const advSearchRunBtn = document.getElementById('advSearchRunBtn');
 const advSearchResetBtn = document.getElementById('advSearchResetBtn');
 const advSearchCancelBtn = document.getElementById('advSearchCancelBtn');
@@ -1640,10 +1639,10 @@ function handleAction(id, e) {
             toggleSelectedVisibility();
             return;
         case 'nav.prev':
-            vscode.postMessage({ command: 'prev' });
+            navigateRelative(-1);
             return;
         case 'nav.next':
-            vscode.postMessage({ command: 'next' });
+            navigateRelative(1);
             return;
         case 'edit.delete':
             if (selectedShapeIndices.size > 0) {
@@ -6708,14 +6707,14 @@ if (themeAutoBtn) {
 // Previous Image button
 if (prevImageBtn) {
     prevImageBtn.onclick = () => {
-        vscode.postMessage({ command: 'prev' });
+        navigateRelative(-1);
     };
 }
 
 // Next Image button
 if (nextImageBtn) {
     nextImageBtn.onclick = () => {
-        vscode.postMessage({ command: 'next' });
+        navigateRelative(1);
     };
 }
 
@@ -6979,8 +6978,10 @@ let filteredImages = []; // Filtered image list when search is active
 // Advanced search state
 let advancedFilterActive = false;
 let advancedResults = [];          // ranked relative paths
-let advSearchClassData = [];       // [{name, count}] from the extension
-const advSelectedClasses = new Set();
+let advSearchClassData = [];       // [{name, count}] from the extension (lazy)
+let advClassUniverseLoaded = false;
+let advConditions = [];            // [{ id, type, value, classes:[] }]
+let advCondSeq = 0;
 
 function tt(key, params) {
     return (window.i18n && window.i18n.t) ? window.i18n.t(key, params) : key;
@@ -7051,70 +7052,146 @@ function filterImages(query) {
 function openAdvancedSearchModal() {
     if (!advancedSearchModal) return;
     advancedSearchModal.style.display = 'flex';
-    if (advancedSearchBtn) advancedSearchBtn.disabled = true;
-    // Request the class universe / image count from the extension.
-    vscode.postMessage({ command: 'advancedSearchPrepare' });
+    if (advConditions.length === 0) addAdvCondition('name'); // start with one name row
+    else renderAdvConditions();
 }
 
 function hideAdvancedSearchModal() {
     if (advancedSearchModal) advancedSearchModal.style.display = 'none';
-    if (advancedSearchBtn) advancedSearchBtn.disabled = false;
 }
 
-function renderAdvancedClassList() {
-    if (!advSearchClassList) return;
-    const filterText = advSearchClassFilter ? advSearchClassFilter.value : '';
-    const visible = window.AdvancedSearchHelpers.filterClassNames(advSearchClassData, filterText);
-    advSearchClassList.innerHTML = '';
+// The class universe (for autocomplete) requires reading every sidecar JSON, so
+// it is fetched only the first time a class condition is added.
+function ensureClassUniverse() {
+    if (advClassUniverseLoaded) return;
+    vscode.postMessage({ command: 'advancedSearchPrepare' });
+}
+
+function addAdvCondition(type) {
+    advConditions.push({ id: ++advCondSeq, type, value: '', classes: [] });
+    if (type === 'class') ensureClassUniverse();
+    renderAdvConditions();
+}
+
+function removeAdvCondition(id) {
+    advConditions = advConditions.filter(c => c.id !== id);
+    renderAdvConditions();
+}
+
+function renderAdvConditions() {
+    if (!advSearchConditions) return;
+    advSearchConditions.innerHTML = '';
     const frag = document.createDocumentFragment();
-    for (const cls of visible) {
-        const li = document.createElement('li');
-        const cb = document.createElement('input');
-        cb.type = 'checkbox';
-        cb.value = cls.name;
-        cb.checked = advSelectedClasses.has(cls.name);
-        cb.onchange = () => {
-            if (cb.checked) advSelectedClasses.add(cls.name);
-            else advSelectedClasses.delete(cls.name);
+    for (const cond of advConditions) frag.appendChild(buildAdvConditionRow(cond));
+    advSearchConditions.appendChild(frag);
+}
+
+function renderAdvChips(chipsEl, cond) {
+    chipsEl.innerHTML = '';
+    cond.classes.forEach((cls, i) => {
+        const chip = document.createElement('span');
+        chip.className = 'adv-cond__chip';
+        const text = document.createElement('span');
+        text.textContent = cls;
+        const x = document.createElement('button');
+        x.className = 'adv-cond__chip-remove';
+        x.type = 'button';
+        x.textContent = '×';
+        x.onclick = () => { cond.classes.splice(i, 1); renderAdvChips(chipsEl, cond); };
+        chip.appendChild(text);
+        chip.appendChild(x);
+        chipsEl.appendChild(chip);
+    });
+}
+
+function buildAdvConditionRow(cond) {
+    const row = document.createElement('div');
+    row.className = 'adv-cond';
+    row.dataset.type = cond.type;
+
+    const label = document.createElement('span');
+    label.className = 'adv-cond__label';
+    label.textContent = cond.type === 'name' ? tt('advSearch.typeName')
+        : cond.type === 'class' ? tt('advSearch.typeClass')
+        : tt('advSearch.typeDescription');
+    row.appendChild(label);
+
+    if (cond.type === 'class') {
+        const body = document.createElement('div');
+        body.className = 'adv-cond__body adv-cond__class-body';
+        const chips = document.createElement('div');
+        chips.className = 'adv-cond__chips';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'adv-cond__value adv-cond__class-input';
+        input.setAttribute('list', 'advSearchClassDatalist');
+        input.placeholder = tt('advSearch.classInputPlaceholder');
+        const addChip = (val) => {
+            const v = (val || '').trim();
+            if (!v) return;
+            if (!cond.classes.includes(v)) cond.classes.push(v);
+            input.value = '';
+            renderAdvChips(chips, cond);
         };
-        const name = document.createElement('span');
-        name.textContent = cls.name;
-        const count = document.createElement('span');
-        count.className = 'adv-search-class-count';
-        count.textContent = cls.count;
-        li.appendChild(cb);
-        li.appendChild(name);
-        li.appendChild(count);
-        // Clicking the row (not the checkbox) toggles too.
-        li.onclick = (e) => {
-            if (e.target === cb) return;
-            cb.checked = !cb.checked;
-            cb.onchange();
-        };
-        frag.appendChild(li);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); addChip(input.value); }
+            else if (e.key === 'Backspace' && !input.value && cond.classes.length) {
+                cond.classes.pop();
+                renderAdvChips(chips, cond);
+            }
+        });
+        // Adding a chip on change captures both a datalist pick and a blur with
+        // pending text, so typed-but-not-Entered classes are not silently lost.
+        input.addEventListener('change', () => { if (input.value) addChip(input.value); });
+        renderAdvChips(chips, cond);
+        body.appendChild(chips);
+        body.appendChild(input);
+        row.appendChild(body);
+    } else {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'adv-cond__value';
+        input.value = cond.value || '';
+        input.placeholder = cond.type === 'name'
+            ? tt('advSearch.nameInputPlaceholder')
+            : tt('advSearch.descInputPlaceholder');
+        input.addEventListener('input', () => { cond.value = input.value; });
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') { e.preventDefault(); runAdvancedSearchQuery(); }
+        });
+        row.appendChild(input);
     }
-    advSearchClassList.appendChild(frag);
+
+    const remove = document.createElement('button');
+    remove.className = 'adv-cond__remove';
+    remove.type = 'button';
+    remove.setAttribute('aria-label', 'Remove condition');
+    remove.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg>';
+    remove.onclick = () => removeAdvCondition(cond.id);
+    row.appendChild(remove);
+
+    return row;
 }
 
 function applyAdvancedPrepareResult(message) {
     advSearchClassData = message.classes || [];
-    // Drop selections that no longer exist in the universe.
-    for (const c of Array.from(advSelectedClasses)) {
-        if (!advSearchClassData.some(x => x.name === c)) advSelectedClasses.delete(c);
+    advClassUniverseLoaded = true;
+    if (advSearchClassDatalist) {
+        advSearchClassDatalist.innerHTML = '';
+        const frag = document.createDocumentFragment();
+        for (const c of advSearchClassData) {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.label = `${c.name} (${c.count})`;
+            frag.appendChild(opt);
+        }
+        advSearchClassDatalist.appendChild(frag);
     }
-    renderAdvancedClassList();
-    if (advancedSearchBtn) advancedSearchBtn.disabled = false;
 }
 
 function runAdvancedSearchQuery() {
-    const raw = {
-        combinator: (document.querySelector('input[name="advSearchCombinator"]:checked') || {}).value || 'all',
-        name: advSearchName ? advSearchName.value : '',
-        classes: Array.from(advSelectedClasses),
-        description: advSearchDescription ? advSearchDescription.value : '',
-    };
-    const query = window.AdvancedSearchHelpers.normalizeQuery(raw);
-    if (!window.AdvancedSearchHelpers.hasActiveCriteria(query)) {
+    const query = window.AdvancedSearchHelpers.buildQuery(advConditions);
+    if (!window.AdvancedSearchHelpers.hasActiveConditions(query)) {
         clearAdvancedFilter();
         hideAdvancedSearchModal();
         return;
@@ -7155,32 +7232,41 @@ function clearAdvancedFilter() {
 }
 
 function resetAdvancedSearchForm() {
-    if (advSearchName) advSearchName.value = '';
-    if (advSearchDescription) advSearchDescription.value = '';
-    if (advSearchClassFilter) advSearchClassFilter.value = '';
-    advSelectedClasses.clear();
-    const allRadio = document.querySelector('input[name="advSearchCombinator"][value="all"]');
-    if (allRadio) allRadio.checked = true;
-    renderAdvancedClassList();
+    advConditions = [];
+    addAdvCondition('name');
 }
 
 if (advancedSearchBtn) advancedSearchBtn.onclick = openAdvancedSearchModal;
+if (advSearchAddName) advSearchAddName.onclick = () => addAdvCondition('name');
+if (advSearchAddClass) advSearchAddClass.onclick = () => addAdvCondition('class');
+if (advSearchAddDescription) advSearchAddDescription.onclick = () => addAdvCondition('description');
 if (advSearchRunBtn) advSearchRunBtn.onclick = runAdvancedSearchQuery;
 if (advSearchResetBtn) advSearchResetBtn.onclick = resetAdvancedSearchForm;
 if (advSearchCancelBtn) advSearchCancelBtn.onclick = hideAdvancedSearchModal;
 if (advSearchBannerClear) advSearchBannerClear.onclick = clearAdvancedFilter;
-if (advSearchClassFilter) advSearchClassFilter.oninput = renderAdvancedClassList;
-if (advSearchClassAll) advSearchClassAll.onclick = () => {
-    const filterText = advSearchClassFilter ? advSearchClassFilter.value : '';
-    for (const c of window.AdvancedSearchHelpers.filterClassNames(advSearchClassData, filterText)) {
-        advSelectedClasses.add(c.name);
+
+// Navigate prev/next within the current effective (filtered) list, in its order,
+// wrapping around. Falls back to host-side full-list nav when no list is loaded.
+function navigateRelative(direction) {
+    const list = getEffectiveImageList();
+    if (!list || list.length === 0) {
+        vscode.postMessage({ command: direction > 0 ? 'next' : 'prev' });
+        return;
     }
-    renderAdvancedClassList();
-};
-if (advSearchClassNone) advSearchClassNone.onclick = () => {
-    advSelectedClasses.clear();
-    renderAdvancedClassList();
-};
+    let idx = list.indexOf(currentImageRelativePathMutable);
+    if (idx === -1) idx = direction > 0 ? -1 : 0; // current not in set: step to first/last
+    let n = idx + direction;
+    if (n < 0) n = list.length - 1;
+    if (n >= list.length) n = 0;
+    const target = list[n];
+    if (!target) return;
+    // Preserve scroll position like a list click does.
+    const state = vscode.getState() || {};
+    state.savedScrollTop = imageBrowserList ? imageBrowserList.scrollTop : 0;
+    state.skipNextScroll = true;
+    vscode.setState(state);
+    vscode.postMessage({ command: 'navigateToImage', imagePath: target });
+}
 
 // Restore search state if available
 if (vscodeState && vscodeState.searchQuery) {

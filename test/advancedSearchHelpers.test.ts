@@ -3,38 +3,51 @@ import * as assert from 'node:assert/strict';
 import * as path from 'node:path';
 
 const helpers = require(path.resolve(__dirname, '..', '..', 'media', 'advancedSearchHelpers.js'));
-const { normalizeQuery, hasActiveCriteria, filterClassNames, formatBanner } = helpers;
+const { buildQuery, hasActiveConditions, formatBanner } = helpers;
 
-describe('normalizeQuery', () => {
-    it('trims name/description and defaults combinator to all', () => {
-        const q = normalizeQuery({ name: '  cat ', description: ' edge ', classes: ['car'] });
-        assert.deepEqual(q, { combinator: 'all', name: 'cat', classes: ['car'], description: 'edge' });
+describe('buildQuery', () => {
+    it('trims name/description values and shapes class values', () => {
+        const q = buildQuery([
+            { type: 'name', value: '  cat ' },
+            { type: 'class', classes: ['car', 'person'] },
+            { type: 'description', value: ' edge ' },
+        ]);
+        assert.deepEqual(q, {
+            conditions: [
+                { type: 'name', value: 'cat' },
+                { type: 'class', values: ['car', 'person'] },
+                { type: 'description', value: 'edge' },
+            ],
+        });
     });
-    it('passes through combinator any and empty arrays', () => {
-        const q = normalizeQuery({ combinator: 'any' });
-        assert.deepEqual(q, { combinator: 'any', name: '', classes: [], description: '' });
+
+    it('drops empty conditions (blank text, empty class set)', () => {
+        const q = buildQuery([
+            { type: 'name', value: '   ' },
+            { type: 'class', classes: [] },
+            { type: 'description', value: '' },
+            { type: 'class', classes: ['', '  '] },
+        ]);
+        assert.deepEqual(q, { conditions: [] });
+    });
+
+    it('keeps multiple conditions of the same type', () => {
+        const q = buildQuery([
+            { type: 'class', classes: ['car', 'person'] },
+            { type: 'class', classes: ['tree'] },
+        ]);
+        assert.equal(q.conditions.length, 2);
+        assert.deepEqual(q.conditions[1], { type: 'class', values: ['tree'] });
     });
 });
 
-describe('hasActiveCriteria', () => {
-    it('is false when nothing is set', () => {
-        assert.equal(hasActiveCriteria({ combinator: 'all', name: '', classes: [], description: '' }), false);
+describe('hasActiveConditions', () => {
+    it('is false for an empty query', () => {
+        assert.equal(hasActiveConditions({ conditions: [] }), false);
+        assert.equal(hasActiveConditions(buildQuery([{ type: 'name', value: ' ' }])), false);
     });
-    it('is true when any one criterion is set', () => {
-        assert.equal(hasActiveCriteria({ combinator: 'all', name: 'a', classes: [], description: '' }), true);
-        assert.equal(hasActiveCriteria({ combinator: 'all', name: '', classes: ['x'], description: '' }), true);
-        assert.equal(hasActiveCriteria({ combinator: 'all', name: '', classes: [], description: 'd' }), true);
-    });
-});
-
-describe('filterClassNames', () => {
-    const classes = [{ name: 'car', count: 3 }, { name: 'cat', count: 1 }, { name: 'dog', count: 2 }];
-    it('returns all when the filter is empty', () => {
-        assert.equal(filterClassNames(classes, '').length, 3);
-    });
-    it('filters case-insensitively by substring', () => {
-        assert.deepEqual(filterClassNames(classes, 'ca').map((c: any) => c.name), ['car', 'cat']);
-        assert.deepEqual(filterClassNames(classes, 'O').map((c: any) => c.name), ['dog']);
+    it('is true when at least one condition survives', () => {
+        assert.equal(hasActiveConditions(buildQuery([{ type: 'name', value: 'x' }])), true);
     });
 });
 
