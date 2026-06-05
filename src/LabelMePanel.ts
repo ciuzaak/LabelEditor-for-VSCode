@@ -17,6 +17,7 @@ import {
     ExportImage,
     ExportShape
 } from './exportFormats';
+import { AnnotationRecord, SearchQuery, runAdvancedSearch } from './searchEngine';
 
 export class LabelMePanel {
     public static readonly panels: Set<LabelMePanel> = new Set();
@@ -34,6 +35,8 @@ export class LabelMePanel {
     private _rootPath: string; // The single source of truth for the image scanning root
     private _panelTitle: string; // Title set once at creation, never changed during navigation
     private _scanGeneration = 0; // Incremented on each scan start to detect stale results
+    private _annotationIndex: AnnotationRecord[] | null = null;
+    private _annotationIndexGeneration = -1; // matches _scanGeneration when the index is valid
     private _isScanFinished = false; // Tracks if the initial background scan has completed
     private _disposed = false; // Guards async callbacks from posting to a disposed webview
     private _webviewReady = false; // Set when the webview signals 'webviewReady'
@@ -461,6 +464,12 @@ export class LabelMePanel {
                     case 'exportDatasetRun':
                         await this._runExportDataset(message.config);
                         return;
+                    case 'advancedSearchPrepare':
+                        await this._handleAdvancedSearchPrepare();
+                        return;
+                    case 'advancedSearchRun':
+                        await this._handleAdvancedSearchRun(message.query);
+                        return;
                 }
             },
             null,
@@ -626,6 +635,7 @@ export class LabelMePanel {
 
         // Force rescan by clearing cached images
         this._workspaceImages = [];
+        this._annotationIndex = null; // force a rebuild on next search
         await this._scanWorkspaceImages();
 
         // Bail if a newer scan or a root change occurred during the await.
@@ -1360,6 +1370,100 @@ export class LabelMePanel {
             </html>`;
     }
 
+    private async _readAnnotationRecord(rel: string): Promise<AnnotationRecord> {
+        const labels = new Map<string, number>();
+        const descriptions: string[] = [];
+        const absImg = path.join(this._rootPath, rel);
+        const jsonPath = absImg.replace(/\.[^/.]+$/, '') + '.json';
+        if (existsSync(jsonPath)) {
+            try {
+                const json = JSON.parse(await fs.readFile(jsonPath, 'utf8'));
+                for (const s of (json.shapes || [])) {
+                    if (s && typeof s.label === 'string' && s.label) {
+                        labels.set(s.label, (labels.get(s.label) || 0) + 1);
+                    }
+                    if (s && typeof s.description === 'string' && s.description.trim()) {
+                        descriptions.push(s.description);
+                    }
+                }
+            } catch {
+                // Treat unreadable/invalid JSON as an empty record.
+            }
+        }
+        return { relPath: rel, labels, descriptions };
+    }
+
+    private async _buildAnnotationIndex(): Promise<AnnotationRecord[]> {
+        if (this._workspaceImages.length === 0) {
+            await this._scanWorkspaceImages();
+        }
+        const rels = this._workspaceImages.slice();
+        const records: AnnotationRecord[] = [];
+        const BATCH = 32;
+        for (let i = 0; i < rels.length; i += BATCH) {
+            const batch = rels.slice(i, i + BATCH);
+            const recs = await Promise.all(batch.map(rel => this._readAnnotationRecord(rel)));
+            records.push(...recs);
+        }
+        return records;
+    }
+
+    private async _getAnnotationIndex(): Promise<AnnotationRecord[]> {
+        if (this._annotationIndex && this._annotationIndexGeneration === this._scanGeneration) {
+            return this._annotationIndex;
+        }
+        const idx = await this._buildAnnotationIndex();
+        this._annotationIndex = idx;
+        this._annotationIndexGeneration = this._scanGeneration;
+        return idx;
+    }
+
+    private _updateIndexForCurrentImage(shapes: any[]): void {
+        if (!this._annotationIndex) return;
+        const rel = path.relative(this._rootPath, this._imageUri.fsPath);
+        const labels = new Map<string, number>();
+        const descriptions: string[] = [];
+        for (const s of (shapes || [])) {
+            if (s && typeof s.label === 'string' && s.label) {
+                labels.set(s.label, (labels.get(s.label) || 0) + 1);
+            }
+            if (s && typeof s.description === 'string' && s.description.trim()) {
+                descriptions.push(s.description);
+            }
+        }
+        const existing = this._annotationIndex.find(r => r.relPath === rel);
+        if (existing) { existing.labels = labels; existing.descriptions = descriptions; }
+        else { this._annotationIndex.push({ relPath: rel, labels, descriptions }); }
+    }
+
+    private async _handleAdvancedSearchPrepare(): Promise<void> {
+        const index = await this._getAnnotationIndex();
+        const classCounts = new Map<string, number>();
+        for (const rec of index) {
+            for (const [label, count] of rec.labels) {
+                classCounts.set(label, (classCounts.get(label) || 0) + count);
+            }
+        }
+        const classes = Array.from(classCounts.entries())
+            .map(([name, count]) => ({ name, count }))
+            .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
+        this._safePost({
+            command: 'advancedSearchPrepareResult',
+            classes,
+            imageCount: index.length
+        });
+    }
+
+    private async _handleAdvancedSearchRun(query: SearchQuery): Promise<void> {
+        const index = await this._getAnnotationIndex();
+        const results = runAdvancedSearch(index, query);
+        this._safePost({
+            command: 'advancedSearchRunResult',
+            results,
+            total: results.length
+        });
+    }
+
     private async saveAnnotation(data: any) {
         const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
 
@@ -1368,6 +1472,8 @@ export class LabelMePanel {
         this._isSaving = true;
         try {
             await fs.writeFile(jsonPath, JSON.stringify(labelMeData, null, 2), 'utf8');
+            // Keep the search index fresh for the just-saved image without a full rescan.
+            this._updateIndexForCurrentImage(data.shapes || []);
             this._notify(
                 'success',
                 'Annotation saved to ' + path.basename(jsonPath),
