@@ -6992,6 +6992,7 @@ let advClassUniverseLoaded = false;
 let advIndexing = false;           // true while the class index is being built
 let advConditions = [];            // [{ id, type, value, classes:[] }]
 let advCondSeq = 0;
+let advSearchRunSeq = 0;           // monotonic id to drop stale/out-of-order run responses
 
 function tt(key, params) {
     return (window.i18n && window.i18n.t) ? window.i18n.t(key, params) : key;
@@ -7242,10 +7243,13 @@ function runAdvancedSearchQuery() {
         hideAdvancedSearchModal();
         return;
     }
-    vscode.postMessage({ command: 'advancedSearchRun', query });
+    const requestId = ++advSearchRunSeq;
+    vscode.postMessage({ command: 'advancedSearchRun', query, requestId });
 }
 
 function applyAdvancedRunResult(message) {
+    // Drop stale/out-of-order responses (and any that arrive after a clear).
+    if (message.requestId !== advSearchRunSeq) return;
     advancedResults = (message.results || []).map(r => r.relPath);
     advancedFilterActive = true;
     // Advanced filter takes over: clear/suppress the quick text search.
@@ -7271,6 +7275,7 @@ function applyAdvancedRunResult(message) {
 function clearAdvancedFilter() {
     advancedFilterActive = false;
     advancedResults = [];
+    advSearchRunSeq++; // invalidate any in-flight search response so it can't re-activate the filter
     if (advSearchBanner) advSearchBanner.style.display = 'none';
     virtualScrollState = { startIndex: -1, endIndex: -1, scrollTop: 0 };
     updateImageCount();
@@ -7296,6 +7301,9 @@ if (advSearchBannerClear) advSearchBannerClear.onclick = clearAdvancedFilter;
 function navigateRelative(direction) {
     const list = getEffectiveImageList();
     if (!list || list.length === 0) {
+        // An active filter that matched nothing: stay put rather than escaping to the
+        // full image set. Only fall back to host nav when no filter is in effect.
+        if (advancedFilterActive || searchQuery) return;
         vscode.postMessage({ command: direction > 0 ? 'next' : 'prev' });
         return;
     }

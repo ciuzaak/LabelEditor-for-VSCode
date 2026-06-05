@@ -16,7 +16,7 @@ const TIPS = {
     'nav.fileName':        { title: 'Current File', desc: 'Left-click copies the absolute path; right-click copies just the filename.' },
     'nav.imageInfo':       { title: 'Image Info', desc: 'Show file size, dimensions, bit depth, and DPI.' },
     'browser.search':      { title: 'Search Images', desc: 'Filter the image list by filename.' },
-    'browser.advancedSearch': { title: 'Advanced Search', desc: 'Filter images by name, annotation class, and description with AND/OR.' },
+    'browser.advancedSearch': { title: 'Advanced Search', desc: 'Filter images by filename, regex, and annotation class. Conditions combine with AND.' },
     'browser.refresh':     { title: 'Refresh List', desc: 'Rescan the workspace for image files.' },
     'browser.searchClose': { title: 'Clear Search', desc: 'Clear the search filter and keep focus in the search field.' },
 

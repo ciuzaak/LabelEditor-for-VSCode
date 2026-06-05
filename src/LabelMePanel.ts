@@ -38,6 +38,7 @@ export class LabelMePanel {
     private _annotationIndex: AnnotationRecord[] | null = null;
     private _annotationIndexGeneration = -1; // matches _scanGeneration when the index is valid
     private _indexBuildToken = 0; // bumped to cancel an in-flight class-index build
+    private _indexBuildPromise: Promise<AnnotationRecord[] | null> | null = null; // shared in-flight build
     private _isScanFinished = false; // Tracks if the initial background scan has completed
     private _disposed = false; // Guards async callbacks from posting to a disposed webview
     private _webviewReady = false; // Set when the webview signals 'webviewReady'
@@ -469,7 +470,7 @@ export class LabelMePanel {
                         await this._handleAdvancedSearchPrepare();
                         return;
                     case 'advancedSearchRun':
-                        await this._handleAdvancedSearchRun(message.query);
+                        await this._handleAdvancedSearchRun(message.query, message.requestId);
                         return;
                     case 'advancedSearchCancelIndex':
                         this._cancelIndexBuild();
@@ -640,6 +641,7 @@ export class LabelMePanel {
         // Force rescan by clearing cached images
         this._workspaceImages = [];
         this._annotationIndex = null; // force a rebuild on next search
+        this._indexBuildToken++; // cancel any in-flight class-index build so it can't cache stale records
         await this._scanWorkspaceImages();
 
         // Bail if a newer scan or a root change occurred during the await.
@@ -1413,7 +1415,6 @@ export class LabelMePanel {
 
     private async _readAnnotationRecord(rel: string): Promise<AnnotationRecord> {
         const labels = new Map<string, number>();
-        const descriptions: string[] = [];
         const absImg = path.join(this._rootPath, rel);
         const jsonPath = absImg.replace(/\.[^/.]+$/, '') + '.json';
         if (existsSync(jsonPath)) {
@@ -1423,15 +1424,13 @@ export class LabelMePanel {
                     if (s && typeof s.label === 'string' && s.label) {
                         labels.set(s.label, (labels.get(s.label) || 0) + 1);
                     }
-                    if (s && typeof s.description === 'string' && s.description.trim()) {
-                        descriptions.push(s.description);
-                    }
                 }
             } catch {
                 // Treat unreadable/invalid JSON as an empty record.
             }
         }
-        return { relPath: rel, labels, descriptions };
+        // descriptions are unused by matching (kept empty for index-shape compatibility).
+        return { relPath: rel, labels, descriptions: [] };
     }
 
     /**
@@ -1464,18 +1463,44 @@ export class LabelMePanel {
         return records;
     }
 
+    /**
+     * Read all sidecar JSONs and cache the result — but only if no rescan/refresh
+     * happened while we were reading (otherwise the records describe a stale image
+     * list and must not be cached as current). Returns null when cancelled (token)
+     * or superseded (generation changed).
+     */
+    private async _buildAndCacheIndex(opts: { token?: number; progress?: boolean }): Promise<AnnotationRecord[] | null> {
+        if (this._workspaceImages.length === 0) {
+            await this._scanWorkspaceImages();
+        }
+        const gen = this._scanGeneration;
+        const idx = await this._readAllRecords(this._workspaceImages.slice(), opts);
+        if (idx === null) return null;            // cancelled mid-build
+        if (gen !== this._scanGeneration) return null; // a refresh/rescan superseded this build
+        this._annotationIndex = idx;
+        this._annotationIndexGeneration = gen;
+        return idx;
+    }
+
     private async _getAnnotationIndex(): Promise<AnnotationRecord[]> {
         if (this._annotationIndex && this._annotationIndexGeneration === this._scanGeneration) {
             return this._annotationIndex;
         }
-        if (this._workspaceImages.length === 0) {
-            await this._scanWorkspaceImages();
+        // Reuse an in-flight prepare build instead of launching a second full scan.
+        if (this._indexBuildPromise) {
+            await this._indexBuildPromise;
+            if (this._annotationIndex && this._annotationIndexGeneration === this._scanGeneration) {
+                return this._annotationIndex;
+            }
         }
-        // Non-cancellable build (used by the search-run fallback); always completes.
-        const idx = (await this._readAllRecords(this._workspaceImages.slice())) as AnnotationRecord[];
-        this._annotationIndex = idx;
-        this._annotationIndexGeneration = this._scanGeneration;
-        return idx;
+        const p = this._buildAndCacheIndex({});
+        this._indexBuildPromise = p;
+        try {
+            const idx = await p;
+            return idx ?? [];
+        } finally {
+            if (this._indexBuildPromise === p) this._indexBuildPromise = null;
+        }
     }
 
     private _cancelIndexBuild(): void {
@@ -1486,18 +1511,14 @@ export class LabelMePanel {
         if (!this._annotationIndex) return;
         const rel = path.relative(this._rootPath, this._imageUri.fsPath);
         const labels = new Map<string, number>();
-        const descriptions: string[] = [];
         for (const s of (shapes || [])) {
             if (s && typeof s.label === 'string' && s.label) {
                 labels.set(s.label, (labels.get(s.label) || 0) + 1);
             }
-            if (s && typeof s.description === 'string' && s.description.trim()) {
-                descriptions.push(s.description);
-            }
         }
         const existing = this._annotationIndex.find(r => r.relPath === rel);
-        if (existing) { existing.labels = labels; existing.descriptions = descriptions; }
-        else { this._annotationIndex.push({ relPath: rel, labels, descriptions }); }
+        if (existing) { existing.labels = labels; existing.descriptions = []; }
+        else { this._annotationIndex.push({ relPath: rel, labels, descriptions: [] }); }
     }
 
     private async _handleAdvancedSearchPrepare(): Promise<void> {
@@ -1506,17 +1527,27 @@ export class LabelMePanel {
             this._postClassUniverse(this._annotationIndex);
             return;
         }
-        if (this._workspaceImages.length === 0) {
-            await this._scanWorkspaceImages();
+        // Reuse a build already in flight (e.g. one a search-run kicked off) so we
+        // don't read every sidecar twice.
+        if (this._indexBuildPromise) {
+            await this._indexBuildPromise;
+            if (this._annotationIndex && this._annotationIndexGeneration === this._scanGeneration) {
+                this._postClassUniverse(this._annotationIndex);
+                return;
+            }
         }
         // Cancellable, progress-reporting build. The webview cancels by posting
         // 'advancedSearchCancelIndex' (which bumps _indexBuildToken).
         const token = ++this._indexBuildToken;
-        const idx = await this._readAllRecords(this._workspaceImages.slice(), { token, progress: true });
-        if (idx === null) return; // cancelled — don't cache, don't post a result
-        this._annotationIndex = idx;
-        this._annotationIndexGeneration = this._scanGeneration;
-        this._postClassUniverse(idx);
+        const p = this._buildAndCacheIndex({ token, progress: true });
+        this._indexBuildPromise = p;
+        try {
+            const idx = await p;
+            if (idx === null) return; // cancelled or superseded — don't post a result
+            this._postClassUniverse(idx);
+        } finally {
+            if (this._indexBuildPromise === p) this._indexBuildPromise = null;
+        }
     }
 
     private _postClassUniverse(index: AnnotationRecord[]): void {
@@ -1536,7 +1567,7 @@ export class LabelMePanel {
         });
     }
 
-    private async _handleAdvancedSearchRun(query: SearchQuery): Promise<void> {
+    private async _handleAdvancedSearchRun(query: SearchQuery, requestId?: number): Promise<void> {
         // Name / regex queries match on the relative path the host already holds, so
         // they need zero sidecar reads. Only build the (cached) annotation index when a
         // class condition is present.
@@ -1555,8 +1586,10 @@ export class LabelMePanel {
             }));
         }
         const results = runAdvancedSearch(index, query);
+        // Echo requestId so the webview can drop a stale (out-of-order) response.
         this._safePost({
             command: 'advancedSearchRunResult',
+            requestId,
             results,
             total: results.length
         });
