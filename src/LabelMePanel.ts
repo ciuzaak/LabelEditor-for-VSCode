@@ -467,7 +467,7 @@ export class LabelMePanel {
                         await this._runExportDataset(message.config);
                         return;
                     case 'advancedSearchPrepare':
-                        await this._handleAdvancedSearchPrepare();
+                        await this._handleAdvancedSearchPrepare(message.requestId);
                         return;
                     case 'advancedSearchRun':
                         await this._handleAdvancedSearchRun(message.query, message.requestId);
@@ -1470,13 +1470,17 @@ export class LabelMePanel {
      * or superseded (generation changed).
      */
     private async _buildAndCacheIndex(opts: { token?: number; progress?: boolean }): Promise<AnnotationRecord[] | null> {
+        // Capture identity BEFORE any await so a refresh/rescan during the pre-index
+        // scan is detected too (not just during the record reads).
+        const gen = this._scanGeneration;
+        const root = this._rootPath;
         if (this._workspaceImages.length === 0) {
             await this._scanWorkspaceImages();
+            if (gen !== this._scanGeneration || root !== this._rootPath) return null;
         }
-        const gen = this._scanGeneration;
         const idx = await this._readAllRecords(this._workspaceImages.slice(), opts);
         if (idx === null) return null;            // cancelled mid-build
-        if (gen !== this._scanGeneration) return null; // a refresh/rescan superseded this build
+        if (gen !== this._scanGeneration || root !== this._rootPath) return null; // superseded
         this._annotationIndex = idx;
         this._annotationIndexGeneration = gen;
         return idx;
@@ -1521,10 +1525,10 @@ export class LabelMePanel {
         else { this._annotationIndex.push({ relPath: rel, labels, descriptions: [] }); }
     }
 
-    private async _handleAdvancedSearchPrepare(): Promise<void> {
+    private async _handleAdvancedSearchPrepare(requestId?: number): Promise<void> {
         // Serve the cached index immediately when it is still valid.
         if (this._annotationIndex && this._annotationIndexGeneration === this._scanGeneration) {
-            this._postClassUniverse(this._annotationIndex);
+            this._postClassUniverse(this._annotationIndex, requestId);
             return;
         }
         // Reuse a build already in flight (e.g. one a search-run kicked off) so we
@@ -1532,7 +1536,7 @@ export class LabelMePanel {
         if (this._indexBuildPromise) {
             await this._indexBuildPromise;
             if (this._annotationIndex && this._annotationIndexGeneration === this._scanGeneration) {
-                this._postClassUniverse(this._annotationIndex);
+                this._postClassUniverse(this._annotationIndex, requestId);
                 return;
             }
         }
@@ -1544,13 +1548,13 @@ export class LabelMePanel {
         try {
             const idx = await p;
             if (idx === null) return; // cancelled or superseded — don't post a result
-            this._postClassUniverse(idx);
+            this._postClassUniverse(idx, requestId);
         } finally {
             if (this._indexBuildPromise === p) this._indexBuildPromise = null;
         }
     }
 
-    private _postClassUniverse(index: AnnotationRecord[]): void {
+    private _postClassUniverse(index: AnnotationRecord[], requestId?: number): void {
         const classCounts = new Map<string, number>();
         for (const rec of index) {
             for (const [label, count] of rec.labels) {
@@ -1562,6 +1566,7 @@ export class LabelMePanel {
             .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
         this._safePost({
             command: 'advancedSearchPrepareResult',
+            requestId,
             classes,
             imageCount: index.length
         });

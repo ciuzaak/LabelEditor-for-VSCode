@@ -1428,6 +1428,7 @@ function handleUpdateImageList(message) {
         clearAdvancedFilter();
     }
     if (advIndexing) cancelIndexing();
+    advPrepareSeq++; // invalidate any in-flight prepare response against the now-stale list
     advClassUniverseLoaded = false;
     advSearchClassData = [];
     // Update the global workspaceImages array
@@ -6993,6 +6994,7 @@ let advIndexing = false;           // true while the class index is being built
 let advConditions = [];            // [{ id, type, value, classes:[] }]
 let advCondSeq = 0;
 let advSearchRunSeq = 0;           // monotonic id to drop stale/out-of-order run responses
+let advPrepareSeq = 0;             // monotonic id to drop stale class-universe (prepare) responses
 
 function tt(key, params) {
     return (window.i18n && window.i18n.t) ? window.i18n.t(key, params) : key;
@@ -7089,12 +7091,14 @@ function ensureClassUniverse() {
     advIndexing = true;
     updateAddClassButtonState();
     setIndexStatus(tt('advSearch.indexingStart'));
-    vscode.postMessage({ command: 'advancedSearchPrepare' });
+    const requestId = ++advPrepareSeq;
+    vscode.postMessage({ command: 'advancedSearchPrepare', requestId });
 }
 
 function cancelIndexing() {
     if (!advIndexing) return;
     advIndexing = false;
+    advPrepareSeq++; // invalidate any in-flight prepare response so it can't repopulate the datalist
     vscode.postMessage({ command: 'advancedSearchCancelIndex' });
     setIndexStatus('');
     updateAddClassButtonState();
@@ -7218,6 +7222,8 @@ function buildAdvConditionRow(cond) {
 }
 
 function applyAdvancedPrepareResult(message) {
+    // Drop stale prepare responses (cancelled, reset, or superseded by a newer request).
+    if (message.requestId !== advPrepareSeq) return;
     advSearchClassData = message.classes || [];
     advClassUniverseLoaded = true;
     advIndexing = false;
