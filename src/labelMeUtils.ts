@@ -205,7 +205,7 @@ export async function getImageMetadata(filePath: string): Promise<ImageMetadata>
     return result;
 }
 
-function comparePathsNaturally(a: string, b: string): number {
+export function comparePathsNaturally(a: string, b: string): number {
     const partsA = a.split(/[\\/]/);
     const partsB = b.split(/[\\/]/);
     const minLen = Math.min(partsA.length, partsB.length);
