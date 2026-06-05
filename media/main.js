@@ -82,6 +82,20 @@ const searchImagesBtn = document.getElementById('searchImagesBtn');
 const searchInputContainer = document.getElementById('searchInputContainer');
 const searchInput = document.getElementById('searchInput');
 const searchCloseBtn = document.getElementById('searchCloseBtn');
+const advancedSearchBtn = document.getElementById('advancedSearchBtn');
+const advancedSearchModal = document.getElementById('advancedSearchModal');
+const advSearchName = document.getElementById('advSearchName');
+const advSearchDescription = document.getElementById('advSearchDescription');
+const advSearchClassFilter = document.getElementById('advSearchClassFilter');
+const advSearchClassList = document.getElementById('advSearchClassList');
+const advSearchClassAll = document.getElementById('advSearchClassAll');
+const advSearchClassNone = document.getElementById('advSearchClassNone');
+const advSearchRunBtn = document.getElementById('advSearchRunBtn');
+const advSearchResetBtn = document.getElementById('advSearchResetBtn');
+const advSearchCancelBtn = document.getElementById('advSearchCancelBtn');
+const advSearchBanner = document.getElementById('advSearchBanner');
+const advSearchBannerText = document.getElementById('advSearchBannerText');
+const advSearchBannerClear = document.getElementById('advSearchBannerClear');
 
 // Theme elements
 const themeLightBtn = document.getElementById('themeLightBtn');
@@ -1191,6 +1205,14 @@ window.addEventListener('message', event => {
             if (message.ok) hideExportDatasetModal();
             break;
         }
+        case 'advancedSearchPrepareResult': {
+            applyAdvancedPrepareResult(message);
+            break;
+        }
+        case 'advancedSearchRunResult': {
+            applyAdvancedRunResult(message);
+            break;
+        }
         case 'gpuDetectResult': {
             // Populate BOTH ONNX and SAM GPU dropdowns (whichever modal is open)
             const gpuGroups = [
@@ -1396,6 +1418,10 @@ let scanComplete = false;
 // Handle refreshed image list from extension
 function handleUpdateImageList(message) {
     scanComplete = message.hasOwnProperty('isScanFinished') ? !!message.isScanFinished : true;
+    // A refreshed/rescanned list invalidates the advanced results (the index changed).
+    if (advancedFilterActive) {
+        clearAdvancedFilter();
+    }
     // Update the global workspaceImages array
     // Note: workspaceImages is defined in the HTML as a const, so we need to modify it in place
     if (typeof workspaceImages !== 'undefined' && Array.isArray(workspaceImages)) {
@@ -6950,8 +6976,21 @@ let virtualScrollState = {
 let searchQuery = '';
 let filteredImages = []; // Filtered image list when search is active
 
+// Advanced search state
+let advancedFilterActive = false;
+let advancedResults = [];          // ranked relative paths
+let advSearchClassData = [];       // [{name, count}] from the extension
+const advSelectedClasses = new Set();
+
+function tt(key, params) {
+    return (window.i18n && window.i18n.t) ? window.i18n.t(key, params) : key;
+}
+
 // Get the effective image list (filtered or full)
 function getEffectiveImageList() {
+    if (advancedFilterActive) {
+        return advancedResults;
+    }
     if (searchQuery && filteredImages.length >= 0) {
         return filteredImages;
     }
@@ -6967,14 +7006,15 @@ function updateImageCount() {
     const total = typeof workspaceImages !== 'undefined' ? workspaceImages.length : 0;
     const currentIndex = effectiveImages.indexOf(currentImageRelativePathMutable);
 
+    const filteredMode = advancedFilterActive || !!searchQuery;
     if (currentIndex === -1) {
         // Position unknown — show count only
-        imageCountEl.textContent = searchQuery
+        imageCountEl.textContent = filteredMode
             ? `(${effectiveImages.length}/${total})`
             : `(${total})`;
     } else {
         const currentPos = currentIndex + 1;
-        imageCountEl.textContent = searchQuery
+        imageCountEl.textContent = filteredMode
             ? `(${currentPos}/${effectiveImages.length}/${total})`
             : `(${currentPos}/${total})`;
     }
@@ -7006,6 +7046,141 @@ function filterImages(query) {
     };
     renderImageBrowserList();
 }
+
+// ===== Advanced search =====
+function openAdvancedSearchModal() {
+    if (!advancedSearchModal) return;
+    advancedSearchModal.style.display = 'flex';
+    if (advancedSearchBtn) advancedSearchBtn.disabled = true;
+    // Request the class universe / image count from the extension.
+    vscode.postMessage({ command: 'advancedSearchPrepare' });
+}
+
+function hideAdvancedSearchModal() {
+    if (advancedSearchModal) advancedSearchModal.style.display = 'none';
+    if (advancedSearchBtn) advancedSearchBtn.disabled = false;
+}
+
+function renderAdvancedClassList() {
+    if (!advSearchClassList) return;
+    const filterText = advSearchClassFilter ? advSearchClassFilter.value : '';
+    const visible = window.AdvancedSearchHelpers.filterClassNames(advSearchClassData, filterText);
+    advSearchClassList.innerHTML = '';
+    const frag = document.createDocumentFragment();
+    for (const cls of visible) {
+        const li = document.createElement('li');
+        const cb = document.createElement('input');
+        cb.type = 'checkbox';
+        cb.value = cls.name;
+        cb.checked = advSelectedClasses.has(cls.name);
+        cb.onchange = () => {
+            if (cb.checked) advSelectedClasses.add(cls.name);
+            else advSelectedClasses.delete(cls.name);
+        };
+        const name = document.createElement('span');
+        name.textContent = cls.name;
+        const count = document.createElement('span');
+        count.className = 'adv-search-class-count';
+        count.textContent = cls.count;
+        li.appendChild(cb);
+        li.appendChild(name);
+        li.appendChild(count);
+        // Clicking the row (not the checkbox) toggles too.
+        li.onclick = (e) => {
+            if (e.target === cb) return;
+            cb.checked = !cb.checked;
+            cb.onchange();
+        };
+        frag.appendChild(li);
+    }
+    advSearchClassList.appendChild(frag);
+}
+
+function applyAdvancedPrepareResult(message) {
+    advSearchClassData = message.classes || [];
+    // Drop selections that no longer exist in the universe.
+    for (const c of Array.from(advSelectedClasses)) {
+        if (!advSearchClassData.some(x => x.name === c)) advSelectedClasses.delete(c);
+    }
+    renderAdvancedClassList();
+    if (advancedSearchBtn) advancedSearchBtn.disabled = false;
+}
+
+function runAdvancedSearchQuery() {
+    const raw = {
+        combinator: (document.querySelector('input[name="advSearchCombinator"]:checked') || {}).value || 'all',
+        name: advSearchName ? advSearchName.value : '',
+        classes: Array.from(advSelectedClasses),
+        description: advSearchDescription ? advSearchDescription.value : '',
+    };
+    const query = window.AdvancedSearchHelpers.normalizeQuery(raw);
+    if (!window.AdvancedSearchHelpers.hasActiveCriteria(query)) {
+        clearAdvancedFilter();
+        hideAdvancedSearchModal();
+        return;
+    }
+    vscode.postMessage({ command: 'advancedSearchRun', query });
+}
+
+function applyAdvancedRunResult(message) {
+    advancedResults = (message.results || []).map(r => r.relPath);
+    advancedFilterActive = true;
+    // Advanced filter takes over: clear/suppress the quick text search.
+    searchQuery = '';
+    filteredImages = [];
+    if (searchInput) searchInput.value = '';
+    if (searchInputContainer) searchInputContainer.style.display = 'none';
+    if (searchCloseBtn) searchCloseBtn.classList.remove('visible');
+    if (advSearchBanner) {
+        advSearchBanner.style.display = 'flex';
+        if (advSearchBannerText) {
+            advSearchBannerText.textContent = window.AdvancedSearchHelpers.formatBanner(
+                message.total, tt('advSearch.bannerActive', { count: message.total })
+            );
+        }
+    }
+    hideAdvancedSearchModal();
+    virtualScrollState = { startIndex: -1, endIndex: -1, scrollTop: 0 };
+    updateImageCount();
+    renderImageBrowserList();
+}
+
+function clearAdvancedFilter() {
+    advancedFilterActive = false;
+    advancedResults = [];
+    if (advSearchBanner) advSearchBanner.style.display = 'none';
+    virtualScrollState = { startIndex: -1, endIndex: -1, scrollTop: 0 };
+    updateImageCount();
+    renderImageBrowserList();
+}
+
+function resetAdvancedSearchForm() {
+    if (advSearchName) advSearchName.value = '';
+    if (advSearchDescription) advSearchDescription.value = '';
+    if (advSearchClassFilter) advSearchClassFilter.value = '';
+    advSelectedClasses.clear();
+    const allRadio = document.querySelector('input[name="advSearchCombinator"][value="all"]');
+    if (allRadio) allRadio.checked = true;
+    renderAdvancedClassList();
+}
+
+if (advancedSearchBtn) advancedSearchBtn.onclick = openAdvancedSearchModal;
+if (advSearchRunBtn) advSearchRunBtn.onclick = runAdvancedSearchQuery;
+if (advSearchResetBtn) advSearchResetBtn.onclick = resetAdvancedSearchForm;
+if (advSearchCancelBtn) advSearchCancelBtn.onclick = hideAdvancedSearchModal;
+if (advSearchBannerClear) advSearchBannerClear.onclick = clearAdvancedFilter;
+if (advSearchClassFilter) advSearchClassFilter.oninput = renderAdvancedClassList;
+if (advSearchClassAll) advSearchClassAll.onclick = () => {
+    const filterText = advSearchClassFilter ? advSearchClassFilter.value : '';
+    for (const c of window.AdvancedSearchHelpers.filterClassNames(advSearchClassData, filterText)) {
+        advSelectedClasses.add(c.name);
+    }
+    renderAdvancedClassList();
+};
+if (advSearchClassNone) advSearchClassNone.onclick = () => {
+    advSelectedClasses.clear();
+    renderAdvancedClassList();
+};
 
 // Restore search state if available
 if (vscodeState && vscodeState.searchQuery) {
