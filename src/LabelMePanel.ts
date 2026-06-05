@@ -775,6 +775,7 @@ export class LabelMePanel {
         const SW = 'stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" fill="none"';
         return `<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
             <symbol id="icon-search" viewBox="0 0 24 24" ${SW}><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+            <symbol id="icon-sliders" viewBox="0 0 24 24" ${SW}><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></symbol>
             <symbol id="icon-refresh-cw" viewBox="0 0 24 24" ${SW}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></symbol>
             <symbol id="icon-x" viewBox="0 0 24 24" ${SW}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
             <symbol id="icon-panel-left" viewBox="0 0 24 24" ${SW}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></symbol>
@@ -849,6 +850,11 @@ export class LabelMePanel {
         const popoverDismissPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'popoverDismiss.js');
         const popoverDismissUri = webview.asWebviewUri(popoverDismissPath);
 
+        // Advanced-search helpers (pure functions, must load before main.js)
+        const advancedSearchHelpersUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'advancedSearchHelpers.js')
+        );
+
         // Keybindings helpers (pure functions + frozen defaults, must load before main.js)
         const keybindingsPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'keybindings.js');
         const keybindingsUri = webview.asWebviewUri(keybindingsPath);
@@ -919,8 +925,13 @@ export class LabelMePanel {
                             <div class="search-field">
                                 <svg class="icon icon-sm search-field__icon" aria-hidden="true"><use href="#icon-search"/></svg>
                                 <input type="search" id="searchInput" placeholder="Search images…" data-i18n-placeholder="placeholder.searchImages" />
+                                <button id="advancedSearchBtn" class="search-field__advanced" data-tip-id="browser.advancedSearch" aria-label="Advanced search"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-sliders"/></svg></button>
                                 <button id="searchCloseBtn" class="search-field__clear" data-tip-id="browser.searchClose" aria-label="Clear search"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                             </div>
+                        </div>
+                        <div id="advSearchBanner" class="adv-search-banner" style="display: none;">
+                            <span id="advSearchBannerText" class="adv-search-banner__text"></span>
+                            <button id="advSearchBannerClear" class="adv-search-banner__clear" aria-label="Clear advanced filter"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         </div>
                         <ul id="imageBrowserList" class="image-browser-list"></ul>
                     </div>
@@ -1256,6 +1267,43 @@ export class LabelMePanel {
                     </div>
                 </div>
 
+                <!-- Modal for Advanced Search -->
+                <div id="advancedSearchModal" class="modal">
+                    <div class="modal-content advanced-search-content">
+                        <button class="modal-close" data-modal-close="advancedSearchModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-sliders"/></svg> <span data-i18n="modal.advancedSearch">Advanced Search</span></h3>
+                        <div class="onnx-form-group">
+                            <label data-i18n="advSearch.combinator">Match</label>
+                            <div class="onnx-radio-group segmented-group">
+                                <label class="onnx-radio"><input type="radio" name="advSearchCombinator" value="all" checked /> <span data-i18n="advSearch.all">All (AND)</span></label>
+                                <label class="onnx-radio"><input type="radio" name="advSearchCombinator" value="any" /> <span data-i18n="advSearch.any">Any (OR)</span></label>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label data-i18n="advSearch.imageName">Image name</label>
+                            <input type="text" id="advSearchName" placeholder="Filename contains…" data-i18n-placeholder="advSearch.imageNamePlaceholder" />
+                        </div>
+                        <div class="onnx-form-group">
+                            <label data-i18n="advSearch.classes">Class names</label>
+                            <input type="text" id="advSearchClassFilter" class="adv-search-class-filter" placeholder="Filter classes…" data-i18n-placeholder="advSearch.classFilterPlaceholder" />
+                            <div class="adv-search-class-actions">
+                                <button id="advSearchClassAll" class="btn" data-i18n="advSearch.selectAll">Select all</button>
+                                <button id="advSearchClassNone" class="btn" data-i18n="advSearch.clearClasses">Clear</button>
+                            </div>
+                            <ul id="advSearchClassList" class="adv-search-class-list"></ul>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label data-i18n="advSearch.description">Description</label>
+                            <input type="text" id="advSearchDescription" placeholder="Description contains…" data-i18n-placeholder="advSearch.descriptionPlaceholder" />
+                        </div>
+                        <div class="modal-buttons">
+                            <button id="advSearchRunBtn" class="btn btn-primary" data-i18n="advSearch.search">Search</button>
+                            <button id="advSearchResetBtn" class="btn" data-i18n="advSearch.reset">Reset</button>
+                            <button id="advSearchCancelBtn" class="btn" data-i18n="button.cancel">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Modal for More Settings (Language + Keyboard Shortcuts) -->
                 <div id="moreSettingsModal" class="modal">
                     <div class="modal-content more-settings-content">
@@ -1363,6 +1411,7 @@ export class LabelMePanel {
                 <script src="${tooltipHelpersUri}"></script>
                 <script src="${tooltipUri}"></script>
                 <script src="${popoverDismissUri}"></script>
+                <script src="${advancedSearchHelpersUri}"></script>
                 <script src="${keybindingsUri}"></script>
                 <script src="${i18nUri}"></script>
                 <script src="${scriptUri}"></script>
