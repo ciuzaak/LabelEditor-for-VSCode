@@ -2,6 +2,26 @@
 
 Date: 2026-06-05
 
+> **Revision 2026-06-05b (post-smoke feedback).** Three changes supersede parts of the
+> original design below:
+> 1. **Incremental condition builder.** Instead of a fixed 3-field form with a global
+>    ALL/ANY toggle, the user **adds conditions one at a time**. There can be several
+>    name / class / description conditions at once. Combination rule: **conditions are AND'd**
+>    together; **within a single class condition, multiple selected classes are OR'd**. The
+>    global ALL/ANY toggle is removed. Query model becomes
+>    `{ conditions: Array<{type:'name'|'description', value} | {type:'class', values[]}> }`.
+> 2. **Lazy indexing.** Name-only searches read **no** sidecar JSON (name matching uses the
+>    relative path the host already has). The sidecar scan happens only when a class or
+>    description condition is present; the class universe is fetched only when a class
+>    condition is added. Cache + save-time incremental update + refresh invalidation unchanged.
+> 3. **Filtered navigation.** prev/next buttons and the a/d keys navigate **within the current
+>    effective (filtered) list, in its order**, wrapping around — for both quick search and
+>    advanced search. Navigation is computed in the webview from `getEffectiveImageList()` and
+>    dispatched as `navigateToImage`, preserving the existing dirty-save flow.
+>
+> Sections below describe the original (superseded) ALL/ANY-toggle design; read them with the
+> revision in mind.
+
 The file-navigation sidebar currently offers only a substring filter over image paths
 ([media/main.js:6984](../../../media/main.js#L6984)). This adds an **advanced search** that
 can additionally filter by **annotation class name** (multi-select) and **shape description**

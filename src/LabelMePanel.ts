@@ -1272,30 +1272,15 @@ export class LabelMePanel {
                     <div class="modal-content advanced-search-content">
                         <button class="modal-close" data-modal-close="advancedSearchModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-sliders"/></svg> <span data-i18n="modal.advancedSearch">Advanced Search</span></h3>
-                        <div class="onnx-form-group">
-                            <label data-i18n="advSearch.combinator">Match</label>
-                            <div class="onnx-radio-group segmented-group">
-                                <label class="onnx-radio"><input type="radio" name="advSearchCombinator" value="all" checked /> <span data-i18n="advSearch.all">All (AND)</span></label>
-                                <label class="onnx-radio"><input type="radio" name="advSearchCombinator" value="any" /> <span data-i18n="advSearch.any">Any (OR)</span></label>
-                            </div>
+                        <div class="adv-search-hint" data-i18n="advSearch.andHint">All conditions must match (AND). Within one class condition, any selected class matches (OR).</div>
+                        <div id="advSearchConditions" class="adv-search-conditions"></div>
+                        <div class="adv-search-add-row">
+                            <span class="adv-search-add-label" data-i18n="advSearch.addCondition">Add condition:</span>
+                            <button id="advSearchAddName" class="btn" data-i18n="advSearch.addName">Name</button>
+                            <button id="advSearchAddClass" class="btn" data-i18n="advSearch.addClass">Class</button>
+                            <button id="advSearchAddDescription" class="btn" data-i18n="advSearch.addDescription">Description</button>
                         </div>
-                        <div class="onnx-form-group">
-                            <label data-i18n="advSearch.imageName">Image name</label>
-                            <input type="text" id="advSearchName" placeholder="Filename contains…" data-i18n-placeholder="advSearch.imageNamePlaceholder" />
-                        </div>
-                        <div class="onnx-form-group">
-                            <label data-i18n="advSearch.classes">Class names</label>
-                            <input type="text" id="advSearchClassFilter" class="adv-search-class-filter" placeholder="Filter classes…" data-i18n-placeholder="advSearch.classFilterPlaceholder" />
-                            <div class="adv-search-class-actions">
-                                <button id="advSearchClassAll" class="btn" data-i18n="advSearch.selectAll">Select all</button>
-                                <button id="advSearchClassNone" class="btn" data-i18n="advSearch.clearClasses">Clear</button>
-                            </div>
-                            <ul id="advSearchClassList" class="adv-search-class-list"></ul>
-                        </div>
-                        <div class="onnx-form-group">
-                            <label data-i18n="advSearch.description">Description</label>
-                            <input type="text" id="advSearchDescription" placeholder="Description contains…" data-i18n-placeholder="advSearch.descriptionPlaceholder" />
-                        </div>
+                        <datalist id="advSearchClassDatalist"></datalist>
                         <div class="modal-buttons">
                             <button id="advSearchRunBtn" class="btn btn-primary" data-i18n="advSearch.search">Search</button>
                             <button id="advSearchResetBtn" class="btn" data-i18n="advSearch.reset">Reset</button>
@@ -1504,7 +1489,25 @@ export class LabelMePanel {
     }
 
     private async _handleAdvancedSearchRun(query: SearchQuery): Promise<void> {
-        const index = await this._getAnnotationIndex();
+        // Name-only queries match on the relative path the host already holds, so they
+        // need zero sidecar reads. Only build the (cached) annotation index when a class
+        // or description condition is present.
+        const needsAnnotations = (query.conditions || []).some(
+            c => c.type === 'class' || c.type === 'description'
+        );
+        let index: AnnotationRecord[];
+        if (needsAnnotations) {
+            index = await this._getAnnotationIndex();
+        } else {
+            if (this._workspaceImages.length === 0) {
+                await this._scanWorkspaceImages();
+            }
+            index = this._workspaceImages.map(rel => ({
+                relPath: rel,
+                labels: new Map<string, number>(),
+                descriptions: [] as string[],
+            }));
+        }
         const results = runAdvancedSearch(index, query);
         this._safePost({
             command: 'advancedSearchRunResult',

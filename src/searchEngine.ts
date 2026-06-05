@@ -8,18 +8,23 @@ export interface AnnotationRecord {
 
 export type AnnotationIndex = AnnotationRecord[];
 
+// A single user-added condition. name/description carry one substring value;
+// class carries a set of class names that are OR'd among themselves.
+export type SearchCondition =
+    | { type: 'name'; value: string }
+    | { type: 'description'; value: string }
+    | { type: 'class'; values: string[] };
+
+// Conditions are AND'd together. (No global ALL/ANY toggle — see spec revision.)
 export interface SearchQuery {
-    combinator: 'all' | 'any';
-    name: string;          // image-name substring, '' = inactive
-    classes: string[];     // selected class names, [] = inactive
-    description: string;   // description substring, '' = inactive
+    conditions: SearchCondition[];
 }
 
 export interface SearchResult {
     relPath: string;
     score: number;
-    nameMatchKind: 'exact' | 'prefix' | 'substr' | 'none';
-    matchedClasses: string[];
+    nameMatchKind: 'exact' | 'prefix' | 'substr' | 'none'; // best across name conditions
+    matchedClasses: string[];     // union across class conditions
     classInstanceCount: number;
     descMatchCount: number;
 }
@@ -34,104 +39,111 @@ const WEIGHTS = {
     descPrefixBonus: 20,
 };
 
+const NAME_KIND_RANK: Record<SearchResult['nameMatchKind'], number> = {
+    none: 0, substr: 1, prefix: 2, exact: 3,
+};
+
 function basename(relPath: string): string {
     const parts = relPath.split(/[\\/]/);
     return parts[parts.length - 1] || relPath;
 }
 
-interface Scored {
-    result: SearchResult;
-    nameContribution: number;
-    classContribution: number;
-    descContribution: number;
-    nameSatisfied: boolean;
-    classSatisfied: boolean;
-    descSatisfied: boolean;
+function nameScore(relPath: string, rawValue: string): { kind: SearchResult['nameMatchKind']; contribution: number } {
+    const nameQ = rawValue.trim().toLowerCase();
+    if (!nameQ) return { kind: 'none', contribution: 0 };
+    const base = basename(relPath).toLowerCase();
+    const stem = base.replace(/\.[^.]+$/, ''); // filename without extension
+    if (stem === nameQ || base === nameQ) return { kind: 'exact', contribution: WEIGHTS.nameExact };
+    if (base.startsWith(nameQ)) return { kind: 'prefix', contribution: WEIGHTS.namePrefix };
+    if (base.includes(nameQ)) return { kind: 'substr', contribution: WEIGHTS.nameSubstr };
+    if (relPath.toLowerCase().includes(nameQ)) return { kind: 'substr', contribution: WEIGHTS.nameSubstr };
+    return { kind: 'none', contribution: 0 };
 }
 
-function evaluate(record: AnnotationRecord, query: SearchQuery): Scored {
-    // Name
-    const nameQ = query.name.trim().toLowerCase();
-    let nameMatchKind: SearchResult['nameMatchKind'] = 'none';
-    let nameContribution = 0;
-    if (nameQ) {
-        const base = basename(record.relPath).toLowerCase();
-        const stem = base.replace(/\.[^.]+$/, ''); // filename without extension
-        if (stem === nameQ || base === nameQ) { nameMatchKind = 'exact'; nameContribution = WEIGHTS.nameExact; }
-        else if (base.startsWith(nameQ)) { nameMatchKind = 'prefix'; nameContribution = WEIGHTS.namePrefix; }
-        else if (base.includes(nameQ)) { nameMatchKind = 'substr'; nameContribution = WEIGHTS.nameSubstr; }
-        else if (record.relPath.toLowerCase().includes(nameQ)) { nameMatchKind = 'substr'; nameContribution = WEIGHTS.nameSubstr; }
-    }
-
-    // Classes (multi-select OR)
-    const matchedClasses: string[] = [];
-    let classInstanceCount = 0;
-    for (const c of query.classes) {
+function classScore(record: AnnotationRecord, values: string[]): { satisfied: boolean; matched: string[]; instanceCount: number; contribution: number } {
+    const matched: string[] = [];
+    let instanceCount = 0;
+    for (const c of values) {
         const count = record.labels.get(c);
-        if (count && count > 0) { matchedClasses.push(c); classInstanceCount += count; }
+        if (count && count > 0) { matched.push(c); instanceCount += count; }
     }
-    const classContribution = matchedClasses.length * WEIGHTS.classPresent + classInstanceCount * WEIGHTS.classInstance;
-
-    // Description (substring)
-    const descQ = query.description.trim().toLowerCase();
-    let descMatchCount = 0;
-    let descPrefixCount = 0;
-    if (descQ) {
-        for (const d of record.descriptions) {
-            const dl = d.toLowerCase();
-            if (dl.includes(descQ)) {
-                descMatchCount++;
-                if (dl === descQ || dl.startsWith(descQ)) descPrefixCount++;
-            }
-        }
-    }
-    const descContribution = descMatchCount * WEIGHTS.descHit + descPrefixCount * WEIGHTS.descPrefixBonus;
-
     return {
-        result: {
-            relPath: record.relPath,
-            score: 0,
-            nameMatchKind,
-            matchedClasses,
-            classInstanceCount,
-            descMatchCount,
-        },
-        nameContribution,
-        classContribution,
-        descContribution,
-        nameSatisfied: nameMatchKind !== 'none',
-        classSatisfied: matchedClasses.length > 0,
-        descSatisfied: descMatchCount > 0,
+        satisfied: matched.length > 0,
+        matched,
+        instanceCount,
+        contribution: matched.length * WEIGHTS.classPresent + instanceCount * WEIGHTS.classInstance,
     };
 }
 
+function descScore(record: AnnotationRecord, rawValue: string): { satisfied: boolean; count: number; contribution: number } {
+    const descQ = rawValue.trim().toLowerCase();
+    if (!descQ) return { satisfied: false, count: 0, contribution: 0 };
+    let count = 0;
+    let prefixCount = 0;
+    for (const d of record.descriptions) {
+        const dl = d.toLowerCase();
+        if (dl.includes(descQ)) {
+            count++;
+            if (dl === descQ || dl.startsWith(descQ)) prefixCount++;
+        }
+    }
+    return {
+        satisfied: count > 0,
+        count,
+        contribution: count * WEIGHTS.descHit + prefixCount * WEIGHTS.descPrefixBonus,
+    };
+}
+
+// Drop conditions with no usable value (empty name/description, empty class set).
+function activeConditions(conditions: SearchCondition[]): SearchCondition[] {
+    return (conditions || []).filter(c => {
+        if (c.type === 'class') return Array.isArray(c.values) && c.values.length > 0;
+        return typeof c.value === 'string' && c.value.trim() !== '';
+    });
+}
+
 export function runAdvancedSearch(index: AnnotationIndex, query: SearchQuery): SearchResult[] {
-    const nameActive = query.name.trim() !== '';
-    const classActive = query.classes.length > 0;
-    const descActive = query.description.trim() !== '';
-    if (!nameActive && !classActive && !descActive) return [];
+    const active = activeConditions(query.conditions || []);
+    if (active.length === 0) return [];
 
     const out: SearchResult[] = [];
     for (const record of index) {
-        const s = evaluate(record, query);
-
-        const satisfiedFlags: boolean[] = [];
-        if (nameActive) satisfiedFlags.push(s.nameSatisfied);
-        if (classActive) satisfiedFlags.push(s.classSatisfied);
-        if (descActive) satisfiedFlags.push(s.descSatisfied);
-
-        const qualifies = query.combinator === 'all'
-            ? satisfiedFlags.every(Boolean)
-            : satisfiedFlags.some(Boolean);
-        if (!qualifies) continue;
-
-        // Score = sum of contributions from satisfied active criteria.
+        let ok = true;
         let score = 0;
-        if (nameActive && s.nameSatisfied) score += s.nameContribution;
-        if (classActive && s.classSatisfied) score += s.classContribution;
-        if (descActive && s.descSatisfied) score += s.descContribution;
+        let bestName: SearchResult['nameMatchKind'] = 'none';
+        const matchedClasses = new Set<string>();
+        let classInstanceCount = 0;
+        let descMatchCount = 0;
 
-        out.push({ ...s.result, score });
+        for (const cond of active) {
+            if (cond.type === 'name') {
+                const r = nameScore(record.relPath, cond.value);
+                if (r.kind === 'none') { ok = false; break; }
+                score += r.contribution;
+                if (NAME_KIND_RANK[r.kind] > NAME_KIND_RANK[bestName]) bestName = r.kind;
+            } else if (cond.type === 'class') {
+                const r = classScore(record, cond.values);
+                if (!r.satisfied) { ok = false; break; }
+                score += r.contribution;
+                r.matched.forEach(c => matchedClasses.add(c));
+                classInstanceCount += r.instanceCount;
+            } else {
+                const r = descScore(record, cond.value);
+                if (!r.satisfied) { ok = false; break; }
+                score += r.contribution;
+                descMatchCount += r.count;
+            }
+        }
+        if (!ok) continue;
+
+        out.push({
+            relPath: record.relPath,
+            score,
+            nameMatchKind: bestName,
+            matchedClasses: Array.from(matchedClasses),
+            classInstanceCount,
+            descMatchCount,
+        });
     }
 
     out.sort((a, b) => (b.score - a.score) || comparePathsNaturally(a.relPath, b.relPath));
