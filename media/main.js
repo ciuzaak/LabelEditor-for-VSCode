@@ -1422,14 +1422,12 @@ let scanComplete = false;
 // Handle refreshed image list from extension
 function handleUpdateImageList(message) {
     scanComplete = message.hasOwnProperty('isScanFinished') ? !!message.isScanFinished : true;
-    // Only a manual refresh/rescan invalidates an active advanced filter and the
-    // cached class universe. The initial background-scan delivery and webviewReady
-    // re-sends must NOT wipe a filter the user just applied (that was bug: first
-    // search appeared to "fail" when the async scan landed right after it).
+    // A manual refresh resets the cached class universe (annotations may have
+    // changed), so the next class condition re-indexes. We never auto-CLEAR an
+    // active advanced filter here — doing so wiped filters when the async initial
+    // scan or a re-send landed after a search. The result set is instead
+    // re-validated against the new list below.
     if (message.isRefresh) {
-        if (advancedFilterActive) {
-            clearAdvancedFilter();
-        }
         if (advIndexing) cancelIndexing();
         advPrepareSeq++; // invalidate any in-flight prepare response against the now-stale list
         advClassUniverseLoaded = false;
@@ -1440,6 +1438,13 @@ function handleUpdateImageList(message) {
     if (typeof workspaceImages !== 'undefined' && Array.isArray(workspaceImages)) {
         workspaceImages.length = 0; // Clear existing
         message.workspaceImages.forEach(img => workspaceImages.push(img));
+    }
+
+    // Keep an active advanced filter alive across list updates — just drop any
+    // results that no longer exist in the refreshed list.
+    if (advancedFilterActive) {
+        const present = new Set(workspaceImages);
+        advancedResults = advancedResults.filter(p => present.has(p));
     }
 
     // Update the current image relative path
@@ -7242,7 +7247,9 @@ function applyAdvancedPrepareResult(message) {
         for (const c of advSearchClassData) {
             const opt = document.createElement('option');
             opt.value = c.name;
-            opt.label = `${c.name} (${c.count})`;
+            // label = count only; setting label to include the name made Chromium
+            // render the class name twice ("name  name (n)") in the dropdown.
+            opt.label = `(${c.count})`;
             frag.appendChild(opt);
         }
         advSearchClassDatalist.appendChild(frag);
