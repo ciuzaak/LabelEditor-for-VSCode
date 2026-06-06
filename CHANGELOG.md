@@ -2,6 +2,25 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [1.3.0] - 2026-06-06
+
+Advanced search for the image browser: filter the workspace by filename, regex, and annotation class, ranked by match relevance. Built spec-first with a pure, unit-tested scoring engine (`src/searchEngine.ts`) and hardened over several rounds of Codex review.
+
+### Added
+- **Advanced Search**: a sliders button in the image-browser search box opens a builder where you **add conditions one at a time** and combine them:
+  - **Condition types**: **Name** (filename substring), **Name (regex)** (case-insensitive regex on the filename, with live validity check), and **Class** (multi-select of annotation labels).
+  - **Combination**: conditions are AND'd together; within a single Class condition the selected classes are OR'd — so two Class conditions express `(A or B) and C` without a nested query builder.
+  - **Ranked results**: matches fill the sidebar **sorted by a composite score** (exact/prefix/substring filename hits rank highest, then more matched classes and instances), ties broken by natural path order. A clearable "filter active (N)" banner sits above the list.
+  - **Lazy indexing**: Name and regex searches read **no** annotation files (they match the paths the host already has). Only a Class condition triggers a sidecar-JSON scan; the index is built **once and cached**, updated in place on save, and invalidated on refresh. Class indexing shows progress, disables the **+ Class** button while it runs, and is **cancellable** — removing the Class condition or closing the modal stops it.
+  - The scoring/ranking logic lives in a pure, unit-tested module (`runAdvancedSearch` in `src/searchEngine.ts`).
+
+### Changed
+- **Filtered navigation**: prev/next (buttons and `A` / `D`) now move **within the active filter's results, in their order**, wrapping around — for both quick search and advanced search — instead of walking the full image set.
+- Advanced-filter state (active filter, results, conditions) is **persisted and restored** across webview re-inits, matching how quick search already behaved.
+
+### Fixed
+- Switching images no longer reloads the webview on same-folder navigation (`updateWebviewOptions` now reassigns `localResourceRoots` only when they actually change), which previously could drop in-memory UI state.
+
 ## [1.2.0] - 2026-05-26
 
 Overlapping-instance selection is now predictable, plus a Remote-SSH fix for SAM mode entry. Built test-first on the shared pure-helper module (`media/shapeHelpers.js`) and hardened with a Codex review pass before tagging.
