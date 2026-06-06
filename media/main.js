@@ -7249,7 +7249,7 @@ function applyAdvancedPrepareResult(message) {
             opt.value = c.name;
             // label = count only; setting label to include the name made Chromium
             // render the class name twice ("name  name (n)") in the dropdown.
-            opt.label = `(${c.count})`;
+            opt.label = String(c.count);
             frag.appendChild(opt);
         }
         advSearchClassDatalist.appendChild(frag);
@@ -7290,6 +7290,7 @@ function applyAdvancedRunResult(message) {
     virtualScrollState = { startIndex: -1, endIndex: -1, scrollTop: 0 };
     updateImageCount();
     renderImageBrowserList();
+    persistAdvancedState();
 }
 
 function clearAdvancedFilter() {
@@ -7300,6 +7301,23 @@ function clearAdvancedFilter() {
     virtualScrollState = { startIndex: -1, endIndex: -1, scrollTop: 0 };
     updateImageCount();
     renderImageBrowserList();
+    persistAdvancedState();
+}
+
+// Persist the advanced-filter state so it survives a webview re-init, exactly
+// like the quick-search query is persisted/restored. Without this, a webview
+// reload kept the quick search (restored from state) but silently dropped the
+// advanced filter — the "advanced search fails but normal works" bug.
+function persistAdvancedState() {
+    const state = vscode.getState() || {};
+    state.advancedFilterActive = advancedFilterActive;
+    state.advancedResults = advancedFilterActive ? advancedResults : [];
+    state.advConditions = advConditions.map(c => ({
+        type: c.type,
+        value: c.value || '',
+        classes: Array.isArray(c.classes) ? c.classes.slice() : []
+    }));
+    vscode.setState(state);
 }
 
 function resetAdvancedSearchForm() {
@@ -7365,6 +7383,36 @@ if (vscodeState && vscodeState.searchQuery) {
     // If no search query, ensure UI is reset (though it should be hidden by default in HTML)
     if (searchInput) searchInput.value = '';
     if (searchInputContainer) searchInputContainer.style.display = 'none';
+}
+
+// Restore advanced-filter state if available (mirrors the quick-search restore
+// above). This is what keeps the advanced filter alive across a webview re-init.
+if (vscodeState && vscodeState.advancedFilterActive && Array.isArray(vscodeState.advancedResults)) {
+    advancedFilterActive = true;
+    advancedResults = vscodeState.advancedResults.slice();
+    if (Array.isArray(vscodeState.advConditions)) {
+        advConditions = vscodeState.advConditions.map(c => ({
+            id: ++advCondSeq,
+            type: c.type,
+            value: c.value || '',
+            classes: Array.isArray(c.classes) ? c.classes.slice() : []
+        }));
+    }
+    // Advanced filter takes over the list — suppress the quick search.
+    searchQuery = '';
+    filteredImages = [];
+    if (searchInput) searchInput.value = '';
+    if (searchInputContainer) searchInputContainer.style.display = 'none';
+    if (searchCloseBtn) searchCloseBtn.classList.remove('visible');
+    if (advSearchBanner) {
+        advSearchBanner.style.display = 'flex';
+        if (advSearchBannerText) {
+            advSearchBannerText.textContent = window.AdvancedSearchHelpers.formatBanner(
+                advancedResults.length, tt('advSearch.bannerActive', { count: advancedResults.length })
+            );
+        }
+    }
+    updateImageCount();
 }
 
 function renderImageBrowserList() {

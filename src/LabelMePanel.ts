@@ -675,13 +675,19 @@ export class LabelMePanel {
             roots.push(vscode.Uri.file(imageDir));
         }
 
-        const newOptions = {
+        // Only reassign when the roots actually change. Reassigning webview.options
+        // can reload the webview (wiping in-memory webview state — e.g. an active
+        // advanced filter), and this runs on every image navigation, so a no-op
+        // reassignment must be avoided.
+        const current = (this._panel.webview.options.localResourceRoots || []).map(u => u.toString());
+        const next = roots.map(u => u.toString());
+        const unchanged = current.length === next.length && current.every((v, i) => v === next[i]);
+        if (unchanged) return;
+
+        (this._panel.webview as any).options = {
             enableScripts: true,
             localResourceRoots: roots
         };
-
-        // Apply the updated options to the webview
-        (this._panel.webview as any).options = newOptions;
     }
 
     public async updateImage(imageUri: vscode.Uri) {
