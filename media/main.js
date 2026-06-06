@@ -7308,15 +7308,27 @@ function clearAdvancedFilter() {
 // like the quick-search query is persisted/restored. Without this, a webview
 // reload kept the quick search (restored from state) but silently dropped the
 // advanced filter — the "advanced search fails but normal works" bug.
+const ADV_RESULT_PERSIST_CAP = 5000; // snapshot up to this many results; beyond it, re-run on restore
 function persistAdvancedState() {
     const state = vscode.getState() || {};
+    // Keep quick-search persistence in sync: advanced search suppresses the quick
+    // filter, so a stale persisted searchQuery must not resurrect it on reload.
+    state.searchQuery = searchQuery;
     state.advancedFilterActive = advancedFilterActive;
-    state.advancedResults = advancedFilterActive ? advancedResults : [];
     state.advConditions = advConditions.map(c => ({
         type: c.type,
         value: c.value || '',
         classes: Array.isArray(c.classes) ? c.classes.slice() : []
     }));
+    // Snapshot results for instant restore, but cap webview-state size for huge
+    // result sets; beyond the cap, restore re-derives from the persisted conditions.
+    if (advancedFilterActive && advancedResults.length <= ADV_RESULT_PERSIST_CAP) {
+        state.advancedResults = advancedResults;
+        state.advancedNeedsRerun = false;
+    } else {
+        state.advancedResults = [];
+        state.advancedNeedsRerun = advancedFilterActive;
+    }
     vscode.setState(state);
 }
 
@@ -7387,9 +7399,7 @@ if (vscodeState && vscodeState.searchQuery) {
 
 // Restore advanced-filter state if available (mirrors the quick-search restore
 // above). This is what keeps the advanced filter alive across a webview re-init.
-if (vscodeState && vscodeState.advancedFilterActive && Array.isArray(vscodeState.advancedResults)) {
-    advancedFilterActive = true;
-    advancedResults = vscodeState.advancedResults.slice();
+if (vscodeState && vscodeState.advancedFilterActive) {
     if (Array.isArray(vscodeState.advConditions)) {
         advConditions = vscodeState.advConditions.map(c => ({
             id: ++advCondSeq,
@@ -7398,13 +7408,25 @@ if (vscodeState && vscodeState.advancedFilterActive && Array.isArray(vscodeState
             classes: Array.isArray(c.classes) ? c.classes.slice() : []
         }));
     }
+    advancedFilterActive = true;
+    advancedResults = Array.isArray(vscodeState.advancedResults) ? vscodeState.advancedResults.slice() : [];
     // Advanced filter takes over the list — suppress the quick search.
     searchQuery = '';
     filteredImages = [];
     if (searchInput) searchInput.value = '';
     if (searchInputContainer) searchInputContainer.style.display = 'none';
     if (searchCloseBtn) searchCloseBtn.classList.remove('visible');
-    if (advSearchBanner) {
+    // Snapshot was too large to persist — re-derive from the saved conditions.
+    if (vscodeState.advancedNeedsRerun) {
+        const query = window.AdvancedSearchHelpers.buildQuery(advConditions);
+        if (window.AdvancedSearchHelpers.hasActiveConditions(query)) {
+            const requestId = ++advSearchRunSeq;
+            vscode.postMessage({ command: 'advancedSearchRun', query, requestId });
+        } else {
+            advancedFilterActive = false; // nothing valid to re-run — drop the stale filter
+        }
+    }
+    if (advancedFilterActive && advSearchBanner) {
         advSearchBanner.style.display = 'flex';
         if (advSearchBannerText) {
             advSearchBannerText.textContent = window.AdvancedSearchHelpers.formatBanner(
