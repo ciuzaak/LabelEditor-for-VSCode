@@ -580,17 +580,21 @@ export class LabelMePanel {
         return images;
     }
 
-    private _sendImageListUpdate() {
+    private _sendImageListUpdate(isRefresh = false) {
         // Calculate current image relative path
         let currentImageRelativePath = '';
         currentImageRelativePath = path.relative(this._rootPath, this._imageUri.fsPath);
 
-        // Send updated image list to webview
+        // Send updated image list to webview. `isRefresh` distinguishes a manual
+        // rescan (which invalidates an active advanced filter / class index) from
+        // the initial background-scan delivery or a webviewReady re-send (which
+        // must NOT wipe a filter the user already applied).
         this._safePost({
             command: 'updateImageList',
             workspaceImages: this._workspaceImages,
             currentImageRelativePath: currentImageRelativePath,
-            isScanFinished: this._isScanFinished
+            isScanFinished: this._isScanFinished,
+            isRefresh
         });
     }
 
@@ -649,7 +653,7 @@ export class LabelMePanel {
             return;
         }
 
-        this._sendImageListUpdate();
+        this._sendImageListUpdate(true); // manual refresh — webview should drop an active filter
 
         this._notify(
             'success',

@@ -1422,15 +1422,19 @@ let scanComplete = false;
 // Handle refreshed image list from extension
 function handleUpdateImageList(message) {
     scanComplete = message.hasOwnProperty('isScanFinished') ? !!message.isScanFinished : true;
-    // A refreshed/rescanned list invalidates the advanced results AND the cached
-    // class universe (the host's index was dropped), so reset both.
-    if (advancedFilterActive) {
-        clearAdvancedFilter();
+    // Only a manual refresh/rescan invalidates an active advanced filter and the
+    // cached class universe. The initial background-scan delivery and webviewReady
+    // re-sends must NOT wipe a filter the user just applied (that was bug: first
+    // search appeared to "fail" when the async scan landed right after it).
+    if (message.isRefresh) {
+        if (advancedFilterActive) {
+            clearAdvancedFilter();
+        }
+        if (advIndexing) cancelIndexing();
+        advPrepareSeq++; // invalidate any in-flight prepare response against the now-stale list
+        advClassUniverseLoaded = false;
+        advSearchClassData = [];
     }
-    if (advIndexing) cancelIndexing();
-    advPrepareSeq++; // invalidate any in-flight prepare response against the now-stale list
-    advClassUniverseLoaded = false;
-    advSearchClassData = [];
     // Update the global workspaceImages array
     // Note: workspaceImages is defined in the HTML as a const, so we need to modify it in place
     if (typeof workspaceImages !== 'undefined' && Array.isArray(workspaceImages)) {
@@ -1486,7 +1490,10 @@ function updateImageBrowserHighlight(newRelativePath) {
     // 2. Force re-render of visible items to update highlighting
 
     if (typeof workspaceImages !== 'undefined') {
-        const newIndex = workspaceImages.indexOf(newRelativePath);
+        // Position is relative to the EFFECTIVE (filtered) list, since that is what
+        // the virtual list renders. Using the full-list index here scrolled the
+        // filtered list past its end (the "jumps to bottom" bug).
+        const newIndex = getEffectiveImageList().indexOf(newRelativePath);
         if (newIndex !== -1) {
             const viewportTop = imageBrowserList.scrollTop;
             const viewportBottom = viewportTop + imageBrowserList.clientHeight;
@@ -7506,7 +7513,8 @@ if (imageBrowserList) {
 function scrollToActiveItem() {
     if (!imageBrowserList || typeof workspaceImages === 'undefined') return;
 
-    const currentIndex = workspaceImages.indexOf(currentImageRelativePathMutable);
+    // Index within the EFFECTIVE (filtered) list — that is what the virtual list lays out.
+    const currentIndex = getEffectiveImageList().indexOf(currentImageRelativePathMutable);
     if (currentIndex !== -1) {
         const targetScrollTop = currentIndex * VIRTUAL_ITEM_HEIGHT - imageBrowserList.clientHeight / 2 + VIRTUAL_ITEM_HEIGHT / 2;
         imageBrowserList.scrollTop = Math.max(0, targetScrollTop);
