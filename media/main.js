@@ -85,7 +85,6 @@ const searchCloseBtn = document.getElementById('searchCloseBtn');
 const advancedSearchBtn = document.getElementById('advancedSearchBtn');
 const advancedSearchModal = document.getElementById('advancedSearchModal');
 const advSearchConditions = document.getElementById('advSearchConditions');
-const advSearchClassDatalist = document.getElementById('advSearchClassDatalist');
 const advSearchAddName = document.getElementById('advSearchAddName');
 const advSearchAddNameRegex = document.getElementById('advSearchAddNameRegex');
 const advSearchAddClass = document.getElementById('advSearchAddClass');
@@ -5988,7 +5987,29 @@ document.addEventListener('mousedown', (e) => {
             toolsMenuDropdown.style.display = 'none';
         }
     }
+    // Class combobox (advanced search) — the whole condition row is the "trigger"
+    // so clicks on the input/caret/chips keep it open; clicks elsewhere dismiss it.
+    if (advClassComboEl && advClassComboEl.style.display !== 'none') {
+        const trigger = advClassComboInput ? advClassComboInput.closest('.adv-cond') : null;
+        if (dismiss(e.target, advClassComboEl, trigger, path)) closeClassCombo();
+    }
 });
+
+// Keep the class combobox glued to its input as the modal scrolls or the window
+// resizes (it is position:fixed and anchored via getBoundingClientRect). Capture
+// phase catches scrolls on the now-scrollable .modal-content (scroll doesn't bubble).
+window.addEventListener('resize', () => {
+    if (advClassComboInput) positionClassCombo();
+    // A window resize can shift the buttons relative to a full-width open menu, so
+    // re-aim the arrow (the resize-handle path already closes the menu on mousedown).
+    if (settingsMenuDropdown && settingsMenuDropdown.style.display !== 'none' && settingsMenuBtn) {
+        positionSidebarDropdownArrow(settingsMenuDropdown, settingsMenuBtn);
+    }
+    if (toolsMenuDropdown && toolsMenuDropdown.style.display !== 'none' && toolsMenuBtn) {
+        positionSidebarDropdownArrow(toolsMenuDropdown, toolsMenuBtn);
+    }
+});
+document.addEventListener('scroll', () => { if (advClassComboInput) positionClassCombo(); }, true);
 
 // --- Labels Management Event Listeners ---
 
@@ -7024,6 +7045,12 @@ let advCondSeq = 0;
 let advSearchRunSeq = 0;           // monotonic id to drop stale/out-of-order run responses
 let advPrepareSeq = 0;             // monotonic id to drop stale class-universe (prepare) responses
 
+// Custom class combobox (one shared body-anchored listbox, bound to the active input)
+let advClassComboEl = null;        // the <div> listbox, created lazily, appended to <body>
+let advClassComboInput = null;     // the class <input> the listbox is currently bound to
+let advClassComboCond = null;      // the condition object backing the active input
+let advClassComboActiveIndex = -1; // keyboard-highlighted option (-1 = none)
+
 function tt(key, params) {
     return (window.i18n && window.i18n.t) ? window.i18n.t(key, params) : key;
 }
@@ -7094,10 +7121,15 @@ function openAdvancedSearchModal() {
     if (!advancedSearchModal) return;
     advancedSearchModal.style.display = 'flex';
     renderAdvConditions(); // opens with whatever conditions exist (none on first open)
+    // Reopening with existing class conditions: re-fetch the universe if a prior
+    // load was cancelled (e.g. the modal closed before indexing finished), so the
+    // combobox always has data to offer instead of being stuck empty.
+    if (advConditions.some(c => c.type === 'class')) ensureClassUniverse();
 }
 
 function hideAdvancedSearchModal() {
     if (advancedSearchModal) advancedSearchModal.style.display = 'none';
+    closeClassCombo();
     // Leaving the filter UI stops any in-flight class indexing.
     if (advIndexing) cancelIndexing();
 }
@@ -7147,6 +7179,10 @@ function removeAdvCondition(id) {
 
 function renderAdvConditions() {
     if (!advSearchConditions) return;
+    // Re-rendering recreates every condition input, detaching whatever the shared
+    // combobox was bound to; close it first so it can't linger over a stale node
+    // (e.g. after removing the very class condition whose popup is open).
+    closeClassCombo();
     advSearchConditions.innerHTML = '';
     const frag = document.createDocumentFragment();
     for (const cond of advConditions) frag.appendChild(buildAdvConditionRow(cond));
@@ -7189,11 +7225,33 @@ function buildAdvConditionRow(cond) {
         body.className = 'adv-cond__body adv-cond__class-body';
         const chips = document.createElement('div');
         chips.className = 'adv-cond__chips';
+
+        // Custom combobox: a text input plus an always-visible caret toggle. We
+        // intentionally avoid the native <datalist> here (its dropdown arrow only
+        // renders when the list is non-empty, and its popup can't be aligned or
+        // made to scroll inside the blurred modal).
+        const wrap = document.createElement('div');
+        wrap.className = 'adv-cond__class-input-wrap';
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'adv-cond__value adv-cond__class-input';
-        input.setAttribute('list', 'advSearchClassDatalist');
         input.placeholder = tt('advSearch.classInputPlaceholder');
+        input.setAttribute('autocomplete', 'off');
+        // ARIA combobox wiring (parity with the native control we replaced).
+        input.setAttribute('role', 'combobox');
+        input.setAttribute('aria-autocomplete', 'list');
+        input.setAttribute('aria-haspopup', 'listbox');
+        input.setAttribute('aria-controls', 'advClassCombo');
+        input.setAttribute('aria-expanded', 'false');
+        // Give the input an accessible name via the visible "Class" label.
+        label.id = 'advCondLabel' + cond.id;
+        input.setAttribute('aria-labelledby', label.id);
+        const caret = document.createElement('button');
+        caret.type = 'button';
+        caret.className = 'adv-cond__class-caret';
+        caret.setAttribute('aria-label', tt('advSearch.classInputPlaceholder'));
+        caret.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-chevron-down"/></svg>';
+
         const addChip = (val) => {
             const v = (val || '').trim();
             if (!v) return;
@@ -7201,19 +7259,45 @@ function buildAdvConditionRow(cond) {
             input.value = '';
             renderAdvChips(chips, cond);
         };
+        // Let the shared combobox commit a picked/highlighted option to this input.
+        input._advAddChip = addChip;
+
         input.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') { e.preventDefault(); addChip(input.value); }
+            // Give the open combobox first crack at arrow/enter/escape navigation.
+            if (advClassComboInput === input && handleClassComboKeydown(e)) return;
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                addChip(input.value);
+                // Refresh the open popup so the just-added class drops out and the
+                // (now-empty) filter shows fresh suggestions — matching option-pick.
+                if (advClassComboInput === input) renderClassCombo();
+            }
             else if (e.key === 'Backspace' && !input.value && cond.classes.length) {
                 cond.classes.pop();
                 renderAdvChips(chips, cond);
             }
         });
-        // Adding a chip on change captures both a datalist pick and a blur with
-        // pending text, so typed-but-not-Entered classes are not silently lost.
+        input.addEventListener('input', () => openClassCombo(input, cond));
+        input.addEventListener('focus', () => openClassCombo(input, cond));
+        // change still captures a typed-but-not-Entered value on blur, so it is not
+        // silently lost; picking an option keeps focus (no blur) so this won't fire.
         input.addEventListener('change', () => { if (input.value) addChip(input.value); });
+        // Close the popup when focus genuinely leaves the input (e.g. Tab away).
+        // Option/caret clicks use mousedown+preventDefault, so they never blur here.
+        input.addEventListener('blur', () => { if (advClassComboInput === input) closeClassCombo(); });
+        caret.addEventListener('mousedown', (e) => {
+            // mousedown (not click) so it runs before the input's blur/dismiss path.
+            e.preventDefault();
+            const open = advClassComboInput === input && advClassComboEl && advClassComboEl.style.display !== 'none';
+            if (open) { closeClassCombo(); }
+            else { input.focus(); openClassCombo(input, cond); }
+        });
+
         renderAdvChips(chips, cond);
+        wrap.appendChild(input);
+        wrap.appendChild(caret);
         body.appendChild(chips);
-        body.appendChild(input);
+        body.appendChild(wrap);
         row.appendChild(body);
     } else {
         const input = document.createElement('input');
@@ -7249,6 +7333,173 @@ function buildAdvConditionRow(cond) {
     return row;
 }
 
+// ---- Custom class combobox (shared listbox anchored to the active input) ----
+function ensureClassComboEl() {
+    if (advClassComboEl) return advClassComboEl;
+    const el = document.createElement('div');
+    el.id = 'advClassCombo';
+    el.className = 'adv-combobox-dropdown';
+    el.setAttribute('role', 'listbox');
+    el.style.display = 'none';
+    // Swallow mousedown on the dropdown's own chrome (padding / scrollbar) so it
+    // never blurs the input; option rows handle their own mousedown below.
+    el.addEventListener('mousedown', (e) => { if (e.target === el) e.preventDefault(); });
+    document.body.appendChild(el);
+    advClassComboEl = el;
+    return el;
+}
+
+function openClassCombo(input, cond) {
+    ensureClassComboEl();
+    advClassComboInput = input;
+    advClassComboCond = cond;
+    advClassComboActiveIndex = -1;
+    input.setAttribute('aria-expanded', 'true');
+    // The universe loads lazily; (re)trigger it in case a prior load was cancelled.
+    ensureClassUniverse();
+    renderClassCombo();
+}
+
+function positionClassCombo() {
+    const el = advClassComboEl;
+    const input = advClassComboInput;
+    if (!el || !input || el.style.display === 'none') return;
+    const anchor = input.closest('.adv-cond__class-input-wrap') || input;
+    const r = anchor.getBoundingClientRect();
+    const GAP = 4, MARGIN = 12, MIN_H = 120, MAX_H = 280;
+    const roomBelow = window.innerHeight - r.bottom - MARGIN;
+    const roomAbove = r.top - MARGIN;
+    // Prefer opening below; flip above only when below is too cramped to be usable
+    // and above genuinely has more room (e.g. the input sits low in a tall modal).
+    const placeAbove = roomBelow < MIN_H && roomAbove > roomBelow;
+    const maxH = Math.max(0, Math.min(MAX_H, placeAbove ? roomAbove : roomBelow));
+    el.style.left = r.left + 'px';
+    el.style.width = r.width + 'px';
+    el.style.maxHeight = maxH + 'px';
+    if (placeAbove) {
+        // scrollHeight is the natural content height (ignores maxHeight); sit the
+        // box just above the input, capped to the room available.
+        const h = Math.min(maxH, el.scrollHeight);
+        el.style.top = (r.top - GAP - h) + 'px';
+    } else {
+        el.style.top = (r.bottom + GAP) + 'px';
+    }
+}
+
+function renderClassCombo() {
+    const el = advClassComboEl;
+    const input = advClassComboInput;
+    const cond = advClassComboCond;
+    if (!el || !input) return;
+    el.innerHTML = '';
+    // Rebuilding invalidates the option set: drop any stale highlight/active id.
+    advClassComboActiveIndex = -1;
+    input.removeAttribute('aria-activedescendant');
+    if (advIndexing && !advClassUniverseLoaded) {
+        const loading = document.createElement('div');
+        loading.className = 'adv-combobox-empty';
+        loading.textContent = tt('advSearch.indexingStart');
+        el.appendChild(loading);
+        el.style.display = 'block';
+        positionClassCombo();
+        return;
+    }
+    const matches = window.AdvancedSearchHelpers.filterClassNames(advSearchClassData, input.value)
+        .filter(c => !cond || !cond.classes.includes(c.name)); // hide already-picked classes
+    if (!matches.length) {
+        const empty = document.createElement('div');
+        empty.className = 'adv-combobox-empty';
+        empty.textContent = tt('advSearch.noClassMatches');
+        el.appendChild(empty);
+    } else {
+        const frag = document.createDocumentFragment();
+        for (let i = 0; i < matches.length; i++) {
+            const c = matches[i];
+            const opt = document.createElement('div');
+            opt.className = 'adv-combobox-option';
+            opt.id = 'advClassOpt' + i;
+            opt.setAttribute('role', 'option');
+            opt.setAttribute('aria-selected', 'false');
+            opt.dataset.index = String(i);
+            const name = document.createElement('span');
+            name.className = 'adv-combobox-option__name';
+            name.textContent = c.name;
+            const count = document.createElement('span');
+            count.className = 'adv-combobox-option__count';
+            count.textContent = String(c.count);
+            opt.appendChild(name);
+            opt.appendChild(count);
+            // mousedown (not click): keeps the input focused (no blur → no stray
+            // `change` committing the typed text instead of the picked class).
+            opt.addEventListener('mousedown', (e) => { e.preventDefault(); commitClassPick(c.name); });
+            frag.appendChild(opt);
+        }
+        el.appendChild(frag);
+    }
+    el.style.display = 'block';
+    positionClassCombo();
+}
+
+function commitClassPick(name) {
+    const input = advClassComboInput;
+    if (!input || typeof input._advAddChip !== 'function') return;
+    input._advAddChip(name);
+    advClassComboActiveIndex = -1;
+    // Re-filter: the picked class drops out and the list stays open for more picks.
+    renderClassCombo();
+}
+
+function highlightClassComboOption(delta) {
+    const el = advClassComboEl;
+    if (!el) return;
+    const opts = el.querySelectorAll('.adv-combobox-option');
+    if (!opts.length) {
+        advClassComboActiveIndex = -1;
+        if (advClassComboInput) advClassComboInput.removeAttribute('aria-activedescendant');
+        return;
+    }
+    let i = advClassComboActiveIndex + delta;
+    if (i < 0) i = opts.length - 1;
+    if (i >= opts.length) i = 0;
+    advClassComboActiveIndex = i;
+    opts.forEach((o, idx) => {
+        const on = idx === i;
+        o.classList.toggle('active', on);
+        o.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    opts[i].scrollIntoView({ block: 'nearest' });
+    if (advClassComboInput) advClassComboInput.setAttribute('aria-activedescendant', opts[i].id);
+}
+
+// Returns true when the keydown was consumed by the open combobox.
+function handleClassComboKeydown(e) {
+    const el = advClassComboEl;
+    if (!el || el.style.display === 'none') return false;
+    if (e.key === 'ArrowDown') { e.preventDefault(); highlightClassComboOption(1); return true; }
+    if (e.key === 'ArrowUp') { e.preventDefault(); highlightClassComboOption(-1); return true; }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeClassCombo(); return true; }
+    if (e.key === 'Enter' && advClassComboActiveIndex >= 0) {
+        const active = el.querySelector('.adv-combobox-option.active');
+        if (active) {
+            e.preventDefault();
+            commitClassPick(active.querySelector('.adv-combobox-option__name').textContent);
+            return true;
+        }
+    }
+    return false;
+}
+
+function closeClassCombo() {
+    if (advClassComboEl) advClassComboEl.style.display = 'none';
+    if (advClassComboInput) {
+        advClassComboInput.setAttribute('aria-expanded', 'false');
+        advClassComboInput.removeAttribute('aria-activedescendant');
+    }
+    advClassComboInput = null;
+    advClassComboCond = null;
+    advClassComboActiveIndex = -1;
+}
+
 function applyAdvancedPrepareResult(message) {
     // Drop stale prepare responses (cancelled, reset, or superseded by a newer request).
     if (message.requestId !== advPrepareSeq) return;
@@ -7257,19 +7508,8 @@ function applyAdvancedPrepareResult(message) {
     advIndexing = false;
     setIndexStatus('');
     updateAddClassButtonState();
-    if (advSearchClassDatalist) {
-        advSearchClassDatalist.innerHTML = '';
-        const frag = document.createDocumentFragment();
-        for (const c of advSearchClassData) {
-            const opt = document.createElement('option');
-            opt.value = c.name;
-            // label = count only; setting label to include the name made Chromium
-            // render the class name twice ("name  name (n)") in the dropdown.
-            opt.label = String(c.count);
-            frag.appendChild(opt);
-        }
-        advSearchClassDatalist.appendChild(frag);
-    }
+    // If the class combobox is open, refresh it now that the universe has arrived.
+    if (advClassComboInput) renderClassCombo();
 }
 
 function runAdvancedSearchQuery() {

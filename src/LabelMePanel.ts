@@ -799,6 +799,7 @@ export class LabelMePanel {
             <symbol id="icon-panel-left" viewBox="0 0 24 24" ${SW}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></symbol>
             <symbol id="icon-chevron-left" viewBox="0 0 24 24" ${SW}><polyline points="15 18 9 12 15 6"/></symbol>
             <symbol id="icon-chevron-right" viewBox="0 0 24 24" ${SW}><polyline points="9 18 15 12 9 6"/></symbol>
+            <symbol id="icon-chevron-down" viewBox="0 0 24 24" ${SW}><polyline points="6 9 12 15 18 9"/></symbol>
             <symbol id="icon-info" viewBox="0 0 24 24" ${SW}><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
             <symbol id="icon-eye" viewBox="0 0 24 24" ${SW}><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></symbol>
             <symbol id="icon-eye-off" viewBox="0 0 24 24" ${SW}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.51 18.51 0 0 1-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></symbol>
@@ -1299,7 +1300,6 @@ export class LabelMePanel {
                             <button id="advSearchAddClass" class="btn" data-i18n="advSearch.addClass">Class</button>
                             <span id="advSearchIndexStatus" class="adv-search-index-status" style="display: none;"></span>
                         </div>
-                        <datalist id="advSearchClassDatalist"></datalist>
                         <div class="modal-buttons">
                             <button id="advSearchRunBtn" class="btn btn-primary" data-i18n="advSearch.search">Search</button>
                             <button id="advSearchResetBtn" class="btn" data-i18n="advSearch.reset">Reset</button>

@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 import * as path from 'node:path';
 
 const helpers = require(path.resolve(__dirname, '..', '..', 'media', 'advancedSearchHelpers.js'));
-const { buildQuery, hasActiveConditions, formatBanner } = helpers;
+const { buildQuery, hasActiveConditions, formatBanner, filterClassNames } = helpers;
 
 describe('buildQuery', () => {
     it('trims name/regex values and shapes class values', () => {
@@ -54,5 +54,39 @@ describe('hasActiveConditions', () => {
 describe('formatBanner', () => {
     it('substitutes the count into the template', () => {
         assert.equal(formatBanner(7, 'Advanced filter active ({count})'), 'Advanced filter active (7)');
+    });
+});
+
+describe('filterClassNames', () => {
+    const data = [
+        { name: 'car', count: 5 },
+        { name: 'cardoor', count: 2 },
+        { name: 'person', count: 9 },
+        { name: 'scarf', count: 1 },
+    ];
+
+    const names = (arr: any[]) => arr.map((c: any) => c.name);
+
+    it('returns every item (original order) when the filter is blank', () => {
+        assert.deepEqual(names(filterClassNames(data, '')), ['car', 'cardoor', 'person', 'scarf']);
+        assert.deepEqual(names(filterClassNames(data, '   ')), ['car', 'cardoor', 'person', 'scarf']);
+    });
+
+    it('matches by case-insensitive substring', () => {
+        assert.deepEqual(names(filterClassNames(data, 'CAR')), ['car', 'cardoor', 'scarf']);
+    });
+
+    it('ranks prefix matches before mid-string matches, stable within each group', () => {
+        // "car"/"cardoor" start with "car"; "scarf" only contains it → ranked last.
+        assert.deepEqual(names(filterClassNames(data, 'car')), ['car', 'cardoor', 'scarf']);
+    });
+
+    it('returns an empty array when nothing matches', () => {
+        assert.deepEqual(filterClassNames(data, 'zzz'), []);
+    });
+
+    it('tolerates a missing/empty universe', () => {
+        assert.deepEqual(filterClassNames(undefined as any, 'x'), []);
+        assert.deepEqual(filterClassNames([], 'x'), []);
     });
 });

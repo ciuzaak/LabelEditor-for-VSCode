@@ -1746,6 +1746,59 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 }
 .adv-cond__remove:hover { background: var(--color-bg-hover); color: var(--color-text-primary); }
 
+/* Class condition: custom combobox (replaces the native <datalist>, whose arrow
+   could vanish, couldn't be aligned to the input, and couldn't be made to scroll
+   inside the blurred modal). The input keeps an always-visible caret toggle, and
+   the option list is a body-anchored, position:fixed listbox we fully control. */
+.adv-cond__class-input-wrap { position: relative; display: flex; align-items: stretch; }
+.adv-cond__class-input-wrap .adv-cond__class-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    margin: 0;            /* override .modal-content input { margin: 10px 0 } */
+    padding-right: 26px;  /* room for the caret */
+}
+.adv-cond__class-caret {
+    position: absolute;
+    right: 0; top: 0; bottom: 0;
+    width: 24px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+}
+.adv-cond__class-caret:hover { color: var(--color-text-primary); }
+
+.adv-combobox-dropdown {
+    position: fixed;
+    z-index: 2000;        /* above the modal overlay (z-index: 1000) */
+    box-sizing: border-box;
+    overflow-y: auto;     /* scroll when the class universe is large */
+    background: var(--color-bg-popover);
+    backdrop-filter: var(--blur-popover);
+    border: 0.5px solid var(--color-border-secondary);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-3);
+    padding: 4px;
+    animation: popover-in var(--dur-fast) var(--ease-standard);
+}
+.adv-combobox-option {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 5px 8px;
+    font-size: 12px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--color-text-primary);
+}
+.adv-combobox-option:hover,
+.adv-combobox-option.active { background: var(--color-bg-hover); }
+.adv-combobox-option__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.adv-combobox-option__count { flex: 0 0 auto; font-size: 11px; opacity: 0.6; }
+.adv-combobox-empty { padding: 6px 8px; font-size: 12px; opacity: 0.6; }
+
 .image-browser-item .adv-search-badge {
     margin-left: 6px;
     font-size: 10px;

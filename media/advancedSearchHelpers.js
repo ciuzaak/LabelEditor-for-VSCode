@@ -28,7 +28,26 @@
         return String(template).replace(/\{count\}/g, String(total));
     }
 
-    const api = { buildQuery, hasActiveConditions, formatBanner };
+    // Filter a class universe ([{name, count}]) by a (case-insensitive) substring.
+    // A blank filter returns every item in its original order. Otherwise prefix
+    // matches rank ahead of mid-string matches, stable within each group — so the
+    // custom class combobox surfaces the most likely pick first.
+    function filterClassNames(classData, filterText) {
+        const list = Array.isArray(classData) ? classData : [];
+        const q = (filterText || '').trim().toLowerCase();
+        if (!q) return list.slice();
+        const prefix = [];
+        const contains = [];
+        for (const c of list) {
+            const name = (c && c.name != null) ? String(c.name).toLowerCase() : '';
+            const at = name.indexOf(q);
+            if (at === 0) prefix.push(c);
+            else if (at > 0) contains.push(c);
+        }
+        return prefix.concat(contains);
+    }
+
+    const api = { buildQuery, hasActiveConditions, formatBanner, filterClassNames };
     if (root) root.AdvancedSearchHelpers = api;
     if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : null);
