@@ -2585,14 +2585,27 @@ function showShapeContextMenu(clientX, clientY, shapeIndex) {
             : tt('context.delete');
     }
 
-    // Position the menu at mouse location relative to canvasWrapper
-    const wrapperRect = canvasWrapper.getBoundingClientRect();
-    const menuX = clientX - wrapperRect.left;
-    const menuY = clientY - wrapperRect.top;
-
-    shapeContextMenu.style.left = menuX + 'px';
-    shapeContextMenu.style.top = menuY + 'px';
+    // Position at the cursor, then keep the whole menu inside the visible canvas
+    // viewport: flip left/up near the right/bottom edges and clamp so it never
+    // renders off-screen. The menu is absolute within #canvasWrapper, which can be
+    // larger than — and scrolled within — the .canvas-container viewport, so we
+    // clamp in client coords against that viewport and convert back to wrapper space.
+    shapeContextMenu.style.visibility = 'hidden';
     shapeContextMenu.style.display = 'block';
+    const menuW = shapeContextMenu.offsetWidth;
+    const menuH = shapeContextMenu.offsetHeight;
+    const wrapperRect = canvasWrapper.getBoundingClientRect();
+    const view = canvasContainer
+        ? canvasContainer.getBoundingClientRect()
+        : { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight };
+    const M = 4; // keep a small gap from the viewport edge
+    let clientLeft = (clientX + menuW > view.right) ? clientX - menuW : clientX;
+    clientLeft = Math.max(view.left + M, Math.min(clientLeft, view.right - menuW - M));
+    let clientTop = (clientY + menuH > view.bottom) ? clientY - menuH : clientY;
+    clientTop = Math.max(view.top + M, Math.min(clientTop, view.bottom - menuH - M));
+    shapeContextMenu.style.left = (clientLeft - wrapperRect.left) + 'px';
+    shapeContextMenu.style.top = (clientTop - wrapperRect.top) + 'px';
+    shapeContextMenu.style.visibility = '';
 }
 
 function hideShapeContextMenu() {
