@@ -2,6 +2,18 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [1.3.1] - 2026-06-08
+
+UI polish for the v1.3.0 advanced search and the sidebar/canvas popovers. Found by a full read-through of every floating-UI element and hardened over several rounds of Codex review.
+
+### Changed
+- **Advanced search — class picker**: the class condition's native `<datalist>` is replaced by a custom combobox. Its dropdown is **strictly aligned to the input**, **scrolls** when the class list is large, and its toggle is **always visible** (the native arrow could silently disappear, leaving no way to pick). Adds type-to-filter with prefix ranking, keyboard navigation (Up/Down/Enter/Esc), already-picked classes hidden, loading/empty states, and full ARIA combobox semantics. Reopening the modal also re-fetches the class list if a prior index build was cancelled, so the picker is never stuck empty.
+
+### Fixed
+- **Sidebar settings/tools menus**: the popovers now **track the sidebar width** when it is resized and their **arrow points at the button that opened them**, instead of being pinned to a fixed width at the toolbar's right edge.
+- **Shape right-click menu**: now **stays inside the viewport** — it flips and clamps near the right/bottom edges instead of rendering partly or fully off-screen.
+- **Tall modals**: `.modal-content` now caps to the viewport and **scrolls**, so long config forms or many search conditions can no longer push the title or action buttons off-screen on short/split editor panels.
+
 ## [1.3.0] - 2026-06-06
 
 Advanced search for the image browser: filter the workspace by filename, regex, and annotation class, ranked by match relevance. Built spec-first with a pure, unit-tested scoring engine (`src/searchEngine.ts`) and hardened over several rounds of Codex review.

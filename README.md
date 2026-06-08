@@ -49,7 +49,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 ### Image Browser & Navigation
 - **Sidebar image list**: every workspace image organized by folder, click to jump, current image highlighted, resizable — virtual scrolling handles 8000+ images smoothly
 - **Quick search**: filter the list by filename as you type
-- **Advanced search**: the sliders button in the search box opens a condition builder — add **Name** (substring), **Name (regex)**, and **Class** (multi-select) conditions; conditions AND together while multiple classes in one condition OR. Results are **ranked by match relevance** with a clearable banner. Name/regex search reads no annotation files; class search indexes sidecar JSON once (cached, with progress and cancel), so it stays fast on large datasets
+- **Advanced search**: the sliders button in the search box opens a condition builder — add **Name** (substring), **Name (regex)**, and **Class** (multi-select via a searchable, scrollable picker) conditions; conditions AND together while multiple classes in one condition OR. Results are **ranked by match relevance** with a clearable banner. Name/regex search reads no annotation files; class search indexes sidecar JSON once (cached, with progress and cancel), so it stays fast on large datasets
 - **Open Folder for Annotation**: right-click a folder to work with just its images
 - **Multi-panel**: open several images/folders side-by-side; re-opening the same one reveals its existing panel
 - **Zoom & pan** with mouse-centered pivot; prev/next buttons and `A` / `D` (navigation stays within the active filter's results)
