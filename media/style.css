@@ -559,6 +559,11 @@ canvas {
     padding: var(--space-5);
     min-width: 320px;
     max-width: min(560px, 92vw);
+    /* Cap to the viewport and scroll when content is taller than the panel, so
+       tall modals (many search conditions, long config forms) never push their
+       title or action buttons off-screen on short/split editor panels. */
+    max-height: 90vh;
+    overflow-y: auto;
     box-sizing: border-box;
     color: var(--color-text-primary);
     animation: modal-in var(--dur-base) var(--ease-emphasized);
