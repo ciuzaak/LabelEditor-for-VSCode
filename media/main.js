@@ -527,6 +527,7 @@ updateClaheToggleUI();
 // 恢复设置下拉菜单的展开状态
 if (settingsMenuDropdown && vscodeState.settingsMenuExpanded) {
     settingsMenuDropdown.style.display = 'block';
+    if (settingsMenuBtn) positionSidebarDropdownArrow(settingsMenuDropdown, settingsMenuBtn);
 }
 // 初始化模式按钮UI
 if (viewModeBtn && pointModeBtn && lineModeBtn && polygonModeBtn && rectangleModeBtn) {
@@ -4818,7 +4819,7 @@ function resetLabelColor(label) {
 // --- Sidebar Dropdown Toggle ---
 
 // Generic toggle for sidebar dropdowns — opening one closes the other
-function toggleSidebarDropdown(dropdown, otherDropdown) {
+function toggleSidebarDropdown(dropdown, otherDropdown, btn) {
     if (!dropdown) return;
     const isVisible = dropdown.style.display !== 'none';
     const newState = isVisible ? 'none' : 'block';
@@ -4829,10 +4830,25 @@ function toggleSidebarDropdown(dropdown, otherDropdown) {
         otherDropdown.style.display = 'none';
     }
 
+    // The menu spans the full toolbar width (so its width tracks the sidebar as it
+    // is resized); point the arrow at whichever button opened it.
+    if (newState === 'block' && btn) positionSidebarDropdownArrow(dropdown, btn);
+
     // Save state to vscodeState
     const state = vscode.getState() || {};
     state.settingsMenuExpanded = settingsMenuDropdown ? settingsMenuDropdown.style.display !== 'none' : false;
     vscode.setState(state);
+}
+
+// Point a sidebar dropdown's arrow (::before) at the center of the button that
+// opened it, clamped to stay within the menu's rounded corners.
+function positionSidebarDropdownArrow(dropdown, btn) {
+    const dropRect = dropdown.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    const ARROW = 10; // px — matches .sidebar-dropdown::before width
+    let x = btnRect.left + btnRect.width / 2 - dropRect.left - ARROW / 2;
+    x = Math.max(8, Math.min(dropRect.width - ARROW - 8, x));
+    dropdown.style.setProperty('--arrow-x', x + 'px');
 }
 // --- Theme Functions ---
 
@@ -6000,7 +6016,7 @@ if (customColorInput) {
 if (settingsMenuBtn) {
     settingsMenuBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        toggleSidebarDropdown(settingsMenuDropdown, toolsMenuDropdown);
+        toggleSidebarDropdown(settingsMenuDropdown, toolsMenuDropdown, settingsMenuBtn);
     });
 }
 
@@ -6008,7 +6024,7 @@ if (settingsMenuBtn) {
 if (toolsMenuBtn) {
     toolsMenuBtn.addEventListener('click', (e) => {
         e.stopPropagation();
-        toggleSidebarDropdown(toolsMenuDropdown, settingsMenuDropdown);
+        toggleSidebarDropdown(toolsMenuDropdown, settingsMenuDropdown, toolsMenuBtn);
     });
 }
 

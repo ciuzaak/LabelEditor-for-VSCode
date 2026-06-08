@@ -830,8 +830,11 @@ textarea { resize: vertical; min-height: 36px; max-height: 120px; }
 .sidebar-dropdown {
     position: absolute;
     top: calc(100% + 6px);
+    /* Span the full toolbar width (left:0 + right:0) so the menu width tracks the
+       sidebar as it is resized, instead of staying pinned at a fixed min-width. */
+    left: 0;
     right: 0;
-    min-width: 240px;
+    box-sizing: border-box;
     background: var(--color-bg-popover);
     backdrop-filter: var(--blur-popover);
     border: 0.5px solid var(--color-border-secondary);
@@ -844,7 +847,9 @@ textarea { resize: vertical; min-height: 36px; max-height: 120px; }
 .sidebar-dropdown::before {
     content: "";
     position: absolute;
-    top: -5px; right: 12px;
+    /* --arrow-x is set per-open in JS so the arrow points at the clicked button
+       (settings vs tools), not at a fixed corner of the toolbar. */
+    top: -5px; left: var(--arrow-x, 24px);
     width: 10px; height: 10px;
     background: inherit;
     backdrop-filter: inherit;
