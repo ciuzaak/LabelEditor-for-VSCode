@@ -7,6 +7,7 @@ Runs ONNX segmentation model on a list of images and outputs LabelMe JSON annota
 import argparse
 import json
 import os
+import re
 import sys
 
 import cv2
@@ -45,6 +46,56 @@ def mask_to_shapes(mask, value2label):
                 "mask": None,
             })
     return shapes
+
+
+def image_to_label_path(image_path):
+    """Map an image path to its YOLO label .txt path (Ultralytics convention):
+    replace the LAST /images/ or \\images\\ segment with labels, ext -> .txt;
+    fall back to a sidecar .txt if there is no images segment."""
+    base, _ext = os.path.splitext(image_path)
+    matches = list(re.finditer(r"[\\/]images[\\/]", base))
+    if matches:
+        m = matches[-1]
+        matched = m.group(0)
+        replacement = matched[0] + "labels" + matched[-1]
+        new_base = base[:m.start()] + replacement + base[m.start() + len(matched):]
+        return new_base + ".txt"
+    return base + ".txt"
+
+
+def _clamp01(v):
+    if v != v or v in (float("inf"), float("-inf")):  # NaN / +-inf -> 0
+        return 0.0
+    if v < 0:
+        return 0.0
+    if v > 1:
+        return 1.0
+    return v
+
+
+def shapes_to_yolo_lines(shapes, w, h, class_names):
+    """Convert LabelMe-style polygon shapes to YOLO segmentation lines.
+    Returns (lines, skipped_count). A shape whose label is not in class_names
+    is skipped (the batch tool does not add classes to data.yaml)."""
+    name_to_idx = {n: i for i, n in enumerate(class_names)}
+    lines = []
+    skipped = 0
+    if w <= 0 or h <= 0:
+        return lines, len(shapes)
+    for s in shapes:
+        label = s.get("label")
+        if label not in name_to_idx:
+            skipped += 1
+            continue
+        pts = s.get("points") or []
+        if len(pts) < 3:
+            continue
+        parts = [str(name_to_idx[label])]
+        for p in pts:
+            parts.append(f"{_clamp01(p[0] / w):.6f}")
+            parts.append(f"{_clamp01(p[1] / h):.6f}")
+        lines.append(" ".join(parts))
+    return lines, skipped
 
 
 def load_model(model_dir, device):
@@ -144,7 +195,19 @@ def main():
                         help="How to handle images with existing annotations")
     parser.add_argument("--device", default="cpu", choices=["cpu", "gpu"])
     parser.add_argument("--color_format", default="rgb", choices=["rgb", "bgr"])
+    parser.add_argument("--format", default="labelme", choices=["labelme", "yolo"],
+                        help="Output annotation format")
+    parser.add_argument("--class_names_json", default=None,
+                        help="JSON file with the ordered YOLO class names (required for --format yolo)")
     args = parser.parse_args()
+
+    class_names = []
+    if args.format == "yolo":
+        if not args.class_names_json or not os.path.exists(args.class_names_json):
+            print("Error: --class_names_json is required for --format yolo", file=sys.stderr)
+            sys.exit(1)
+        with open(args.class_names_json, encoding="utf-8") as f:
+            class_names = json.load(f)
 
     # Load image list
     with open(args.images_json, encoding="utf-8") as f:
@@ -167,8 +230,11 @@ def main():
     errors = 0
 
     for img_path in tqdm(image_paths, desc="Inferring", unit="img"):
-        json_path = os.path.splitext(img_path)[0] + ".json"
-        has_existing = os.path.exists(json_path)
+        if args.format == "yolo":
+            out_path = image_to_label_path(img_path)
+        else:
+            out_path = os.path.splitext(img_path)[0] + ".json"
+        has_existing = os.path.exists(out_path)
 
         # Handle existing annotations
         if has_existing and args.mode == "skip":
@@ -183,15 +249,39 @@ def main():
         mask, h, w = result
         new_shapes = mask_to_shapes(mask, value2label)
 
+        if args.format == "yolo":
+            new_lines, conv_skipped = shapes_to_yolo_lines(new_shapes, w, h, class_names)
+            if conv_skipped:
+                print(f"  Note: {conv_skipped} shape(s) in {os.path.basename(img_path)} "
+                      f"have labels not in data.yaml; skipped.", file=sys.stderr)
+            if has_existing and args.mode == "merge":
+                try:
+                    with open(out_path, encoding="utf-8") as f:
+                        existing_text = f.read()
+                except Exception as e:
+                    print(f"  Warning: Cannot read existing {out_path}: {e}, skipping.", file=sys.stderr)
+                    errors += 1
+                    continue
+                if existing_text and not existing_text.endswith("\n"):
+                    existing_text += "\n"
+                content = existing_text + ("\n".join(new_lines) + ("\n" if new_lines else ""))
+            else:
+                content = "\n".join(new_lines) + ("\n" if new_lines else "")
+            os.makedirs(os.path.dirname(out_path), exist_ok=True)
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write(content)
+            processed += 1
+            continue
+
         if has_existing and args.mode == "merge":
             # Load existing and append new shapes
             try:
-                with open(json_path, encoding="utf-8") as f:
+                with open(out_path, encoding="utf-8") as f:
                     existing_data = json.load(f)
                 existing_shapes = existing_data.get("shapes", [])
                 all_shapes = existing_shapes + new_shapes
             except Exception as e:
-                print(f"  Warning: Cannot read existing {json_path}: {e}, skipping.", file=sys.stderr)
+                print(f"  Warning: Cannot read existing {out_path}: {e}, skipping.", file=sys.stderr)
                 errors += 1
                 continue
         else:
@@ -207,7 +297,7 @@ def main():
             "imageWidth": w,
         }
 
-        with open(json_path, "w", encoding="utf-8") as f:
+        with open(out_path, "w", encoding="utf-8") as f:
             json.dump(labelme_data, f, ensure_ascii=False, indent=2)
 
         processed += 1

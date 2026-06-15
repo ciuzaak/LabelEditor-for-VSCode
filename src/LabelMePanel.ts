@@ -2247,6 +2247,20 @@ export class LabelMePanel {
             `--mode ${config.mode}`
         ];
 
+        // In YOLO mode, tell the script to emit YOLO .txt labels and give it the
+        // dataset's class names (written to a temp JSON to avoid CLI quoting issues
+        // with non-ASCII names). Shapes whose label isn't a known class are skipped
+        // by the script — the batch tool does not edit data.yaml.
+        if (this._format === 'yolo') {
+            const classesTmpFile = path.join(
+                tmpDir,
+                `labeleditor_onnx_classes_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.json`
+            );
+            await fs.writeFile(classesTmpFile, JSON.stringify(this._yoloClasses, null, 2), 'utf8');
+            args.push('--format yolo');
+            args.push(`--class_names_json "${classesTmpFile}"`);
+        }
+
         // PowerShell requires & (call operator) for quoted executable paths;
         // bash/zsh/cmd do not need it.
         const shell = vscode.env.shell.toLowerCase();
