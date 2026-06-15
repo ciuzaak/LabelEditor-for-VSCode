@@ -681,7 +681,20 @@ export class LabelMePanel {
     }
 
     private async _scanWorkspaceImages(): Promise<string[]> {
-        const images = await scanWorkspaceImages(this._rootPath);
+        let images: string[];
+        if (this._format === 'yolo' && this._yamlUri) {
+            try {
+                const text = await fs.readFile(this._yamlUri.fsPath, 'utf8');
+                const parsed = parseDataYaml(text);
+                const { dirs } = resolveImageDirs(this._yamlUri.fsPath, parsed);
+                images = await LabelMePanel._scanYoloImages(dirs, this._rootPath);
+            } catch {
+                // Fall back to a generic recursive scan if the yaml became unreadable.
+                images = await scanWorkspaceImages(this._rootPath);
+            }
+        } else {
+            images = await scanWorkspaceImages(this._rootPath);
+        }
         this._workspaceImages = images;
         return images;
     }
