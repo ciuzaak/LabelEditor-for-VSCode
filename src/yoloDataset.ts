@@ -163,3 +163,62 @@ export function imageToLabelPath(imageAbsPath: string): string {
     }
     return base + '.txt';
 }
+
+// Shape object ready to hand to the webview (matches editor-created shapes).
+export interface YoloLoadedShape {
+    label: string;
+    shape_type: string;
+    points: number[][];
+    group_id: null;
+    flags: Record<string, unknown>;
+}
+
+function makeShape(label: string, shapeType: string, points: number[][]): YoloLoadedShape {
+    return { label, shape_type: shapeType, points, group_id: null, flags: {} };
+}
+
+// Parse a YOLO .txt into shapes with ABSOLUTE pixel coordinates.
+//   5 tokens (cls + 4)         -> rectangle (2 corner points)
+//   >=7 tokens, cls + even N   -> polygon
+// label = names[idx]; out-of-range idx -> "class_<idx>" + warning.
+export function parseYoloTxt(
+    text: string, imgW: number, imgH: number, names: string[]
+): { shapes: YoloLoadedShape[]; warnings: string[] } {
+    const warnings: string[] = [];
+    const shapes: YoloLoadedShape[] = [];
+    const lines = text.split(/\r?\n/);
+    for (let li = 0; li < lines.length; li++) {
+        const line = lines[li].trim();
+        if (!line) continue;
+        const tokens = line.split(/\s+/);
+        const cls = Number(tokens[0]);
+        if (!Number.isInteger(cls) || cls < 0) {
+            warnings.push(`Line ${li + 1}: invalid class index "${tokens[0]}"`);
+            continue;
+        }
+        const coords = tokens.slice(1).map(Number);
+        if (coords.length === 0 || coords.some(n => !Number.isFinite(n))) {
+            warnings.push(`Line ${li + 1}: non-numeric coordinates`);
+            continue;
+        }
+        const label = cls < names.length ? names[cls] : `class_${cls}`;
+        if (cls >= names.length) {
+            warnings.push(`Line ${li + 1}: class index ${cls} has no name in data.yaml`);
+        }
+        if (coords.length === 4) {
+            const [cx, cy, w, h] = coords;
+            const x1 = (cx - w / 2) * imgW, y1 = (cy - h / 2) * imgH;
+            const x2 = (cx + w / 2) * imgW, y2 = (cy + h / 2) * imgH;
+            shapes.push(makeShape(label, 'rectangle', [[x1, y1], [x2, y2]]));
+        } else if (coords.length >= 6 && coords.length % 2 === 0) {
+            const pts: number[][] = [];
+            for (let k = 0; k < coords.length; k += 2) {
+                pts.push([coords[k] * imgW, coords[k + 1] * imgH]);
+            }
+            shapes.push(makeShape(label, 'polygon', pts));
+        } else {
+            warnings.push(`Line ${li + 1}: unexpected token count ${tokens.length}`);
+        }
+    }
+    return { shapes, warnings };
+}

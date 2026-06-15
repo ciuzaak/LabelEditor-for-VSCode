@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as path from 'path';
-import { parseDataYaml, resolveImageDirs, imageToLabelPath } from '../src/yoloDataset';
+import { parseDataYaml, resolveImageDirs, imageToLabelPath, parseYoloTxt } from '../src/yoloDataset';
 
 describe('parseDataYaml', () => {
     it('parses a block-mapping names form', () => {
@@ -95,5 +95,36 @@ describe('imageToLabelPath', () => {
     });
     it('falls back to a sidecar .txt when there is no images segment', () => {
         assert.equal(imageToLabelPath('/ds/train/img1.jpeg'), '/ds/train/img1.txt');
+    });
+});
+
+describe('parseYoloTxt', () => {
+    const names = ['person', 'car'];
+
+    it('parses a bbox line into a rectangle with pixel corner points', () => {
+        const { shapes } = parseYoloTxt('0 0.5 0.5 0.2 0.4\n', 100, 200, names);
+        assert.equal(shapes.length, 1);
+        assert.equal(shapes[0].label, 'person');
+        assert.equal(shapes[0].shape_type, 'rectangle');
+        assert.deepEqual(shapes[0].points, [[40, 60], [60, 140]]);
+    });
+
+    it('parses a segmentation line into a polygon', () => {
+        const { shapes } = parseYoloTxt('1 0 0 1 0 1 1\n', 100, 100, names);
+        assert.equal(shapes[0].shape_type, 'polygon');
+        assert.equal(shapes[0].label, 'car');
+        assert.deepEqual(shapes[0].points, [[0, 0], [100, 0], [100, 100]]);
+    });
+
+    it('synthesizes a name and warns for an out-of-range class index', () => {
+        const { shapes, warnings } = parseYoloTxt('5 0.5 0.5 0.1 0.1\n', 10, 10, names);
+        assert.equal(shapes[0].label, 'class_5');
+        assert.ok(warnings.length >= 1);
+    });
+
+    it('skips blank lines and warns on malformed token counts', () => {
+        const { shapes, warnings } = parseYoloTxt('\n0 0.5 0.5\n', 10, 10, names);
+        assert.equal(shapes.length, 0);
+        assert.equal(warnings.length, 1);
     });
 });
