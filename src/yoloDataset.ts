@@ -116,3 +116,31 @@ export function parseDataYaml(text: string): ParsedDataYaml {
     }
     return result;
 }
+
+// Compute the absolute image directories referenced by train/val/test. Pure
+// (no existence check — the panel filters to existing dirs). Each entry is
+// resolved relative to `path` (itself relative to the yaml dir), unless absolute.
+// A `.txt` entry is a YOLO image-list file (v1 limitation) — skipped with a warning.
+export function resolveImageDirs(
+    yamlPath: string,
+    parsed: ParsedDataYaml
+): { dirs: string[]; warnings: string[] } {
+    const warnings: string[] = [];
+    const yamlDir = path.dirname(yamlPath);
+    const base = parsed.path
+        ? (path.isAbsolute(parsed.path) ? parsed.path : path.resolve(yamlDir, parsed.path))
+        : yamlDir;
+    const dirs: string[] = [];
+    const seen = new Set<string>();
+    const add = (entry: string) => {
+        if (/\.txt$/i.test(entry)) {
+            warnings.push(`Skipped image-list file (not supported in v1): ${entry}`);
+            return;
+        }
+        const abs = path.isAbsolute(entry) ? entry : path.resolve(base, entry);
+        const norm = path.normalize(abs);
+        if (!seen.has(norm)) { seen.add(norm); dirs.push(norm); }
+    };
+    for (const e of [...parsed.train, ...parsed.val, ...parsed.test]) add(e);
+    return { dirs, warnings };
+}

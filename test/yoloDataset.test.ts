@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
-import { parseDataYaml } from '../src/yoloDataset';
+import * as path from 'path';
+import { parseDataYaml, resolveImageDirs } from '../src/yoloDataset';
 
 describe('parseDataYaml', () => {
     it('parses a block-mapping names form', () => {
@@ -42,5 +43,33 @@ describe('parseDataYaml', () => {
         assert.equal(r.path, null);
         assert.deepEqual(r.names, []);
         assert.deepEqual(r.train, []);
+    });
+});
+
+describe('resolveImageDirs', () => {
+    it('resolves train/val relative to path, relative to the yaml dir', () => {
+        const yaml = path.resolve('/ds/data.yaml');
+        const parsed = { path: '.', train: ['images/train'], val: ['images/val'], test: [], names: [] };
+        const { dirs } = resolveImageDirs(yaml, parsed);
+        assert.deepEqual(dirs, [
+            path.resolve('/ds/images/train'),
+            path.resolve('/ds/images/val'),
+        ]);
+    });
+
+    it('respects an absolute entry and dedupes', () => {
+        const yaml = path.resolve('/ds/data.yaml');
+        const abs = path.resolve('/other/imgs');
+        const parsed = { path: null, train: [abs], val: [abs], test: [], names: [] };
+        const { dirs } = resolveImageDirs(yaml, parsed);
+        assert.deepEqual(dirs, [path.normalize(abs)]);
+    });
+
+    it('warns and skips a .txt list-file entry', () => {
+        const yaml = path.resolve('/ds/data.yaml');
+        const parsed = { path: null, train: ['train.txt'], val: [], test: [], names: [] };
+        const { dirs, warnings } = resolveImageDirs(yaml, parsed);
+        assert.deepEqual(dirs, []);
+        assert.equal(warnings.length, 1);
     });
 });
