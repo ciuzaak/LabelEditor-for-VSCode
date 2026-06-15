@@ -1937,10 +1937,36 @@ export class LabelMePanel {
             }
 
             const absImg = path.join(this._rootPath, rel);
-            const jsonPath = absImg.replace(/\.[^/.]+$/, '') + '.json';
             let shapes: ExportShape[] = [];
             let width = 0;
             let height = 0;
+
+            if (this._format === 'yolo') {
+                try {
+                    const meta = await getImageMetadata(absImg);
+                    if (meta.width) width = meta.width;
+                    if (meta.height) height = meta.height;
+                } catch {
+                    // Leave 0 — caller will skip images with unknown dimensions.
+                }
+                const labelPath = imageToLabelPath(absImg);
+                if (width && height && existsSync(labelPath)) {
+                    try {
+                        const txt = await fs.readFile(labelPath, 'utf8');
+                        shapes = parseYoloTxt(txt, width, height, this._yoloClasses).shapes.map(s => ({
+                            label: s.label,
+                            shape_type: s.shape_type,
+                            points: s.points
+                        }));
+                    } catch {
+                        // Treat as no annotations.
+                    }
+                }
+                images.push({ fileName: rel.replace(/\\/g, '/'), width, height, shapes });
+                continue;
+            }
+
+            const jsonPath = absImg.replace(/\.[^/.]+$/, '') + '.json';
             if (existsSync(jsonPath)) {
                 try {
                     const json = JSON.parse(await fs.readFile(jsonPath, 'utf8'));
