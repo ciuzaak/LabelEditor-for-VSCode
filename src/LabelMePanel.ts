@@ -9,6 +9,7 @@ import {
     getImageMetadata,
     scanWorkspaceImages,
     comparePathsNaturally,
+    classifyEntry,
     ImageMetadata
 } from './labelMeUtils';
 import {
@@ -180,25 +181,37 @@ export class LabelMePanel {
         let initialImageUri: vscode.Uri | undefined = targetImageUri;
 
         if (!initialImageUri) {
+            // Resolved real paths already visited — guards against symlink cycles.
+            const visited = new Set<string>();
             const findFirstImage = async (dirPath: string): Promise<string | undefined> => {
+                let real: string;
+                try { real = await fs.realpath(dirPath); } catch { return undefined; }
+                if (visited.has(real)) return undefined;
+                visited.add(real);
                 try {
                     const entries = await fs.readdir(dirPath, { withFileTypes: true });
                     // Sort entries for deterministic ordering
                     entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' }));
 
+                    // Classify once (follows symlinks to their target type).
+                    const kinds = await Promise.all(
+                        entries.map(e => classifyEntry(path.join(dirPath, e.name), e))
+                    );
+
                     // First pass: check files in current directory
-                    for (const entry of entries) {
-                        if (entry.isFile()) {
-                            const ext = path.extname(entry.name).toLowerCase();
+                    for (let i = 0; i < entries.length; i++) {
+                        if (kinds[i] === 'file') {
+                            const ext = path.extname(entries[i].name).toLowerCase();
                             if (imageExtensions.includes(ext)) {
-                                return path.join(dirPath, entry.name);
+                                return path.join(dirPath, entries[i].name);
                             }
                         }
                     }
 
                     // Second pass: recurse into subdirectories (DFS with early exit)
-                    for (const entry of entries) {
-                        if (entry.isDirectory() &&
+                    for (let i = 0; i < entries.length; i++) {
+                        const entry = entries[i];
+                        if (kinds[i] === 'dir' &&
                             !entry.name.startsWith('.') &&
                             entry.name !== 'node_modules' &&
                             entry.name !== 'out') {
@@ -327,7 +340,13 @@ export class LabelMePanel {
     private static async _scanYoloImages(dirs: string[], rootPath: string): Promise<string[]> {
         const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp'];
         const out: string[] = [];
+        // Resolved real paths already visited — guards against symlink cycles.
+        const visited = new Set<string>();
         const walk = async (d: string): Promise<void> => {
+            let real: string;
+            try { real = await fs.realpath(d); } catch { return; }
+            if (visited.has(real)) return;
+            visited.add(real);
             let entries;
             try {
                 entries = await fs.readdir(d, { withFileTypes: true });
@@ -336,9 +355,10 @@ export class LabelMePanel {
             }
             for (const e of entries) {
                 const full = path.join(d, e.name);
-                if (e.isDirectory()) {
+                const kind = await classifyEntry(full, e);
+                if (kind === 'dir') {
                     if (!e.name.startsWith('.')) await walk(full);
-                } else if (imageExtensions.includes(path.extname(e.name).toLowerCase())) {
+                } else if (kind === 'file' && imageExtensions.includes(path.extname(e.name).toLowerCase())) {
                     out.push(path.relative(rootPath, full));
                 }
             }

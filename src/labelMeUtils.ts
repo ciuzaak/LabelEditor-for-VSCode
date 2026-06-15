@@ -1,4 +1,5 @@
 import * as fs from 'fs/promises';
+import type { Dirent } from 'fs';
 import * as path from 'path';
 
 export interface LabelMeShape {
@@ -26,19 +27,49 @@ export interface ImageMetadata {
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp'];
 const SKIPPED_DIRECTORIES = new Set(['node_modules', 'out']);
 
+/**
+ * Classify a directory entry as 'dir' | 'file' | 'other', FOLLOWING symbolic
+ * links. `Dirent.isDirectory()/isFile()` describe the link itself, not its
+ * target, so a symlinked directory/file would otherwise be missed during a
+ * scan. Hard links need no special handling — they are indistinguishable from
+ * regular files at the filesystem level. A broken/unreadable symlink → 'other'.
+ */
+export async function classifyEntry(fullPath: string, entry: Dirent): Promise<'dir' | 'file' | 'other'> {
+    if (entry.isDirectory()) return 'dir';
+    if (entry.isFile()) return 'file';
+    if (entry.isSymbolicLink()) {
+        try {
+            const st = await fs.stat(fullPath); // stat() follows the link to its target
+            if (st.isDirectory()) return 'dir';
+            if (st.isFile()) return 'file';
+        } catch {
+            return 'other'; // dangling or unreadable link target
+        }
+    }
+    return 'other';
+}
+
 export async function scanWorkspaceImages(rootPath: string): Promise<string[]> {
     const images: string[] = [];
+    // Resolved real paths already visited — guards against symlink cycles
+    // (a symlinked dir pointing back up the tree would otherwise loop forever).
+    const visited = new Set<string>();
 
     const scanDirectory = async (dirPath: string): Promise<void> => {
+        let real: string;
+        try { real = await fs.realpath(dirPath); } catch { return; }
+        if (visited.has(real)) return;
+        visited.add(real);
         try {
             const entries = await fs.readdir(dirPath, { withFileTypes: true });
             for (const entry of entries) {
                 const fullPath = path.join(dirPath, entry.name);
-                if (entry.isDirectory()) {
+                const kind = await classifyEntry(fullPath, entry);
+                if (kind === 'dir') {
                     if (!entry.name.startsWith('.') && !SKIPPED_DIRECTORIES.has(entry.name)) {
                         await scanDirectory(fullPath);
                     }
-                } else if (entry.isFile()) {
+                } else if (kind === 'file') {
                     const ext = path.extname(entry.name).toLowerCase();
                     if (IMAGE_EXTENSIONS.includes(ext)) {
                         images.push(path.relative(rootPath, fullPath));
