@@ -101,6 +101,12 @@ const themeLightBtn = document.getElementById('themeLightBtn');
 const themeDarkBtn = document.getElementById('themeDarkBtn');
 const themeAutoBtn = document.getElementById('themeAutoBtn');
 
+// YOLO datasets only support view / sam / polygon / rectangle modes.
+// Hide the point/line/circle mode buttons (the variables are declared above).
+if (window.annotationFormat === 'yolo') {
+    [pointModeBtn, lineModeBtn, circleModeBtn].forEach(b => { if (b) b.style.display = 'none'; });
+}
+
 let img = new Image();
 
 let shapes = [];
@@ -383,6 +389,10 @@ if (vscodeState && vscodeState.labelVisibility) {
 // 从vscode state恢复currentMode
 if (vscodeState && vscodeState.currentMode) {
     currentMode = vscodeState.currentMode;
+}
+// YOLO mode can't restore a now-hidden mode (point/line/circle) — fall back to view.
+if (window.annotationFormat === 'yolo' && ['point', 'line', 'circle'].includes(currentMode)) {
+    currentMode = 'view';
 }
 
 // Boot i18n locale from persisted settings before any DOM text is read by
@@ -1157,6 +1167,16 @@ window.addEventListener('message', event => {
             pendingSaveHistoryIndex = -1;
             isSaving = false;
             saveTriggeredByNavigation = false;
+            break;
+        case 'yoloClassAdded':
+            window.yoloClasses = message.classes || window.yoloClasses;
+            // The label is now a valid class — re-run confirm to create/edit the shape.
+            labelInput.value = message.label;
+            confirmLabel();
+            break;
+        case 'yoloAddClassCancelled':
+            // User declined; keep the modal open so they can pick an existing class.
+            if (labelModal.style.display === 'flex') labelInput.focus();
             break;
         case 'updateImage':
             handleImageUpdate(message);
@@ -4012,6 +4032,21 @@ function renderRecentLabels() {
         return chip;
     }
 
+    // YOLO: list the data.yaml classes as the primary selection source.
+    if (window.annotationFormat === 'yolo' && Array.isArray(window.yoloClasses) && window.yoloClasses.length > 0) {
+        const classSection = document.createElement('div');
+        classSection.className = 'label-section yolo-classes';
+        const classTitle = document.createElement('div');
+        classTitle.className = 'label-section-title';
+        classTitle.textContent = (window.i18n && window.i18n.t) ? window.i18n.t('label.classes') : 'Classes';
+        classSection.appendChild(classTitle);
+        const classChips = document.createElement('div');
+        classChips.className = 'label-chips';
+        window.yoloClasses.forEach(label => classChips.appendChild(buildChip(label, '')));
+        classSection.appendChild(classChips);
+        recentLabelsDiv.appendChild(classSection);
+    }
+
     // 渲染当前图片标签区域（如果有的话）
     if (currentImageLabelsOrdered.length > 0) {
         const currentSection = document.createElement('div');
@@ -4052,6 +4087,16 @@ function renderRecentLabels() {
 }
 
 function confirmLabel() {
+    // YOLO: a label must be one of the data.yaml classes. If the typed label is
+    // missing, ask the extension to confirm + add it; on success we re-enter
+    // confirmLabel with the now-valid label (see the 'yoloClassAdded' handler).
+    if (window.annotationFormat === 'yolo') {
+        const typed = labelInput.value.trim();
+        if (typed && !window.yoloClasses.includes(typed)) {
+            vscode.postMessage({ command: 'yoloConfirmAddClass', label: typed });
+            return; // keep the modal open; wait for the reply
+        }
+    }
     // Merge-pending mode: commit the merge using the chosen label.
     if (isMergePending) {
         if (commitMergePendingFromModal()) return;
@@ -4916,6 +4961,10 @@ applyTheme(currentTheme);
 
 // 设置交互模式
 function setMode(mode) {
+    // YOLO datasets only support view/sam/polygon/rectangle.
+    if (window.annotationFormat === 'yolo' && (mode === 'point' || mode === 'line' || mode === 'circle')) {
+        return;
+    }
     // 如果正在绘制，取消绘制（切换任何模式时都应取消）
     if (isDrawing) {
         isDrawing = false;
