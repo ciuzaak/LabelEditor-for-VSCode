@@ -809,6 +809,56 @@ export class LabelMePanel {
         return getImageMetadata(filePath);
     }
 
+    /**
+     * Load the existing annotation for the current image as a webview-ready
+     * `{ shapes, imageWidth, imageHeight }` object, or null if none. Branches by
+     * format: LabelMe reads the .json sidecar; YOLO reads the .txt label file and
+     * converts normalized coords to pixels using image dimensions.
+     */
+    private async _loadExistingAnnotation(meta?: ImageMetadata): Promise<any> {
+        if (this._format === 'yolo') {
+            let w = meta?.width || 0;
+            let h = meta?.height || 0;
+            if (!w || !h) {
+                const m = await getImageMetadata(this._imageUri.fsPath);
+                w = m.width || 0;
+                h = m.height || 0;
+            }
+            if (!w || !h) {
+                this._notify('warn', 'Cannot read image dimensions; YOLO labels not loaded', { key: 'yolo.noDims' });
+                return null;
+            }
+            const labelPath = imageToLabelPath(this._imageUri.fsPath);
+            if (!existsSync(labelPath)) {
+                return { shapes: [], imageWidth: w, imageHeight: h };
+            }
+            try {
+                const txt = await fs.readFile(labelPath, 'utf8');
+                const { shapes, warnings } = parseYoloTxt(txt, w, h, this._yoloClasses);
+                if (warnings.length) {
+                    this._notify('warn', `YOLO import: ${warnings.length} issue(s) in ${path.basename(labelPath)}`, { key: 'yolo.importWarn' });
+                }
+                return { shapes, imageWidth: w, imageHeight: h };
+            } catch (e) {
+                this._notify('warn', `Failed to read ${path.basename(labelPath)}: ${(e as Error).message}`);
+                return { shapes: [], imageWidth: w, imageHeight: h };
+            }
+        }
+
+        // LabelMe
+        const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
+        if (existsSync(jsonPath)) {
+            try {
+                const jsonContent = await fs.readFile(jsonPath, 'utf8');
+                return JSON.parse(jsonContent);
+            } catch (e) {
+                this._notify('warn', `Failed to load annotation file: ${(e as Error).message}`,
+                    { i18nKey: 'status.loadJsonFailed', i18nParams: { err: (e as Error).message } });
+            }
+        }
+        return null;
+    }
+
     private async _sendImageUpdate() {
         if (path.basename(this._imageUri.fsPath) === '__no_image__') {
             this._safePost({
@@ -834,22 +884,8 @@ export class LabelMePanel {
         // Get image file metadata (size, bit depth, DPI)
         const imageMetadata = await this._getImageMetadata(this._imageUri.fsPath);
 
-        // Load existing annotation if exists
-        let existingData = null;
-        const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
-        if (existsSync(jsonPath)) {
-            try {
-                const jsonContent = await fs.readFile(jsonPath, 'utf8');
-                existingData = JSON.parse(jsonContent);
-            } catch (e) {
-                console.error("Failed to load existing JSON", e);
-                this._notify(
-                    'warn',
-                    `Failed to load annotation file: ${(e as Error).message}`,
-                    { i18nKey: 'status.loadJsonFailed', i18nParams: { err: (e as Error).message } }
-                );
-            }
-        }
+        // Load existing annotation (format-aware: .json for LabelMe, .txt for YOLO)
+        const existingData = await this._loadExistingAnnotation(imageMetadata);
 
         // Send update message to webview
         this._safePost({
@@ -1006,23 +1042,9 @@ export class LabelMePanel {
         // Get image file metadata for info popup
         const imageMetadata = isDummyImage ? null : await this._getImageMetadata(this._imageUri.fsPath);
 
-        // Skip loading annotation for dummy image
         let existingData = null;
         if (!isDummyImage) {
-            const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
-            if (existsSync(jsonPath)) {
-                try {
-                    const jsonContent = await fs.readFile(jsonPath, 'utf8');
-                    existingData = JSON.parse(jsonContent);
-                } catch (e) {
-                    console.error("Failed to load existing JSON", e);
-                    this._notify(
-                    'warn',
-                    `Failed to load annotation file: ${(e as Error).message}`,
-                    { i18nKey: 'status.loadJsonFailed', i18nParams: { err: (e as Error).message } }
-                );
-                }
-            }
+            existingData = await this._loadExistingAnnotation(imageMetadata || undefined);
         }
 
         return `<!DOCTYPE html>
