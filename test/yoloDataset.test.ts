@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as path from 'path';
-import { parseDataYaml, resolveImageDirs, imageToLabelPath, parseYoloTxt, buildYoloTxt, appendClassToYaml } from '../src/yoloDataset';
+import { parseDataYaml, resolveImageDirs, imageToLabelPath, parseYoloTxt, buildYoloTxt, appendClassToYaml, buildDataYaml } from '../src/yoloDataset';
 
 describe('parseDataYaml', () => {
     it('parses a block-mapping names form', () => {
@@ -171,6 +171,16 @@ describe('buildYoloTxt', () => {
         const { text, warnings } = buildYoloTxt(shapes, 100, 100, classes);
         assert.equal(text, '5 0.000000 0.000000 1.000000 0.000000 1.000000 1.000000\n');
         assert.equal(warnings.length, 0);
+    });
+});
+
+describe('buildDataYaml', () => {
+    it('emits an Ultralytics data.yaml round-trippable by parseDataYaml', () => {
+        const y = buildDataYaml(['cat', 'dog']);
+        const p = parseDataYaml(y);
+        assert.deepEqual(p.names, ['cat', 'dog']);
+        assert.deepEqual(p.train, ['images/train']);
+        assert.equal(p.path, '.');
     });
 });
 

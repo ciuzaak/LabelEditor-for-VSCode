@@ -5734,10 +5734,15 @@ function showExportDatasetModal() {
     if (exportOutputDirInput && initialGlobalSettings && initialGlobalSettings.exportOutputDir) {
         exportOutputDirInput.value = initialGlobalSettings.exportOutputDir;
     }
-    // Seed class list from persisted edits — auto-detect appends new ones.
-    exportClasses = Array.isArray(initialGlobalSettings && initialGlobalSettings.exportClasses)
-        ? initialGlobalSettings.exportClasses.slice()
+    // Seed the class list from the CURRENT dataset, not stale persisted classes.
+    // YOLO uses the data.yaml names (order = class index); other modes start
+    // empty and are filled by auto-detect (applyExportPrepareResult).
+    exportClasses = (window.annotationFormat === 'yolo' && Array.isArray(window.yoloClasses))
+        ? window.yoloClasses.slice()
         : [];
+    // Restore the copy-images preference.
+    const exportCopyChk = document.getElementById('exportCopyImages');
+    if (exportCopyChk) exportCopyChk.checked = !!(initialGlobalSettings && initialGlobalSettings.exportCopyImages);
     renderExportClassList();
     exportDatasetModal.style.display = 'flex';
     // Request scope-aware prep
@@ -5774,11 +5779,13 @@ function buildExportCurrentImageOverride() {
 }
 
 function submitExportDataset() {
+    const exportCopyChk = document.getElementById('exportCopyImages');
     const config = {
         format: getExportFormat(),
         scope: getExportScope(),
         outputDir: exportOutputDirInput ? exportOutputDirInput.value.trim() : '',
-        classes: exportClasses.slice()
+        classes: exportClasses.slice(),
+        copyImages: exportCopyChk ? exportCopyChk.checked : false
     };
     const override = buildExportCurrentImageOverride();
     if (override) config.currentImage = override;

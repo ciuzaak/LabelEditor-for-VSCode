@@ -235,6 +235,7 @@
             // Image counts in export modal
             'export.imageCount': 'Images',
             'export.annotationCount': 'Annotations',
+            'export.copyImages': 'Copy images into the dataset',
 
             // ---- Tooltip translations (keyed by data-tip-id) ----
             // Top toolbar / image browser
@@ -647,6 +648,7 @@
 
             'export.imageCount': '图片数',
             'export.annotationCount': '标注数',
+            'export.copyImages': '把图像一起复制进数据集',
 
             // ---- Tooltip translations (keyed by data-tip-id) ----
             'tip.nav.toggleBrowser.title': '图片浏览器',

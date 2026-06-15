@@ -289,6 +289,20 @@ export function buildYoloTxt(
     return { text: lines.join('\n') + (lines.length > 0 ? '\n' : ''), warnings };
 }
 
+// Build an Ultralytics data.yaml for an exported dataset. Block-mapping names
+// (index = class index), pointing at the images/train + labels/train layout.
+export function buildDataYaml(classes: string[]): string {
+    const names = classes.map((c, i) => `  ${i}: ${c}`).join('\n');
+    return [
+        'path: .',
+        'train: images/train',
+        'val: images/train',
+        `nc: ${classes.length}`,
+        'names:',
+        names
+    ].join('\n') + '\n';
+}
+
 // Append a new class to the yaml's `names` (preserving list/dict/sequence style)
 // and bump `nc` if present. Returns the new yaml text and the new class index
 // (= the number of classes before the append — "the last index").

@@ -17,6 +17,7 @@ import {
     imageToLabelPath,
     parseYoloTxt,
     buildYoloTxt,
+    buildDataYaml,
     appendClassToYaml
 } from './yoloDataset';
 import {
@@ -1412,6 +1413,11 @@ export class LabelMePanel {
                             </div>
                         </div>
                         <div class="onnx-form-group">
+                            <label class="onnx-radio" style="display:inline-flex; align-items:center; gap:6px;">
+                                <input type="checkbox" id="exportCopyImages" /> <span data-i18n="export.copyImages">Copy images into the dataset</span>
+                            </label>
+                        </div>
+                        <div class="onnx-form-group">
                             <label data-tip-id="export.classes"><span data-i18n="label.classes">Classes</span> <span style="font-weight:normal; opacity:0.7">(<span data-i18n="label.classOrderHint">order = class index</span>)</span></label>
                             <ul id="exportClassList" class="export-class-list"></ul>
                             <div class="export-add-class">
@@ -1542,6 +1548,7 @@ export class LabelMePanel {
                         exportScope: ${JSON.stringify(this._globalState.get('exportScope') || 'all')},
                         exportOutputDir: ${JSON.stringify(this._globalState.get('exportOutputDir') || '')},
                         exportClasses: ${JSON.stringify(this._globalState.get('exportClasses') || [])},
+                        exportCopyImages: ${this._globalState.get('exportCopyImages') ?? false},
                         keyboardBindings: ${JSON.stringify(this._globalState.get('keyboardBindings') || null)},
                         locale: ${JSON.stringify(this._globalState.get('locale') || 'en')}
                     };
@@ -2017,7 +2024,11 @@ export class LabelMePanel {
                 }
             }
         }
-        const detectedClasses = Array.from(labelSet).sort();
+        // YOLO: surface the data.yaml classes in their canonical order (index =
+        // class index), even ones not yet used. Other modes: sorted detected.
+        const detectedClasses = this._format === 'yolo'
+            ? this._yoloClasses.slice()
+            : Array.from(labelSet).sort();
         this._safePost({
             command: 'exportDatasetPrepareResult',
             imageCount: images.length,
@@ -2031,6 +2042,7 @@ export class LabelMePanel {
         scope: string;
         outputDir: string;
         classes: string[];
+        copyImages?: boolean;
         currentImage?: { shapes: ExportShape[]; width: number; height: number };
     }) {
         if (!config.outputDir) {
@@ -2046,53 +2058,80 @@ export class LabelMePanel {
         try {
             await fs.mkdir(config.outputDir, { recursive: true });
             const images = await this._collectExportImages(config.scope, config.currentImage);
-            // Drop images with unknown dimensions (no JSON and no file probe).
+            // Drop images with unknown dimensions (no annotation and no file probe).
             const usable = images.filter(img => img.width > 0 && img.height > 0);
             const skippedImages = images.length - usable.length;
+            const copyImages = !!config.copyImages;
             let totalWarnings = 0;
+            let totalAnnotations = 0;
+
+            // Flatten nested source paths to unique basenames. Case-folded on
+            // Windows/macOS so foo.txt and FOO.txt can't collide on disk.
+            const caseInsensitiveFs = process.platform === 'win32' || process.platform === 'darwin';
+            const collisionKey = (s: string) => caseInsensitiveFs ? s.toLowerCase() : s;
+            const usedFinal = new Set<string>();
+            const uniqueName = (fileName: string): { finalName: string; ext: string } => {
+                const ext = path.extname(fileName);
+                const base = path.basename(fileName, ext);
+                let finalName = base;
+                let n = 2;
+                while (usedFinal.has(collisionKey(finalName))) { finalName = `${base}_${n}`; n++; }
+                usedFinal.add(collisionKey(finalName));
+                return { finalName, ext };
+            };
+            const copyOne = async (fileName: string, destAbs: string) => {
+                try {
+                    await fs.copyFile(path.join(this._rootPath, fileName), destAbs);
+                } catch {
+                    totalWarnings++;
+                }
+            };
 
             if (config.format === 'coco') {
-                const { document, warnings } = buildCocoDocument(usable, config.classes);
+                const imagesOutDir = path.join(config.outputDir, 'images');
+                if (copyImages) await fs.mkdir(imagesOutDir, { recursive: true });
+                const remapped: ExportImage[] = [];
+                for (const img of usable) {
+                    if (copyImages) {
+                        const { finalName, ext } = uniqueName(img.fileName);
+                        await copyOne(img.fileName, path.join(imagesOutDir, finalName + ext));
+                        remapped.push({ ...img, fileName: `images/${finalName}${ext}` });
+                    } else {
+                        remapped.push(img);
+                    }
+                }
+                const { document, warnings } = buildCocoDocument(remapped, config.classes);
                 totalWarnings += warnings.length;
+                totalAnnotations += (document as { annotations: unknown[] }).annotations.length;
                 await fs.writeFile(
                     path.join(config.outputDir, 'annotations.json'),
                     JSON.stringify(document, null, 2),
                     'utf8'
                 );
             } else if (config.format === 'yolo-bbox' || config.format === 'yolo-seg') {
-                // Resolve filename collisions across nested folders. Track the
-                // FINAL chosen names — counting by base alone would still
-                // collide when an input happens to be named `foo_2.jpg`
-                // alongside a `foo.jpg` (the manual suffix consumes the slot
-                // that the auto-suffix would have wanted). On Windows / macOS
-                // the underlying filesystem is case-insensitive, so the
-                // collision key is case-folded too — otherwise `foo.txt` and
-                // `FOO.txt` would silently overwrite each other on disk.
-                const caseInsensitiveFs = process.platform === 'win32' || process.platform === 'darwin';
-                const collisionKey = (s: string) => caseInsensitiveFs ? s.toLowerCase() : s;
-                const usedFinal = new Set<string>();
+                // Ultralytics layout: images/train + labels/train + data.yaml.
+                // images/train is created even when not copying, so the structure
+                // is ready for the user to drop images into later.
+                const imagesOutDir = path.join(config.outputDir, 'images', 'train');
+                const labelsOutDir = path.join(config.outputDir, 'labels', 'train');
+                await fs.mkdir(imagesOutDir, { recursive: true });
+                await fs.mkdir(labelsOutDir, { recursive: true });
                 for (const img of usable) {
-                    const base = path.basename(img.fileName, path.extname(img.fileName));
-                    let finalName = base;
-                    let n = 2;
-                    while (usedFinal.has(collisionKey(finalName))) {
-                        finalName = `${base}_${n}`;
-                        n++;
-                    }
-                    usedFinal.add(collisionKey(finalName));
+                    const { finalName, ext } = uniqueName(img.fileName);
                     const out = config.format === 'yolo-bbox'
                         ? buildYoloBboxLines(img, config.classes)
                         : buildYoloSegLines(img, config.classes);
                     totalWarnings += out.warnings.length;
-                    await fs.writeFile(
-                        path.join(config.outputDir, finalName + '.txt'),
-                        out.text,
-                        'utf8'
-                    );
+                    const lineCount = out.text.trim() ? out.text.trim().split('\n').filter(Boolean).length : 0;
+                    totalAnnotations += lineCount;
+                    await fs.writeFile(path.join(labelsOutDir, finalName + '.txt'), out.text, 'utf8');
+                    if (copyImages) {
+                        await copyOne(img.fileName, path.join(imagesOutDir, finalName + ext));
+                    }
                 }
                 await fs.writeFile(
-                    path.join(config.outputDir, 'classes.txt'),
-                    buildClassesTxt(config.classes),
+                    path.join(config.outputDir, 'data.yaml'),
+                    buildDataYaml(config.classes),
                     'utf8'
                 );
             } else {
@@ -2110,24 +2149,24 @@ export class LabelMePanel {
             await this._globalState.update('exportScope', config.scope);
             await this._globalState.update('exportOutputDir', config.outputDir);
             await this._globalState.update('exportClasses', config.classes);
+            await this._globalState.update('exportCopyImages', copyImages);
 
-            // Success toast: localised base message only ("Exported N images
-            // to <path>"). When something was skipped or warned about, a
-            // second info toast surfaces the counts — keeps the primary
-            // success message clean across locales while still giving the
-            // user visibility into what didn't make it into the output.
-            this._notify(
-                'success',
-                `Exported ${usable.length} images to ${config.outputDir}`,
-                { i18nKey: 'status.exportDone', i18nParams: { count: usable.length, path: config.outputDir } }
-            );
+            if (totalAnnotations === 0) {
+                // Files were written but nothing landed — almost always a
+                // class-name mismatch. Surface it instead of a false success.
+                this._notify(
+                    'warn',
+                    `Export finished but wrote 0 annotations to ${config.outputDir} — check that the class names match your labels.`,
+                    { i18nKey: 'status.exportEmpty', i18nParams: { path: config.outputDir } }
+                );
+            } else {
+                this._notify(
+                    'success',
+                    `Exported ${usable.length} images (${totalAnnotations} annotations) to ${config.outputDir}`,
+                    { i18nKey: 'status.exportDone', i18nParams: { count: usable.length, path: config.outputDir } }
+                );
+            }
             if (skippedImages > 0 || totalWarnings > 0) {
-                // Use `warn` so the notification bus preempts the success
-                // toast's minimum-residency window — `info` would be silently
-                // dropped because the bus blocks lower-severity messages
-                // during a higher-severity transient. Skip/warn details
-                // indicate some shapes didn't reach the output, which is a
-                // genuine warning even when the overall run succeeded.
                 this._notify(
                     'warn',
                     `Export details: ${skippedImages} skipped, ${totalWarnings} warnings`,
