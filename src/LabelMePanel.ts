@@ -24,7 +24,6 @@ import {
     buildCocoDocument,
     buildYoloBboxLines,
     buildYoloSegLines,
-    buildClassesTxt,
     ExportImage,
     ExportShape
 } from './exportFormats';
