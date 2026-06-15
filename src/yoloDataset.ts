@@ -279,3 +279,66 @@ export function buildYoloTxt(
     }
     return { text: lines.join('\n') + (lines.length > 0 ? '\n' : ''), warnings };
 }
+
+// Append a new class to the yaml's `names` (preserving list/dict/sequence style)
+// and bump `nc` if present. Returns the new yaml text and the new class index
+// (= the number of classes before the append — "the last index").
+export function appendClassToYaml(text: string, newName: string): { text: string; index: number } {
+    const index = parseDataYaml(text).names.length;
+    const eol = text.includes('\r\n') ? '\r\n' : '\n';
+    const lines = text.split(/\r?\n/);
+
+    let namesLine = -1;
+    for (let i = 0; i < lines.length; i++) {
+        if (indentOf(lines[i]) === 0 && /^names\s*:/.test(stripComment(lines[i]))) { namesLine = i; break; }
+    }
+
+    const out = lines.slice();
+    if (namesLine === -1) {
+        out.push('names:', `  ${index}: ${newName}`);
+    } else {
+        const inline = stripComment(lines[namesLine]).replace(/^names\s*:\s*/, '').trim();
+        if (inline.startsWith('[')) {
+            const close = lines[namesLine].lastIndexOf(']');
+            const before = lines[namesLine].slice(0, close);
+            const after = lines[namesLine].slice(close);
+            const sep = /\[\s*$/.test(before) ? '' : ', ';
+            out[namesLine] = `${before}${sep}'${newName}'${after}`;
+        } else if (inline.startsWith('{')) {
+            const close = lines[namesLine].lastIndexOf('}');
+            const before = lines[namesLine].slice(0, close);
+            const after = lines[namesLine].slice(close);
+            const sep = /\{\s*$/.test(before) ? '' : ', ';
+            out[namesLine] = `${before}${sep}${index}: ${newName}${after}`;
+        } else {
+            // Block form: append after the last indented child line.
+            // Block-sequence items may be at indent 0 (e.g. "- person"), so we
+            // accept them even when indentOf === 0, as long as they look like a
+            // sequence item and we haven't yet decided the child form.
+            let lastChild = namesLine;
+            let childIndent = '  ';
+            let isSeq = false;
+            for (let j = namesLine + 1; j < lines.length; j++) {
+                const l = lines[j];
+                if (!l.trim()) continue;
+                const isSeqItem = /^\s*-\s+/.test(l);
+                const isDictItem = /^\s*(\d+)\s*:\s*/.test(l);
+                if (indentOf(l) === 0 && !isSeqItem && !isDictItem) break;
+                if (!isSeqItem && !isDictItem) break;
+                lastChild = j;
+                childIndent = (l.match(/^(\s*)/) as RegExpMatchArray)[1];
+                if (isSeqItem) isSeq = true;
+            }
+            const newLine = isSeq ? `${childIndent}- ${newName}` : `${childIndent}${index}: ${newName}`;
+            out.splice(lastChild + 1, 0, newLine);
+        }
+    }
+
+    for (let i = 0; i < out.length; i++) {
+        if (/^nc\s*:\s*\d+\s*$/.test(stripComment(out[i]))) {
+            out[i] = out[i].replace(/(\bnc\s*:\s*)\d+/, `$1${index + 1}`);
+            break;
+        }
+    }
+    return { text: out.join(eol), index };
+}

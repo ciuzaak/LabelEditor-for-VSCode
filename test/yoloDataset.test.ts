@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as path from 'path';
-import { parseDataYaml, resolveImageDirs, imageToLabelPath, parseYoloTxt, buildYoloTxt } from '../src/yoloDataset';
+import { parseDataYaml, resolveImageDirs, imageToLabelPath, parseYoloTxt, buildYoloTxt, appendClassToYaml } from '../src/yoloDataset';
 
 describe('parseDataYaml', () => {
     it('parses a block-mapping names form', () => {
@@ -156,5 +156,33 @@ describe('buildYoloTxt', () => {
         const { text, warnings } = buildYoloTxt(shapes, 100, 100, classes);
         assert.equal(text, '');
         assert.equal(warnings.length, 1);
+    });
+});
+
+describe('appendClassToYaml', () => {
+    it('appends to a block-mapping names and returns the new index', () => {
+        const text = 'names:\n  0: person\n  1: bicycle\n';
+        const { text: out, index } = appendClassToYaml(text, 'car');
+        assert.equal(index, 2);
+        assert.deepEqual(parseDataYaml(out).names, ['person', 'bicycle', 'car']);
+    });
+
+    it('appends to a flow-list names', () => {
+        const text = "names: ['person', 'bicycle']\n";
+        const { text: out, index } = appendClassToYaml(text, 'car');
+        assert.equal(index, 2);
+        assert.deepEqual(parseDataYaml(out).names, ['person', 'bicycle', 'car']);
+    });
+
+    it('appends to a block-sequence names', () => {
+        const text = 'names:\n- person\n- bicycle\n';
+        const { text: out } = appendClassToYaml(text, 'car');
+        assert.deepEqual(parseDataYaml(out).names, ['person', 'bicycle', 'car']);
+    });
+
+    it('bumps nc when present', () => {
+        const text = 'nc: 2\nnames: [a, b]\n';
+        const { text: out } = appendClassToYaml(text, 'c');
+        assert.match(out, /nc:\s*3/);
     });
 });
