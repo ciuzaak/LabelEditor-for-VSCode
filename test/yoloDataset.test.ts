@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as path from 'path';
-import { parseDataYaml, resolveImageDirs, imageToLabelPath, parseYoloTxt } from '../src/yoloDataset';
+import { parseDataYaml, resolveImageDirs, imageToLabelPath, parseYoloTxt, buildYoloTxt } from '../src/yoloDataset';
 
 describe('parseDataYaml', () => {
     it('parses a block-mapping names form', () => {
@@ -125,6 +125,36 @@ describe('parseYoloTxt', () => {
     it('skips blank lines and warns on malformed token counts', () => {
         const { shapes, warnings } = parseYoloTxt('\n0 0.5 0.5\n', 10, 10, names);
         assert.equal(shapes.length, 0);
+        assert.equal(warnings.length, 1);
+    });
+});
+
+describe('buildYoloTxt', () => {
+    const classes = ['person', 'car'];
+
+    it('writes a rectangle as a bbox line', () => {
+        const shapes = [{ label: 'person', shape_type: 'rectangle', points: [[40, 60], [60, 140]] }];
+        const { text } = buildYoloTxt(shapes, 100, 200, classes);
+        assert.equal(text, '0 0.500000 0.500000 0.200000 0.400000\n');
+    });
+
+    it('writes a polygon as a segmentation line', () => {
+        const shapes = [{ label: 'car', shape_type: 'polygon', points: [[0, 0], [100, 0], [100, 100]] }];
+        const { text } = buildYoloTxt(shapes, 100, 100, classes);
+        assert.equal(text, '1 0.000000 0.000000 1.000000 0.000000 1.000000 1.000000\n');
+    });
+
+    it('round-trips parse -> build for a mixed file', () => {
+        const src = '0 0.500000 0.500000 0.200000 0.400000\n1 0.000000 0.000000 1.000000 0.000000 1.000000 1.000000\n';
+        const { shapes } = parseYoloTxt(src, 100, 200, classes);
+        const { text } = buildYoloTxt(shapes, 100, 200, classes);
+        assert.equal(text, src);
+    });
+
+    it('skips a shape whose label is not in classes and warns', () => {
+        const shapes = [{ label: 'tree', shape_type: 'rectangle', points: [[0, 0], [10, 10]] }];
+        const { text, warnings } = buildYoloTxt(shapes, 100, 100, classes);
+        assert.equal(text, '');
         assert.equal(warnings.length, 1);
     });
 });

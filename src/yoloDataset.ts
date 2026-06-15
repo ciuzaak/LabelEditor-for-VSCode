@@ -3,6 +3,13 @@
 // tests exercise every branch without temp dirs. Mirrors exportFormats.ts.
 
 import * as path from 'path';
+import {
+    ExportShape,
+    shapeAabb,
+    shapeToPolygonRing,
+    polygonArea,
+    clamp01
+} from './exportFormats';
 
 export interface ParsedDataYaml {
     path: string | null;     // dataset root (may be relative to the yaml dir, or absolute)
@@ -221,4 +228,54 @@ export function parseYoloTxt(
         }
     }
     return { shapes, warnings };
+}
+
+// Serialize shapes to a YOLO .txt, choosing the line form per shape:
+//   rectangle -> bbox line (cls cx cy w h)
+//   polygon (and any non-rectangle ring) -> segmentation line
+// Labels not in `classes` are skipped with a warning. Degenerate geometry skipped.
+export function buildYoloTxt(
+    shapes: ExportShape[], imgW: number, imgH: number, classes: string[]
+): { text: string; warnings: string[] } {
+    const warnings: string[] = [];
+    if (imgW <= 0 || imgH <= 0) {
+        return { text: '', warnings: ['image has no dimensions'] };
+    }
+    const classIndex = new Map<string, number>();
+    classes.forEach((n, i) => classIndex.set(n, i));
+    const lines: string[] = [];
+    for (const shape of shapes) {
+        const label = shape.label || '';
+        const idx = classIndex.get(label);
+        if (idx === undefined) {
+            warnings.push(`label not in classes: ${label}`);
+            continue;
+        }
+        const t = shape.shape_type || 'polygon';
+        if (t === 'rectangle') {
+            const box = shapeAabb(shape);
+            if (!box || box.w <= 0 || box.h <= 0) {
+                warnings.push(`degenerate rectangle: ${label}`);
+                continue;
+            }
+            const cx = clamp01((box.x + box.w / 2) / imgW);
+            const cy = clamp01((box.y + box.h / 2) / imgH);
+            const w = clamp01(box.w / imgW);
+            const h = clamp01(box.h / imgH);
+            lines.push(`${idx} ${cx.toFixed(6)} ${cy.toFixed(6)} ${w.toFixed(6)} ${h.toFixed(6)}`);
+        } else {
+            const ring = shapeToPolygonRing(shape);
+            if (!ring || ring.length < 3 || polygonArea(ring) <= 0) {
+                warnings.push(`degenerate polygon: ${label}`);
+                continue;
+            }
+            const parts = [String(idx)];
+            for (const p of ring) {
+                parts.push(clamp01(p[0] / imgW).toFixed(6));
+                parts.push(clamp01(p[1] / imgH).toFixed(6));
+            }
+            lines.push(parts.join(' '));
+        }
+    }
+    return { text: lines.join('\n') + (lines.length > 0 ? '\n' : ''), warnings };
 }

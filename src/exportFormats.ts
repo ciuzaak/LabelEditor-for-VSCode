@@ -218,7 +218,7 @@ export function buildCocoDocument(images: ExportImage[], classes: string[]): {
     return { document, warnings };
 }
 
-function clamp01(v: number): number {
+export function clamp01(v: number): number {
     // NaN/Infinity collapse to 0 — without this guard, a single malformed
     // coordinate would emit "NaN" into a YOLO line and the entire file
     // would be rejected by trainers (ultralytics, darknet, ...). Returning
