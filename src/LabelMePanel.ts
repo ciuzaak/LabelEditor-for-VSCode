@@ -7,8 +7,18 @@ import {
     buildLabelMeAnnotation,
     buildSvg,
     getImageMetadata,
-    scanWorkspaceImages
+    scanWorkspaceImages,
+    comparePathsNaturally,
+    ImageMetadata
 } from './labelMeUtils';
+import {
+    parseDataYaml,
+    resolveImageDirs,
+    imageToLabelPath,
+    parseYoloTxt,
+    buildYoloTxt,
+    appendClassToYaml
+} from './yoloDataset';
 import {
     buildCocoDocument,
     buildYoloBboxLines,
@@ -27,6 +37,9 @@ export class LabelMePanel {
     private readonly _extensionUri: vscode.Uri;
     private _disposables: vscode.Disposable[] = [];
     private _imageUri: vscode.Uri;
+    private _format: 'labelme' | 'yolo' = 'labelme';
+    private _yamlUri: vscode.Uri | undefined;
+    private _yoloClasses: string[] = [];
     private _isDirty = false;
     private _isSaving = false;
     private _pendingNavigation: number | undefined;
@@ -251,10 +264,100 @@ export class LabelMePanel {
         LabelMePanel.panels.add(new LabelMePanel(panel, context.extensionUri, imageToShow, context.globalState, rootPath, [], panelTitle));
     }
 
-    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, imageUri: vscode.Uri, globalState: vscode.Memento, rootPath: string, initialWorkspaceImages?: string[], panelTitle?: string) {
+    /**
+     * Open the annotator in YOLO mode from a data.yaml. Resolves the dataset's
+     * train/val/test image dirs, scans them, and loads/saves YOLO .txt labels.
+     */
+    public static async createOrShowFromYaml(context: vscode.ExtensionContext, yamlUri: vscode.Uri) {
+        const column = vscode.window.activeTextEditor
+            ? vscode.window.activeTextEditor.viewColumn
+            : undefined;
+
+        let text: string;
+        try {
+            text = await fs.readFile(yamlUri.fsPath, 'utf8');
+        } catch (e) {
+            vscode.window.showErrorMessage('Cannot read data.yaml: ' + (e as Error).message);
+            return;
+        }
+
+        const parsed = parseDataYaml(text);
+        const { dirs } = resolveImageDirs(yamlUri.fsPath, parsed);
+        const yamlDir = path.dirname(yamlUri.fsPath);
+        const rootPath = parsed.path
+            ? (path.isAbsolute(parsed.path) ? parsed.path : path.resolve(yamlDir, parsed.path))
+            : yamlDir;
+
+        const images = await LabelMePanel._scanYoloImages(dirs, rootPath);
+        if (images.length === 0) {
+            vscode.window.showErrorMessage('No images found for this YOLO dataset (check path/train/val in data.yaml).');
+            return;
+        }
+
+        // Reveal an existing panel for this yaml instead of duplicating.
+        for (const existing of LabelMePanel.panels) {
+            if (existing._yamlUri && existing._yamlUri.fsPath === yamlUri.fsPath) {
+                existing._panel.reveal(column);
+                return;
+            }
+        }
+
+        const firstImageUri = vscode.Uri.file(path.join(rootPath, images[0]));
+
+        const localResourceRoots: vscode.Uri[] = [
+            vscode.Uri.joinPath(context.extensionUri, 'media'),
+            vscode.Uri.file(rootPath)
+        ];
+        dirs.forEach(d => localResourceRoots.push(vscode.Uri.file(d)));
+        (vscode.workspace.workspaceFolders || []).forEach(folder => localResourceRoots.push(folder.uri));
+
+        const panelTitle = path.basename(yamlDir) || 'YOLO Dataset';
+        const panel = vscode.window.createWebviewPanel(
+            LabelMePanel.viewType,
+            panelTitle,
+            column || vscode.ViewColumn.One,
+            { enableScripts: true, retainContextWhenHidden: true, localResourceRoots }
+        );
+
+        LabelMePanel.panels.add(new LabelMePanel(
+            panel, context.extensionUri, firstImageUri, context.globalState,
+            rootPath, images, panelTitle, 'yolo', yamlUri, parsed.names
+        ));
+    }
+
+    /** Recursively scan the resolved YOLO image dirs; returns rootPath-relative, sorted, deduped. */
+    private static async _scanYoloImages(dirs: string[], rootPath: string): Promise<string[]> {
+        const imageExtensions = ['.jpg', '.jpeg', '.png', '.bmp'];
+        const out: string[] = [];
+        const walk = async (d: string): Promise<void> => {
+            let entries;
+            try {
+                entries = await fs.readdir(d, { withFileTypes: true });
+            } catch {
+                return;
+            }
+            for (const e of entries) {
+                const full = path.join(d, e.name);
+                if (e.isDirectory()) {
+                    if (!e.name.startsWith('.')) await walk(full);
+                } else if (imageExtensions.includes(path.extname(e.name).toLowerCase())) {
+                    out.push(path.relative(rootPath, full));
+                }
+            }
+        };
+        for (const d of dirs) await walk(d);
+        const deduped = Array.from(new Set(out));
+        deduped.sort(comparePathsNaturally);
+        return deduped;
+    }
+
+    private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri, imageUri: vscode.Uri, globalState: vscode.Memento, rootPath: string, initialWorkspaceImages?: string[], panelTitle?: string, format: 'labelme' | 'yolo' = 'labelme', yamlUri?: vscode.Uri, yoloClasses: string[] = []) {
         this._panel = panel;
         this._extensionUri = extensionUri;
         this._imageUri = imageUri;
+        this._format = format;
+        this._yamlUri = yamlUri;
+        this._yoloClasses = yoloClasses;
         this._globalState = globalState;
         this._rootPath = rootPath;
         this._panelTitle = panelTitle || path.basename(rootPath);
