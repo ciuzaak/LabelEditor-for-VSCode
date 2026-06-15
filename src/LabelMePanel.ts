@@ -807,8 +807,8 @@ export class LabelMePanel {
     }
 
 
-    /** Read image file metadata: file size, bit depth, DPI */
-    private async _getImageMetadata(filePath: string): Promise<{ fileSize: number; bitDepth?: number; dpiX?: number; dpiY?: number }> {
+    /** Read image file metadata: file size, bit depth, DPI, and pixel dimensions */
+    private async _getImageMetadata(filePath: string): Promise<ImageMetadata> {
         return getImageMetadata(filePath);
     }
 
