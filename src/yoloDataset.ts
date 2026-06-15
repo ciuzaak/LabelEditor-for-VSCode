@@ -32,11 +32,29 @@ function stripComment(s: string): string {
 
 function unquote(s: string): string {
     const t = s.trim();
-    if (t.length >= 2 &&
-        ((t[0] === '"' && t[t.length - 1] === '"') || (t[0] === "'" && t[t.length - 1] === "'"))) {
+    if (t.length >= 2 && t[0] === '"' && t[t.length - 1] === '"') {
         return t.slice(1, -1);
     }
+    if (t.length >= 2 && t[0] === "'" && t[t.length - 1] === "'") {
+        // YAML single-quoted scalars escape a literal quote by doubling it.
+        return t.slice(1, -1).replace(/''/g, "'");
+    }
     return t;
+}
+
+// Render a class name as a YAML scalar, single-quoting (and escaping internal
+// single quotes by doubling them) only when the raw value would otherwise be
+// misparsed — empty, leading/trailing space, or containing YAML-significant
+// characters. Plain names (CJK, alphanumerics) stay unquoted to match the
+// conventional Ultralytics style. Round-trips through unquote()/parseDataYaml.
+function yamlScalar(s: string): string {
+    const risky = s.length === 0
+        || /^\s|\s$/.test(s)
+        || /[:#'"[\]{}|>*&!?%@,]/.test(s)
+        || /[\r\n]/.test(s)
+        || /^[-?]/.test(s);
+    if (!risky) return s;
+    return `'${s.replace(/[\r\n]+/g, ' ').replace(/'/g, "''")}'`;
 }
 
 function indentOf(line: string): number {
@@ -292,7 +310,7 @@ export function buildYoloTxt(
 // Build an Ultralytics data.yaml for an exported dataset. Block-mapping names
 // (index = class index), pointing at the images/train + labels/train layout.
 export function buildDataYaml(classes: string[]): string {
-    const names = classes.map((c, i) => `  ${i}: ${c}`).join('\n');
+    const names = classes.map((c, i) => `  ${i}: ${yamlScalar(c)}`).join('\n');
     return [
         'path: .',
         'train: images/train',
@@ -316,9 +334,10 @@ export function appendClassToYaml(text: string, newName: string): { text: string
         if (indentOf(lines[i]) === 0 && /^names\s*:/.test(stripComment(lines[i]))) { namesLine = i; break; }
     }
 
+    const quoted = yamlScalar(newName);
     const out = lines.slice();
     if (namesLine === -1) {
-        out.push('names:', `  ${index}: ${newName}`);
+        out.push('names:', `  ${index}: ${quoted}`);
     } else {
         const inline = stripComment(lines[namesLine]).replace(/^names\s*:\s*/, '').trim();
         if (inline.startsWith('[')) {
@@ -326,13 +345,13 @@ export function appendClassToYaml(text: string, newName: string): { text: string
             const before = lines[namesLine].slice(0, close);
             const after = lines[namesLine].slice(close);
             const sep = /\[\s*$/.test(before) ? '' : ', ';
-            out[namesLine] = `${before}${sep}'${newName}'${after}`;
+            out[namesLine] = `${before}${sep}${quoted}${after}`;
         } else if (inline.startsWith('{')) {
             const close = lines[namesLine].lastIndexOf('}');
             const before = lines[namesLine].slice(0, close);
             const after = lines[namesLine].slice(close);
             const sep = /\{\s*$/.test(before) ? '' : ', ';
-            out[namesLine] = `${before}${sep}${index}: ${newName}${after}`;
+            out[namesLine] = `${before}${sep}${index}: ${quoted}${after}`;
         } else {
             // Block form: append after the last indented child line.
             // Block-sequence items may be at indent 0 (e.g. "- person"), so we
@@ -352,7 +371,7 @@ export function appendClassToYaml(text: string, newName: string): { text: string
                 childIndent = (l.match(/^(\s*)/) as RegExpMatchArray)[1];
                 if (isSeqItem) isSeq = true;
             }
-            const newLine = isSeq ? `${childIndent}- ${newName}` : `${childIndent}${index}: ${newName}`;
+            const newLine = isSeq ? `${childIndent}- ${quoted}` : `${childIndent}${index}: ${quoted}`;
             out.splice(lastChild + 1, 0, newLine);
         }
     }

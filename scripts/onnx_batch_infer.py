@@ -254,6 +254,15 @@ def main():
             if conv_skipped:
                 print(f"  Note: {conv_skipped} shape(s) in {os.path.basename(img_path)} "
                       f"have labels not in data.yaml; skipped.", file=sys.stderr)
+            # Guard against data loss: if the model produced predictions but ALL of
+            # them were dropped because their labels aren't in data.yaml, overwriting
+            # would zero out an existing label file. Keep the existing labels instead.
+            if has_existing and args.mode == "overwrite" and not new_lines and conv_skipped:
+                print(f"  Warning: all {conv_skipped} prediction(s) for {os.path.basename(img_path)} "
+                      f"have labels not in data.yaml; keeping existing labels (not overwriting).",
+                      file=sys.stderr)
+                errors += 1
+                continue
             if has_existing and args.mode == "merge":
                 try:
                     with open(out_path, encoding="utf-8") as f:

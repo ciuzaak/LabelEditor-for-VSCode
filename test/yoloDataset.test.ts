@@ -182,6 +182,12 @@ describe('buildDataYaml', () => {
         assert.deepEqual(p.train, ['images/train']);
         assert.equal(p.path, '.');
     });
+
+    it('quotes class names with YAML-special characters and round-trips', () => {
+        const tricky = ['a: b', 'has #hash', "it's", 'normal', '中文', ' spaced '];
+        const p = parseDataYaml(buildDataYaml(tricky));
+        assert.deepEqual(p.names, tricky);
+    });
 });
 
 describe('appendClassToYaml', () => {
@@ -190,6 +196,12 @@ describe('appendClassToYaml', () => {
         const { text: out, index } = appendClassToYaml(text, 'car');
         assert.equal(index, 2);
         assert.deepEqual(parseDataYaml(out).names, ['person', 'bicycle', 'car']);
+    });
+
+    it('quotes an appended special-character name (block mapping) and round-trips', () => {
+        const text = 'names:\n  0: person\n';
+        const { text: out } = appendClassToYaml(text, 'a: b#c');
+        assert.deepEqual(parseDataYaml(out).names, ['person', 'a: b#c']);
     });
 
     it('appends to a flow-list names', () => {

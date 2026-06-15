@@ -293,7 +293,7 @@ export class LabelMePanel {
         }
 
         const parsed = parseDataYaml(text);
-        const { dirs } = resolveImageDirs(yamlUri.fsPath, parsed);
+        const { dirs, warnings } = resolveImageDirs(yamlUri.fsPath, parsed);
         const yamlDir = path.dirname(yamlUri.fsPath);
         const rootPath = parsed.path
             ? (path.isAbsolute(parsed.path) ? parsed.path : path.resolve(yamlDir, parsed.path))
@@ -301,7 +301,10 @@ export class LabelMePanel {
 
         const images = await LabelMePanel._scanYoloImages(dirs, rootPath);
         if (images.length === 0) {
-            vscode.window.showErrorMessage('No images found for this YOLO dataset (check path/train/val in data.yaml).');
+            // Surface skip reasons (e.g. .txt image-list entries aren't supported)
+            // so a valid-but-unsupported layout isn't mistaken for missing files.
+            const extra = warnings.length ? ' ' + warnings.join('; ') : '';
+            vscode.window.showErrorMessage('No images found for this YOLO dataset (check path/train/val in data.yaml).' + extra);
             return;
         }
 
@@ -2126,7 +2129,7 @@ export class LabelMePanel {
                     JSON.stringify(document, null, 2),
                     'utf8'
                 );
-            } else if (config.format === 'yolo' || config.format === 'yolo-bbox' || config.format === 'yolo-seg') {
+            } else if (config.format === 'yolo') {
                 // Ultralytics layout: images/train + labels/train + data.yaml.
                 // images/train is created even when not copying, so the structure
                 // is ready for the user to drop images into later.
