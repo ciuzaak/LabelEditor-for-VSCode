@@ -176,6 +176,7 @@
 
             // Format radios
             'format.coco': 'COCO',
+            'format.yolo': 'YOLO',
             'format.yoloBbox': 'YOLO bbox',
             'format.yoloSeg': 'YOLO seg',
             'scope.all': 'All Images',
@@ -595,6 +596,7 @@
             'kb.action.browser.find': '搜索图片',
 
             'format.coco': 'COCO',
+            'format.yolo': 'YOLO',
             'format.yoloBbox': 'YOLO bbox',
             'format.yoloSeg': 'YOLO seg',
             'scope.all': '全部图片',

@@ -1326,6 +1326,28 @@ input[type="range"]:focus-visible::-moz-range-thumb {
     display: none;
 }
 
+/* Export modal: "copy images" checkbox row. Nested in a div so it does NOT
+   inherit the uppercase/centered .onnx-form-group > label styling. */
+.export-copy-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.export-copy-row input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    margin: 0;
+    flex: 0 0 auto;
+    cursor: pointer;
+    accent-color: var(--color-accent);
+}
+.export-copy-row label {
+    margin: 0;
+    font-size: 13px;
+    color: var(--color-text-primary);
+    cursor: pointer;
+}
+
 .onnx-image-count {
     font-size: 12px;
     color: var(--color-text-secondary);

@@ -5723,16 +5723,22 @@ function showExportDatasetModal() {
     if (toolsMenuDropdown) toolsMenuDropdown.style.display = 'none';
     if (!exportDatasetModal) return;
     // Restore persisted settings
-    if (initialGlobalSettings && initialGlobalSettings.exportFormat) {
-        const fmtInput = document.querySelector(`input[name="exportFormat"][value="${initialGlobalSettings.exportFormat}"]`);
+    // Restore the format. Legacy persisted values (yolo-bbox/yolo-seg) map to
+    // the single merged "yolo" option.
+    let savedFmt = initialGlobalSettings && initialGlobalSettings.exportFormat;
+    if (savedFmt === 'yolo-bbox' || savedFmt === 'yolo-seg') savedFmt = 'yolo';
+    if (savedFmt) {
+        const fmtInput = document.querySelector(`input[name="exportFormat"][value="${savedFmt}"]`);
         if (fmtInput) fmtInput.checked = true;
     }
     if (initialGlobalSettings && initialGlobalSettings.exportScope) {
         const scopeInput = document.querySelector(`input[name="exportScope"][value="${initialGlobalSettings.exportScope}"]`);
         if (scopeInput) scopeInput.checked = true;
     }
-    if (exportOutputDirInput && initialGlobalSettings && initialGlobalSettings.exportOutputDir) {
-        exportOutputDirInput.value = initialGlobalSettings.exportOutputDir;
+    // Default the output directory to a folder inside the CURRENT dataset, so it
+    // changes per dataset instead of stubbornly keeping the last-used path.
+    if (exportOutputDirInput) {
+        exportOutputDirInput.value = (initialGlobalSettings && initialGlobalSettings.defaultExportDir) || '';
     }
     // Seed the class list from the CURRENT dataset, not stale persisted classes.
     // YOLO uses the data.yaml names (order = class index); other modes start

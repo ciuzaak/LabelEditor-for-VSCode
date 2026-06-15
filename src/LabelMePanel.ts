@@ -22,8 +22,6 @@ import {
 } from './yoloDataset';
 import {
     buildCocoDocument,
-    buildYoloBboxLines,
-    buildYoloSegLines,
     ExportImage,
     ExportShape
 } from './exportFormats';
@@ -1393,8 +1391,7 @@ export class LabelMePanel {
                             <label data-tip-id="export.format" data-i18n="label.format">Format</label>
                             <div class="onnx-radio-group segmented-group">
                                 <label class="onnx-radio"><input type="radio" name="exportFormat" value="coco" checked /> <span data-i18n="format.coco">COCO</span></label>
-                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="yolo-bbox" /> <span data-i18n="format.yoloBbox">YOLO bbox</span></label>
-                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="yolo-seg" /> <span data-i18n="format.yoloSeg">YOLO seg</span></label>
+                                <label class="onnx-radio"><input type="radio" name="exportFormat" value="yolo" /> <span data-i18n="format.yolo">YOLO</span></label>
                             </div>
                         </div>
                         <div class="onnx-form-group">
@@ -1412,9 +1409,10 @@ export class LabelMePanel {
                             </div>
                         </div>
                         <div class="onnx-form-group">
-                            <label class="onnx-radio" style="display:inline-flex; align-items:center; gap:6px;">
-                                <input type="checkbox" id="exportCopyImages" /> <span data-i18n="export.copyImages">Copy images into the dataset</span>
-                            </label>
+                            <div class="export-copy-row">
+                                <input type="checkbox" id="exportCopyImages" />
+                                <label for="exportCopyImages" data-i18n="export.copyImages">Copy images into the dataset</label>
+                            </div>
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="export.classes"><span data-i18n="label.classes">Classes</span> <span style="font-weight:normal; opacity:0.7">(<span data-i18n="label.classOrderHint">order = class index</span>)</span></label>
@@ -1548,6 +1546,7 @@ export class LabelMePanel {
                         exportOutputDir: ${JSON.stringify(this._globalState.get('exportOutputDir') || '')},
                         exportClasses: ${JSON.stringify(this._globalState.get('exportClasses') || [])},
                         exportCopyImages: ${this._globalState.get('exportCopyImages') ?? false},
+                        defaultExportDir: ${JSON.stringify(path.join(this._rootPath, 'export'))},
                         keyboardBindings: ${JSON.stringify(this._globalState.get('keyboardBindings') || null)},
                         locale: ${JSON.stringify(this._globalState.get('locale') || 'en')}
                     };
@@ -2107,7 +2106,7 @@ export class LabelMePanel {
                     JSON.stringify(document, null, 2),
                     'utf8'
                 );
-            } else if (config.format === 'yolo-bbox' || config.format === 'yolo-seg') {
+            } else if (config.format === 'yolo' || config.format === 'yolo-bbox' || config.format === 'yolo-seg') {
                 // Ultralytics layout: images/train + labels/train + data.yaml.
                 // images/train is created even when not copying, so the structure
                 // is ready for the user to drop images into later.
@@ -2117,9 +2116,9 @@ export class LabelMePanel {
                 await fs.mkdir(labelsOutDir, { recursive: true });
                 for (const img of usable) {
                     const { finalName, ext } = uniqueName(img.fileName);
-                    const out = config.format === 'yolo-bbox'
-                        ? buildYoloBboxLines(img, config.classes)
-                        : buildYoloSegLines(img, config.classes);
+                    // Auto per-shape: rectangle -> bbox line, polygon -> seg line
+                    // (same serializer the YOLO editor uses, so export round-trips).
+                    const out = buildYoloTxt(img.shapes, img.width, img.height, config.classes);
                     totalWarnings += out.warnings.length;
                     const lineCount = out.text.trim() ? out.text.trim().split('\n').filter(Boolean).length : 0;
                     totalAnnotations += lineCount;
