@@ -103,8 +103,10 @@ const themeAutoBtn = document.getElementById('themeAutoBtn');
 
 // YOLO datasets only support view / sam / polygon / rectangle modes.
 // Hide the point/line/circle mode buttons (the variables are declared above).
+// The description field is also hidden: a YOLO .txt has no place to store it.
 if (window.annotationFormat === 'yolo') {
     [pointModeBtn, lineModeBtn, circleModeBtn].forEach(b => { if (b) b.style.display = 'none'; });
+    if (descriptionInput) descriptionInput.style.display = 'none';
 }
 
 let img = new Image();
