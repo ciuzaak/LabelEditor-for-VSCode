@@ -5,7 +5,7 @@
 [![Open VSX](https://raster.shields.io/open-vsx/v/ciuzaak/labeleditor-vscode?label=Open%20VSX)](https://open-vsx.org/extension/ciuzaak/labeleditor-vscode)
 [![Open VSX Downloads](https://raster.shields.io/open-vsx/dt/ciuzaak/labeleditor-vscode?label=OVSX%20Downloads)](https://open-vsx.org/extension/ciuzaak/labeleditor-vscode)
 
-Annotate images directly in VS Code — polygon, rectangle, line, point, and **SAM AI-assisted** masks — and save in the LabelMe JSON format used by most ML pipelines. No extra app, no context switch.
+Annotate images directly in VS Code — polygon, rectangle, line, point, and **SAM AI-assisted** masks — and save in the LabelMe JSON format used by most ML pipelines, or work **natively in YOLO format** (open a `data.yaml`, edit, save `.txt`). No extra app, no context switch.
 
 ## ✨ Features
 
@@ -44,10 +44,17 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 ### ONNX Batch Inference
 - Tools menu → **ONNX Batch Infer**: run an ONNX segmentation model across all images or just the current one
 - Configurable model directory, Python interpreter, CPU/GPU, and RGB/BGR; existing annotations can skip / merge / overwrite; progress shown in the terminal
-- Requires Python with `onnxruntime`, `opencv-python`, `numpy`, `tqdm` (outputs polygons)
+- Requires Python with `onnxruntime`, `opencv-python`, `numpy`, `tqdm` (outputs LabelMe polygons, or YOLO `.txt` when launched from a YOLO dataset)
+
+### YOLO Format Mode
+- **Work directly in YOLO format** — right-click a YOLO `data.yaml` → **"LabelEditor: Open as YOLO Dataset"**
+- Resolves the dataset's `path` + `train` / `val` / `test` image directories and **imports existing `.txt` labels** (Ultralytics `images/` → `labels/` convention); detection lines (`cls cx cy w h`) load as rectangles, segmentation lines as polygons
+- Edits **save back as `.txt`**, choosing bbox vs segmentation per shape automatically (one file may mix both)
+- Drawing is scoped to 👁️ View · ✨ SAM · ⬠ Polygon · ▭ Rectangle
+- **Class list is the `data.yaml`**: the label dialog offers the yaml's classes (order = class index); entering a new class prompts to add it, appended at the next index and written straight back to `data.yaml` (its list / dict / block-sequence style is preserved, `nc` is bumped)
 
 ### Image Browser & Navigation
-- **Sidebar image list**: every workspace image organized by folder, click to jump, current image highlighted, resizable — virtual scrolling handles 8000+ images smoothly
+- **Sidebar image list**: every workspace image organized by folder, click to jump, current image highlighted, resizable — virtual scrolling handles 8000+ images smoothly; **symbolic links** to images and folders are followed (with cycle protection)
 - **Quick search**: filter the list by filename as you type
 - **Advanced search**: the sliders button in the search box opens a condition builder — add **Name** (substring), **Name (regex)**, and **Class** (multi-select via a searchable, scrollable picker) conditions; conditions AND together while multiple classes in one condition OR. Results are **ranked by match relevance** with a clearable banner. Name/regex search reads no annotation files; class search indexes sidecar JSON once (cached, with progress and cancel), so it stays fast on large datasets
 - **Open Folder for Annotation**: right-click a folder to work with just its images
@@ -65,9 +72,11 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - All adjustments affect display only — never the original file
 
 ### Dataset Export — COCO / YOLO
-- Tools menu → **Export Dataset**: COCO Instances, YOLO bbox, or YOLO seg, over all images or the current one
-- Classes auto-detected from labels in scope; reorder / rename / remove rows to control class indices (first row = `0` for YOLO, `1` for COCO)
-- Polygons, rectangles, and circles convert to each format's geometry; points and linestrips export to YOLO bbox only; filename collisions across nested folders are auto-suffixed
+- Tools menu → **Export Dataset**: **COCO** Instances or **YOLO**, over all images or the current one
+- **YOLO** exports a ready-to-train Ultralytics dataset (`data.yaml` + `images/train/` + `labels/train/`), auto-selecting bbox vs segmentation per shape; **COCO** writes `annotations.json`
+- **Copy images** option: bundle the images into the dataset for a self-contained copy, or leave them out (the folder structure is still created)
+- Classes reflect the current dataset (the YOLO class order comes from its `data.yaml`); reorder / rename / remove rows to control class indices (first row = `0` for YOLO, `1` for COCO)
+- Output directory defaults to `<dataset>/export`; a run that writes zero annotations warns (likely a class-name mismatch) instead of silently "succeeding"; filename collisions across nested folders are auto-suffixed
 
 ### Labels Panel
 - All label categories with live instance counts; show/hide every instance of a label at once
@@ -106,6 +115,13 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 6. For rectangles: Click to set start point, move and click to set end point
 7. Enter a label name
 8. Save with Ctrl+S
+
+### YOLO Dataset Workflow
+1. Right-click a YOLO `data.yaml` in the Explorer
+2. Select **"LabelEditor: Open as YOLO Dataset"**
+3. Existing `.txt` labels load automatically (boxes and polygons); annotate with Polygon / Rectangle / SAM
+4. Pick a class from the `data.yaml` list, or type a new one and confirm to add it to the yaml
+5. Save with Ctrl+S — labels are written back as YOLO `.txt`
 
 ### Labels Management
 - Click the **color indicator** to customize label colors

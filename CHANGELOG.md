@@ -2,6 +2,29 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [1.4.0] - 2026-06-15
+
+Native YOLO-format annotation: open a YOLO `data.yaml` and import, edit, and save labels as YOLO `.txt` — no LabelMe round-trip. Plus an Export Dataset rework, symlink-aware image scanning, and a Codex-reviewed hardening pass. Built spec-first on a pure, unit-tested module (`src/yoloDataset.ts`).
+
+### Added
+- **YOLO Format Mode**: right-click a YOLO `data.yaml` → **"LabelEditor: Open as YOLO Dataset"**. Resolves the dataset's `path` + `train`/`val`/`test` image directories, imports existing `.txt` labels via the Ultralytics `images/` → `labels/` convention, and saves edits back as `.txt`. Detection lines (`cls cx cy w h`) load as rectangles, segmentation lines as polygons; one file may mix both, chosen automatically per shape on save.
+  - Only the relevant tools are shown (👁️ View · ✨ SAM · ⬠ Polygon · ▭ Rectangle); the description field is hidden (a YOLO `.txt` has nowhere to store it).
+  - **Class selection is bound to the yaml**: the label dialog lists `data.yaml`'s classes (order = class index); typing a class that isn't in the file prompts to add it — appended at the next index and written straight back to `data.yaml`, preserving the file's list / dict / block-sequence style and bumping `nc`. Class names containing YAML-special characters are quoted and escaped.
+  - The class search index, image rescan, **Export Dataset**, and **ONNX Batch Infer** all read/write `.txt` labels when in YOLO mode.
+
+### Changed
+- **Export Dataset rework**:
+  - **YOLO** now exports a ready-to-train Ultralytics dataset — `data.yaml` + `images/train/` + `labels/train/` — instead of flat `.txt` + `classes.txt`. The single **YOLO** option auto-selects bbox vs segmentation per shape, replacing the separate *YOLO bbox* / *YOLO seg* options.
+  - New **Copy images** option (COCO & YOLO): copy images into the dataset for a self-contained bundle, or leave them out (the folder structure is still created).
+  - The class list now reflects the **current** dataset (YOLO uses the yaml's class order) instead of carrying over the last-used classes, and the output directory defaults to `<dataset>/export` so it tracks the open dataset.
+- **Symlink-aware image scanning**: discovery (folder mode, YOLO mode, and the quick first-image probe) now follows symbolic links to both files and directories, with cycle protection. Hard links already worked.
+- **ONNX Batch Infer** can emit YOLO `.txt` labels (using the dataset's class names) when launched from a YOLO dataset.
+
+### Fixed
+- Export Dataset no longer pre-fills a stale class list from a previous, unrelated dataset.
+- Export Dataset now warns when a run writes **zero** annotations (usually a class-name mismatch) instead of reporting plain success.
+- ONNX overwrite mode no longer zeroes an existing YOLO `.txt` when every prediction is dropped for not matching a `data.yaml` class.
+
 ## [1.3.1] - 2026-06-08
 
 UI polish for the v1.3.0 advanced search and the sidebar/canvas popovers. Found by a full read-through of every floating-UI element and hardened over several rounds of Codex review.
