@@ -247,10 +247,18 @@ export function buildYoloTxt(
     const lines: string[] = [];
     for (const shape of shapes) {
         const label = shape.label || '';
-        const idx = classIndex.get(label);
+        let idx = classIndex.get(label);
         if (idx === undefined) {
-            warnings.push(`label not in classes: ${label}`);
-            continue;
+            // A label of the form class_<n> comes from parseYoloTxt for a class
+            // index with no name in data.yaml. Preserve it losslessly by writing
+            // that numeric index, rather than silently dropping the shape.
+            const m = label.match(/^class_(\d+)$/);
+            if (m) {
+                idx = Number(m[1]);
+            } else {
+                warnings.push(`label not in classes: ${label}`);
+                continue;
+            }
         }
         const t = shape.shape_type || 'polygon';
         if (t === 'rectangle') {

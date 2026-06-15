@@ -165,6 +165,13 @@ describe('buildYoloTxt', () => {
         assert.equal(text, '');
         assert.equal(warnings.length, 1);
     });
+
+    it('preserves an out-of-range class_<n> label by writing index n', () => {
+        const shapes = [{ label: 'class_5', shape_type: 'polygon', points: [[0, 0], [100, 0], [100, 100]] }];
+        const { text, warnings } = buildYoloTxt(shapes, 100, 100, classes);
+        assert.equal(text, '5 0.000000 0.000000 1.000000 0.000000 1.000000 1.000000\n');
+        assert.equal(warnings.length, 0);
+    });
 });
 
 describe('appendClassToYaml', () => {
