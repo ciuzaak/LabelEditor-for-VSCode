@@ -144,3 +144,22 @@ export function resolveImageDirs(
     for (const e of [...parsed.train, ...parsed.val, ...parsed.test]) add(e);
     return { dirs, warnings };
 }
+
+// Map an absolute image path to its YOLO label .txt path (Ultralytics convention):
+// replace the LAST `/images/` (or `\images\`) segment with `/labels/`, ext → .txt.
+// If there is no images segment, fall back to a sidecar .txt next to the image.
+export function imageToLabelPath(imageAbsPath: string): string {
+    const ext = path.extname(imageAbsPath);
+    const base = imageAbsPath.slice(0, imageAbsPath.length - ext.length);
+    const re = /[\\/]images[\\/]/g;
+    let last: RegExpExecArray | null = null;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(base)) !== null) last = m;
+    if (last) {
+        const matched = last[0]; // "/images/" or "\images\"
+        const replacement = matched[0] + 'labels' + matched[matched.length - 1];
+        const newBase = base.slice(0, last.index) + replacement + base.slice(last.index + matched.length);
+        return newBase + '.txt';
+    }
+    return base + '.txt';
+}

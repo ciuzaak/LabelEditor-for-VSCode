@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as path from 'path';
-import { parseDataYaml, resolveImageDirs } from '../src/yoloDataset';
+import { parseDataYaml, resolveImageDirs, imageToLabelPath } from '../src/yoloDataset';
 
 describe('parseDataYaml', () => {
     it('parses a block-mapping names form', () => {
@@ -71,5 +71,29 @@ describe('resolveImageDirs', () => {
         const { dirs, warnings } = resolveImageDirs(yaml, parsed);
         assert.deepEqual(dirs, []);
         assert.equal(warnings.length, 1);
+    });
+});
+
+describe('imageToLabelPath', () => {
+    it('swaps the last /images/ segment for /labels/ and ext for .txt (posix)', () => {
+        assert.equal(
+            imageToLabelPath('/ds/images/train/img1.jpg'),
+            '/ds/labels/train/img1.txt'
+        );
+    });
+    it('swaps a \\images\\ segment on Windows-style paths', () => {
+        assert.equal(
+            imageToLabelPath('C:\\ds\\images\\train\\img1.png'),
+            'C:\\ds\\labels\\train\\img1.txt'
+        );
+    });
+    it('only replaces the LAST images segment', () => {
+        assert.equal(
+            imageToLabelPath('/images/ds/images/a.jpg'),
+            '/images/ds/labels/a.txt'
+        );
+    });
+    it('falls back to a sidecar .txt when there is no images segment', () => {
+        assert.equal(imageToLabelPath('/ds/train/img1.jpeg'), '/ds/train/img1.txt');
     });
 });
