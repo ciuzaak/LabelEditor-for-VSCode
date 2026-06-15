@@ -44,6 +44,14 @@ describe('parseDataYaml', () => {
         assert.deepEqual(r.names, []);
         assert.deepEqual(r.train, []);
     });
+
+    it('parses a column-0 block sequence for train and keeps the next key separate', () => {
+        const text = 'train:\n- images/a\n- images/b\nval:\n- images/c\nnames: [x]\n';
+        const r = parseDataYaml(text);
+        assert.deepEqual(r.train, ['images/a', 'images/b']);
+        assert.deepEqual(r.val, ['images/c']);
+        assert.deepEqual(r.names, ['x']);
+    });
 });
 
 describe('resolveImageDirs', () => {

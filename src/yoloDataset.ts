@@ -66,7 +66,8 @@ function readBlockOrInlineList(lines: string[], idx: number, inline: string): st
     for (let j = idx + 1; j < lines.length; j++) {
         const l = lines[j];
         if (!l.trim()) continue;
-        if (indentOf(l) === 0) break;
+        // Accept `- item` lines even at column 0 (valid YAML block sequence),
+        // mirroring readNames. A non-`-` line (e.g. the next `key:`) stops us.
         const m = l.match(/^\s*-\s*(.+)$/);
         if (!m) break;
         out.push(unquote(m[1]));
