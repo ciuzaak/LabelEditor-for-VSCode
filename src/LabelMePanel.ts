@@ -578,6 +578,9 @@ export class LabelMePanel {
                     case 'advancedSearchCancelIndex':
                         this._cancelIndexBuild();
                         return;
+                    case 'yoloConfirmAddClass':
+                        await this._handleYoloConfirmAddClass(message.label);
+                        return;
                 }
             },
             null,
@@ -1529,6 +1532,8 @@ export class LabelMePanel {
                         keyboardBindings: ${JSON.stringify(this._globalState.get('keyboardBindings') || null)},
                         locale: ${JSON.stringify(this._globalState.get('locale') || 'en')}
                     };
+                    window.annotationFormat = ${JSON.stringify(this._format)};
+                    window.yoloClasses = ${JSON.stringify(this._yoloClasses)};
                 </script>
                 <script src="${polyClipUri}"></script>
                 <script src="${samHelpersUri}"></script>
@@ -1800,6 +1805,46 @@ export class LabelMePanel {
             this._safePost({ command: 'saveFailed' });
         } finally {
             this._isSaving = false;
+        }
+    }
+
+    /**
+     * The webview asked to add a class missing from data.yaml. Confirm with a
+     * native modal, append it to the yaml on disk (taking the last index), and
+     * reply with the updated class list so the webview can finish creating the shape.
+     */
+    private async _handleYoloConfirmAddClass(label: string) {
+        if (!this._yamlUri || !label) {
+            this._safePost({ command: 'yoloAddClassCancelled', label });
+            return;
+        }
+        if (this._yoloClasses.includes(label)) {
+            this._safePost({
+                command: 'yoloClassAdded',
+                classes: this._yoloClasses,
+                index: this._yoloClasses.indexOf(label),
+                label
+            });
+            return;
+        }
+        const choice = await vscode.window.showWarningMessage(
+            `Class "${label}" is not in data.yaml. Add it?`,
+            { modal: true },
+            'Add'
+        );
+        if (choice !== 'Add') {
+            this._safePost({ command: 'yoloAddClassCancelled', label });
+            return;
+        }
+        try {
+            const text = await fs.readFile(this._yamlUri.fsPath, 'utf8');
+            const { text: newText, index } = appendClassToYaml(text, label);
+            await fs.writeFile(this._yamlUri.fsPath, newText, 'utf8');
+            this._yoloClasses = [...this._yoloClasses, label];
+            this._safePost({ command: 'yoloClassAdded', classes: this._yoloClasses, index, label });
+        } catch (err) {
+            this._notify('error', 'Failed to update data.yaml: ' + (err as Error).message);
+            this._safePost({ command: 'yoloAddClassCancelled', label });
         }
     }
 
