@@ -1736,6 +1736,9 @@ export class LabelMePanel {
     }
 
     private async saveAnnotation(data: any) {
+        if (this._format === 'yolo') {
+            return this._saveYoloAnnotation(data);
+        }
         const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
 
         const labelMeData = buildLabelMeAnnotation(this._imageUri.fsPath, data);
@@ -1766,6 +1769,34 @@ export class LabelMePanel {
             this._pendingNavigation = undefined;
             this._pendingNavigationPath = undefined;
             // Notify webview that save failed so dirty state is preserved
+            this._safePost({ command: 'saveFailed' });
+        } finally {
+            this._isSaving = false;
+        }
+    }
+
+    private async _saveYoloAnnotation(data: any) {
+        const labelPath = imageToLabelPath(this._imageUri.fsPath);
+        const { text, warnings } = buildYoloTxt(
+            data.shapes || [], data.imageWidth, data.imageHeight, this._yoloClasses
+        );
+        this._isSaving = true;
+        try {
+            await fs.mkdir(path.dirname(labelPath), { recursive: true });
+            await fs.writeFile(labelPath, text, 'utf8');
+            // Keep the class search index fresh without a full rescan.
+            this._updateIndexForCurrentImage(data.shapes || []);
+            this._notify('success', 'Annotation saved to ' + path.basename(labelPath),
+                { i18nKey: 'status.savedTo', i18nParams: { file: path.basename(labelPath) } });
+            if (warnings.length) {
+                this._notify('warn', `YOLO save: ${warnings.length} shape(s) skipped`, { key: 'yolo.saveWarn' });
+            }
+            this._safePost({ command: 'saveComplete' });
+        } catch (err) {
+            this._notify('error', 'Failed to save annotation: ' + (err as Error).message,
+                { i18nKey: 'status.saveFailed', i18nParams: { err: (err as Error).message } });
+            this._pendingNavigation = undefined;
+            this._pendingNavigationPath = undefined;
             this._safePost({ command: 'saveFailed' });
         } finally {
             this._isSaving = false;
