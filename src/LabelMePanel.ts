@@ -1556,6 +1556,24 @@ export class LabelMePanel {
     private async _readAnnotationRecord(rel: string): Promise<AnnotationRecord> {
         const labels = new Map<string, number>();
         const absImg = path.join(this._rootPath, rel);
+
+        if (this._format === 'yolo') {
+            const labelPath = imageToLabelPath(absImg);
+            if (existsSync(labelPath)) {
+                try {
+                    const txt = await fs.readFile(labelPath, 'utf8');
+                    // Image dimensions are irrelevant for label counting.
+                    const { shapes } = parseYoloTxt(txt, 1, 1, this._yoloClasses);
+                    for (const s of shapes) {
+                        if (s.label) labels.set(s.label, (labels.get(s.label) || 0) + 1);
+                    }
+                } catch {
+                    // Treat unreadable .txt as an empty record.
+                }
+            }
+            return { relPath: rel, labels, descriptions: [] };
+        }
+
         const jsonPath = absImg.replace(/\.[^/.]+$/, '') + '.json';
         if (existsSync(jsonPath)) {
             try {
