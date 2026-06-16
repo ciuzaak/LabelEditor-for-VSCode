@@ -69,6 +69,7 @@
             'modal.onnxBatchInfer': 'ONNX Batch Inference',
             'modal.samConfig': 'SAM AI Annotation',
             'modal.exportDataset': 'Export Dataset',
+            'modal.exportSvg': 'Export SVG',
             'modal.moreSettings': 'More Settings',
 
             // Tools menu
@@ -120,6 +121,7 @@
             'toggle.off': 'Off',
             'status.saveFailed': 'Failed to save annotation: {err}',
             'status.svgExported': 'SVG exported to {file}',
+            'status.svgExportedAll': 'Exported {count} SVG file(s) to {dir}',
             'status.svgExportFailed': 'Failed to export SVG: {err}',
             'status.loadJsonFailed': 'Failed to load annotation file: {err}',
             'status.exportUnknownFormat': 'Unknown export format: {format}',
@@ -231,6 +233,7 @@
             'placeholder.onnxModelDir':    'Path to directory with .onnx and labels.json',
             'placeholder.samModelDir':     'Path to directory with encoder.onnx and decoder.onnx',
             'placeholder.exportOutputDir': 'Folder to write the converted files',
+            'placeholder.svgOutputDir': 'Folder to write the SVG files',
             'placeholder.addClass':        'Add class name',
 
             // Image counts in export modal
@@ -343,7 +346,7 @@
 
             // Tools menu items
             'tip.tools.exportSvg.title':      'Export SVG',
-            'tip.tools.exportSvg.desc':       'Export current shapes as a standalone SVG file next to the image.',
+            'tip.tools.exportSvg.desc':       'Export annotation outlines as SVG files — current image or all images — into a chosen folder.',
             'tip.tools.exportDataset.title':  'Export Dataset',
             'tip.tools.exportDataset.desc':   'Convert annotations to COCO Instances, YOLO bbox, or YOLO seg format.',
             'tip.tools.onnxBatchInfer.title': 'ONNX Batch Infer',
@@ -495,6 +498,7 @@
             'modal.onnxBatchInfer': 'ONNX 批量推理',
             'modal.samConfig': 'SAM AI 标注',
             'modal.exportDataset': '导出数据集',
+            'modal.exportSvg': '导出 SVG',
             'modal.moreSettings': '更多设置',
 
             'tools.exportSvg': '导出 SVG',
@@ -543,6 +547,7 @@
             'status.savedTo': '标注已保存到 {file}',
             'status.saveFailed': '保存标注失败:{err}',
             'status.svgExported': 'SVG 已导出到 {file}',
+            'status.svgExportedAll': '已导出 {count} 个 SVG 文件到 {dir}',
             'status.svgExportFailed': '导出 SVG 失败:{err}',
             'status.loadJsonFailed': '加载标注文件失败:{err}',
             'status.exportUnknownFormat': '未知导出格式:{format}',
@@ -646,6 +651,7 @@
             'placeholder.onnxModelDir':    '包含 .onnx 和 labels.json 的目录路径',
             'placeholder.samModelDir':     '包含 encoder.onnx 和 decoder.onnx 的目录路径',
             'placeholder.exportOutputDir': '写出转换后文件的目录',
+            'placeholder.svgOutputDir': '写出 SVG 文件的目录',
             'placeholder.addClass':        '添加类别名',
 
             'export.imageCount': '图片数',
@@ -747,7 +753,7 @@
             'tip.image.claheClipLimit.desc':  'CLAHE 裁剪阈值;数值越大局部对比度越强。',
 
             'tip.tools.exportSvg.title':      '导出 SVG',
-            'tip.tools.exportSvg.desc':       '将当前形状导出为图片旁边的独立 SVG 文件。',
+            'tip.tools.exportSvg.desc':       '将标注轮廓导出为 SVG 文件（当前图片或全部图片）到指定文件夹。',
             'tip.tools.exportDataset.title':  '导出数据集',
             'tip.tools.exportDataset.desc':   '将标注转换为 COCO Instances、YOLO bbox 或 YOLO seg 格式。',
             'tip.tools.onnxBatchInfer.title': 'ONNX 批量推理',

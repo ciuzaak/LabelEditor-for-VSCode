@@ -1219,6 +1219,20 @@ window.addEventListener('message', event => {
             if (input) input.value = message.value;
             break;
         }
+        case 'svgExportBrowseResult': {
+            const input = document.getElementById('svgOutputDir');
+            if (input) input.value = message.value;
+            break;
+        }
+        case 'exportSvgPrepareResult': {
+            const el = document.getElementById('svgImageCount');
+            if (el) el.textContent = message.imageCount;
+            break;
+        }
+        case 'exportSvgRunResult': {
+            if (message.ok) hideExportSvgModal();
+            break;
+        }
         case 'exportDatasetPrepareResult': {
             applyExportPrepareResult(message);
             break;
@@ -5575,43 +5589,76 @@ const toolsMenuBtn = document.getElementById('toolsMenuBtn');
 const toolsMenuDropdown = document.getElementById('toolsMenuDropdown');
 const exportSvgMenuItem = document.getElementById('exportSvgMenuItem');
 
-function exportSvg() {
-    // Close the menu
+// --- Export SVG (modal: scope + output directory, mirrors Export Dataset) ---
+const exportSvgModal = document.getElementById('exportSvgModal');
+const svgOutputDirInput = document.getElementById('svgOutputDir');
+const svgOutputDirBrowse = document.getElementById('svgOutputDirBrowse');
+const svgImageCountSpan = document.getElementById('svgImageCount');
+const svgExportRunBtn = document.getElementById('svgExportRunBtn');
+const svgExportCancelBtn = document.getElementById('svgExportCancelBtn');
+
+function getSvgExportScope() {
+    const checked = document.querySelector('input[name="svgExportScope"]:checked');
+    return checked ? checked.value : 'all';
+}
+
+function showExportSvgModal() {
     if (toolsMenuDropdown) toolsMenuDropdown.style.display = 'none';
-
-    // Guard: image must be fully loaded so dimensions are available
-    if (!img.width || !img.height) {
-        if (window.notifyBus) {
-            const msg = (window.i18n && window.i18n.t)
-                ? window.i18n.t('status.svgNotReady')
-                : 'Cannot export SVG: image has not finished loading yet. Please wait and try again.';
-            window.notifyBus.show('warn', msg);
-        }
-        return;
+    if (!exportSvgModal) return;
+    // Restore the last-used scope.
+    if (initialGlobalSettings && initialGlobalSettings.svgExportScope) {
+        const scopeInput = document.querySelector(`input[name="svgExportScope"][value="${initialGlobalSettings.svgExportScope}"]`);
+        if (scopeInput) scopeInput.checked = true;
     }
-
-    // Filter out visible field, same as save
-    const shapesToExport = shapes.map(shape => {
-        const { visible, ...shapeWithoutVisible } = shape;
-        if (!shapeWithoutVisible.description) {
-            delete shapeWithoutVisible.description;
-        }
-        return shapeWithoutVisible;
-    });
-
+    if (svgImageCountSpan) svgImageCountSpan.textContent = '0';
+    exportSvgModal.style.display = 'flex';
+    // Forward the unsaved current-image shapes so the count (and the run) reflect
+    // in-memory edits rather than the stale sidecar.
     vscode.postMessage({
-        command: 'exportSvg',
-        data: {
-            shapes: shapesToExport,
-            imageHeight: img.height,
-            imageWidth: img.width
-        }
+        command: 'exportSvgPrepare',
+        scope: getSvgExportScope(),
+        currentImage: buildExportCurrentImageOverride() || undefined
     });
+}
+
+function hideExportSvgModal() {
+    if (exportSvgModal) exportSvgModal.style.display = 'none';
+}
+
+function submitExportSvg() {
+    const config = {
+        scope: getSvgExportScope(),
+        outputDir: svgOutputDirInput ? svgOutputDirInput.value.trim() : ''
+    };
+    const override = buildExportCurrentImageOverride();
+    if (override) config.currentImage = override;
+    vscode.postMessage({ command: 'saveGlobalSettings', key: 'svgExportScope', value: config.scope });
+    vscode.postMessage({ command: 'exportSvgRun', config });
 }
 
 if (exportSvgMenuItem) {
-    exportSvgMenuItem.addEventListener('click', exportSvg);
+    exportSvgMenuItem.addEventListener('click', showExportSvgModal);
 }
+if (svgOutputDirBrowse && svgOutputDirInput) {
+    svgOutputDirBrowse.addEventListener('click', () => {
+        vscode.postMessage({
+            command: 'browseSvgOutputDir',
+            currentValue: svgOutputDirInput.value || undefined
+        });
+    });
+}
+if (svgExportRunBtn) svgExportRunBtn.addEventListener('click', submitExportSvg);
+if (svgExportCancelBtn) svgExportCancelBtn.addEventListener('click', hideExportSvgModal);
+// Re-request the count when the scope flips between "all" and "current".
+document.querySelectorAll('input[name="svgExportScope"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+        vscode.postMessage({
+            command: 'exportSvgPrepare',
+            scope: getSvgExportScope(),
+            currentImage: buildExportCurrentImageOverride() || undefined
+        });
+    });
+});
 
 // --- Export Dataset (COCO / YOLO) ---
 const exportDatasetMenuItem = document.getElementById('exportDatasetMenuItem');

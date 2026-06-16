@@ -10,7 +10,8 @@ import {
     scanWorkspaceImages,
     comparePathsNaturally,
     classifyEntry,
-    ImageMetadata
+    ImageMetadata,
+    LabelMeShape
 } from './labelMeUtils';
 import {
     parseDataYaml,
@@ -444,8 +445,24 @@ export class LabelMePanel {
                     case 'saveGlobalSettings':
                         await this._globalState.update(message.key, message.value);
                         return;
-                    case 'exportSvg':
-                        await this.exportSvg(message.data);
+                    case 'browseSvgOutputDir': {
+                        const folderUris = await vscode.window.showOpenDialog({
+                            canSelectFolders: true,
+                            canSelectFiles: false,
+                            canSelectMany: false,
+                            openLabel: 'Select Output Directory',
+                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                        });
+                        if (folderUris && folderUris.length > 0) {
+                            this._safePost({ command: 'svgExportBrowseResult', value: folderUris[0].fsPath });
+                        }
+                        return;
+                    }
+                    case 'exportSvgPrepare':
+                        await this._prepareExportSvg(message.scope, message.currentImage);
+                        return;
+                    case 'exportSvgRun':
+                        await this._runExportSvg(message.config);
                         return;
                     case 'onnxBatchInfer':
                         await this._runOnnxBatchInfer(message.config);
@@ -1453,6 +1470,33 @@ export class LabelMePanel {
                     </div>
                 </div>
 
+                <!-- Modal for Export SVG -->
+                <div id="exportSvgModal" class="modal">
+                    <div class="modal-content onnx-infer-content">
+                        <button class="modal-close" data-modal-close="exportSvgModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <h3><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg> <span data-i18n="modal.exportSvg">Export SVG</span></h3>
+                        <div class="onnx-form-group">
+                            <label data-tip-id="export.scope" data-i18n="label.scope">Scope</label>
+                            <div class="onnx-radio-group segmented-group">
+                                <label class="onnx-radio"><input type="radio" name="svgExportScope" value="all" checked /> <span data-i18n="scope.all">All Images</span></label>
+                                <label class="onnx-radio"><input type="radio" name="svgExportScope" value="current" /> <span data-i18n="scope.current">Current Image</span></label>
+                            </div>
+                        </div>
+                        <div class="onnx-form-group">
+                            <label data-tip-id="export.outputDir" data-i18n="label.outputDir">Output Directory</label>
+                            <div class="onnx-path-input">
+                                <input type="text" id="svgOutputDir" autocomplete="off" placeholder="Folder to write the SVG files" data-i18n-placeholder="placeholder.svgOutputDir" />
+                                <button id="svgOutputDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
+                            </div>
+                        </div>
+                        <div class="onnx-image-count"><span data-i18n="export.imageCount">Images</span>: <strong id="svgImageCount">0</strong></div>
+                        <div class="modal-buttons">
+                            <button id="svgExportRunBtn" class="btn btn-primary" data-i18n="button.run">Run</button>
+                            <button id="svgExportCancelBtn" class="btn" data-i18n="button.cancel">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- Modal for Advanced Search -->
                 <div id="advancedSearchModal" class="modal">
                     <div class="modal-content advanced-search-content">
@@ -1907,28 +1951,68 @@ export class LabelMePanel {
         }
     }
 
-    private async exportSvg(data: any) {
-        const svgPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, '') + '.svg';
+    private async _prepareExportSvg(
+        scope: string,
+        currentImage?: { shapes: ExportShape[]; width: number; height: number }
+    ) {
+        if (this._workspaceImages.length === 0 && scope === 'all') {
+            await this._scanWorkspaceImages();
+        }
+        const images = await this._collectExportImages(scope, currentImage);
+        // Only images with at least one shape (and known dimensions) produce a
+        // useful SVG; that count is what the modal previews.
+        let imageCount = 0;
+        for (const img of images) {
+            if (img.shapes && img.shapes.length > 0 && img.width > 0 && img.height > 0) imageCount++;
+        }
+        this._safePost({ command: 'exportSvgPrepareResult', imageCount });
+    }
 
-        const svg = buildSvg({
-            shapes: data.shapes || [],
-            imageWidth: data.imageWidth,
-            imageHeight: data.imageHeight
-        });
-
+    private async _runExportSvg(config: {
+        scope: string;
+        outputDir: string;
+        currentImage?: { shapes: ExportShape[]; width: number; height: number };
+    }) {
+        if (!config.outputDir) {
+            this._notify('error', 'Pick an output directory first', { i18nKey: 'status.exportPickDir' });
+            this._safePost({ command: 'exportSvgRunResult', ok: false });
+            return;
+        }
         try {
-            await fs.writeFile(svgPath, svg, 'utf8');
+            if (this._workspaceImages.length === 0 && config.scope === 'all') {
+                await this._scanWorkspaceImages();
+            }
+            await fs.mkdir(config.outputDir, { recursive: true });
+            const images = await this._collectExportImages(config.scope, config.currentImage);
+            let count = 0;
+            for (const img of images) {
+                // Skip images with no annotations or unknown dimensions — an empty
+                // SVG carries no useful outline.
+                if (!img.shapes || img.shapes.length === 0) continue;
+                if (!img.width || !img.height) continue;
+                // ExportShape lacks LabelMeShape's index signature; buildSvg only
+                // reads points/shape_type, so the assertion is safe.
+                const svg = buildSvg({ shapes: img.shapes as LabelMeShape[], imageWidth: img.width, imageHeight: img.height });
+                // Preserve the source's relative subfolder structure so files from
+                // different dirs don't collide on basename.
+                const outPath = path.join(config.outputDir, img.fileName.replace(/\.[^/.]+$/, '') + '.svg');
+                await fs.mkdir(path.dirname(outPath), { recursive: true });
+                await fs.writeFile(outPath, svg, 'utf8');
+                count++;
+            }
             this._notify(
                 'success',
-                'SVG exported to ' + path.basename(svgPath),
-                { i18nKey: 'status.svgExported', i18nParams: { file: path.basename(svgPath) } }
+                `Exported ${count} SVG file(s) to ${config.outputDir}`,
+                { i18nKey: 'status.svgExportedAll', i18nParams: { count, dir: config.outputDir } }
             );
+            this._safePost({ command: 'exportSvgRunResult', ok: true });
         } catch (err) {
             this._notify(
                 'error',
                 'Failed to export SVG: ' + (err as Error).message,
                 { i18nKey: 'status.svgExportFailed', i18nParams: { err: (err as Error).message } }
             );
+            this._safePost({ command: 'exportSvgRunResult', ok: false });
         }
     }
 

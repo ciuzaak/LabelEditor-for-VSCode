@@ -73,7 +73,7 @@ const TIPS = {
     'image.claheClipLimit': { title: 'Clip Limit', desc: 'CLAHE clip limit; higher values produce stronger local contrast.' },
 
     // Tools menu items
-    'tools.exportSvg':      { title: 'Export SVG', desc: 'Export current shapes as a standalone SVG file next to the image.' },
+    'tools.exportSvg':      { title: 'Export SVG', desc: 'Export annotation outlines as SVG files — current image or all images — into a chosen folder.' },
     'tools.exportDataset':  { title: 'Export Dataset', desc: 'Convert annotations to COCO Instances, YOLO bbox, or YOLO seg format.' },
     'tools.onnxBatchInfer': { title: 'ONNX Batch Infer', desc: 'Run an ONNX segmentation model over selected images and write polygons.' },
 
