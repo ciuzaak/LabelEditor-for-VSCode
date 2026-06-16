@@ -1594,6 +1594,7 @@ export class LabelMePanel {
                         exportOutputDir: ${JSON.stringify(this._globalState.get('exportOutputDir') || '')},
                         exportClasses: ${JSON.stringify(this._globalState.get('exportClasses') || [])},
                         exportCopyImages: ${this._globalState.get('exportCopyImages') ?? false},
+                        svgExportScope: ${JSON.stringify(this._globalState.get('svgExportScope') || 'all')},
                         defaultExportDir: ${JSON.stringify(path.join(this._rootPath, 'export'))},
                         keyboardBindings: ${JSON.stringify(this._globalState.get('keyboardBindings') || null)},
                         locale: ${JSON.stringify(this._globalState.get('locale') || 'en')}
@@ -1983,6 +1984,13 @@ export class LabelMePanel {
                 await fs.mkdir(path.dirname(outPath), { recursive: true });
                 await fs.writeFile(outPath, svg, 'utf8');
                 count++;
+            }
+            if (count === 0) {
+                // Every candidate was skipped (no shapes / unknown dims): nothing
+                // was written, so don't claim success or close the modal.
+                this._notify('warn', 'No annotated images to export', { i18nKey: 'status.svgExportNothing' });
+                this._safePost({ command: 'exportSvgRunResult', ok: false });
+                return;
             }
             this._notify(
                 'success',
