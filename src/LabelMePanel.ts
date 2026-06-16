@@ -1307,14 +1307,14 @@ export class LabelMePanel {
                         <div class="onnx-form-group">
                             <label data-tip-id="onnx.modelDir" data-i18n="label.modelDir">Model Directory</label>
                             <div class="onnx-path-input">
-                                <input type="text" id="onnxModelDir" placeholder="Path to directory with .onnx and labels.json" data-i18n-placeholder="placeholder.onnxModelDir" />
+                                <input type="text" id="onnxModelDir" autocomplete="off" placeholder="Path to directory with .onnx and labels.json" data-i18n-placeholder="placeholder.onnxModelDir" />
                                 <button id="onnxModelDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="onnx.modelDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="onnx.pythonPath" data-i18n="label.pythonPath">Python Interpreter</label>
                             <div class="onnx-path-input">
-                                <input type="text" id="onnxPythonPath" placeholder="python" />
+                                <input type="text" id="onnxPythonPath" autocomplete="off" placeholder="python" />
                                 <button id="onnxPythonPathBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="onnx.pythonBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
@@ -1368,14 +1368,14 @@ export class LabelMePanel {
                         <div class="onnx-form-group">
                             <label data-tip-id="sam.modelDir" data-i18n="label.modelDir">Model Directory</label>
                             <div class="onnx-path-input">
-                                <input type="text" id="samModelDir" placeholder="Path to directory with encoder.onnx and decoder.onnx" data-i18n-placeholder="placeholder.samModelDir" />
+                                <input type="text" id="samModelDir" autocomplete="off" placeholder="Path to directory with encoder.onnx and decoder.onnx" data-i18n-placeholder="placeholder.samModelDir" />
                                 <button id="samModelDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="sam.modelDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
                             <label data-tip-id="sam.pythonPath" data-i18n="label.pythonPath">Python Interpreter</label>
                             <div class="onnx-path-input">
-                                <input type="text" id="samPythonPath" placeholder="python" />
+                                <input type="text" id="samPythonPath" autocomplete="off" placeholder="python" />
                                 <button id="samPythonPathBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="sam.pythonBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
@@ -1444,7 +1444,7 @@ export class LabelMePanel {
                         <div class="onnx-form-group">
                             <label data-tip-id="export.outputDir" data-i18n="label.outputDir">Output Directory</label>
                             <div class="onnx-path-input">
-                                <input type="text" id="exportOutputDir" placeholder="Folder to write the converted files" data-i18n-placeholder="placeholder.exportOutputDir" />
+                                <input type="text" id="exportOutputDir" autocomplete="off" placeholder="Folder to write the converted files" data-i18n-placeholder="placeholder.exportOutputDir" />
                                 <button id="exportOutputDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
                             </div>
                         </div>
