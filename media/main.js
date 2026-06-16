@@ -5647,6 +5647,15 @@ if (svgOutputDirBrowse && svgOutputDirInput) {
         });
     });
 }
+const svgOutputDirNew = document.getElementById('svgOutputDirNew');
+if (svgOutputDirNew && svgOutputDirInput) {
+    svgOutputDirNew.addEventListener('click', () => {
+        vscode.postMessage({
+            command: 'saveAsSvgOutputDir',
+            currentValue: svgOutputDirInput.value || undefined
+        });
+    });
+}
 if (svgExportRunBtn) svgExportRunBtn.addEventListener('click', submitExportSvg);
 if (svgExportCancelBtn) svgExportCancelBtn.addEventListener('click', hideExportSvgModal);
 // Re-request the count when the scope flips between "all" and "current".
@@ -5837,6 +5846,15 @@ if (exportOutputDirBrowse && exportOutputDirInput) {
     exportOutputDirBrowse.addEventListener('click', () => {
         vscode.postMessage({
             command: 'browseExportOutputDir',
+            currentValue: exportOutputDirInput.value || undefined
+        });
+    });
+}
+const exportOutputDirNew = document.getElementById('exportOutputDirNew');
+if (exportOutputDirNew && exportOutputDirInput) {
+    exportOutputDirNew.addEventListener('click', () => {
+        vscode.postMessage({
+            command: 'saveAsExportOutputDir',
             currentValue: exportOutputDirInput.value || undefined
         });
     });

@@ -458,6 +458,16 @@ export class LabelMePanel {
                         }
                         return;
                     }
+                    case 'saveAsExportOutputDir': {
+                        const picked = await this._pickOutputDirViaSave(message.currentValue);
+                        if (picked) this._safePost({ command: 'exportBrowseResult', value: picked });
+                        return;
+                    }
+                    case 'saveAsSvgOutputDir': {
+                        const picked = await this._pickOutputDirViaSave(message.currentValue);
+                        if (picked) this._safePost({ command: 'svgExportBrowseResult', value: picked });
+                        return;
+                    }
                     case 'exportSvgPrepare':
                         await this._prepareExportSvg(message.scope, message.currentImage);
                         return;
@@ -1446,6 +1456,7 @@ export class LabelMePanel {
                             <div class="onnx-path-input">
                                 <input type="text" id="exportOutputDir" autocomplete="off" placeholder="Folder to write the converted files" data-i18n-placeholder="placeholder.exportOutputDir" />
                                 <button id="exportOutputDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
+                                <button id="exportOutputDirNew" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirNew"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-save"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
@@ -1487,6 +1498,7 @@ export class LabelMePanel {
                             <div class="onnx-path-input">
                                 <input type="text" id="svgOutputDir" autocomplete="off" placeholder="Folder to write the SVG files" data-i18n-placeholder="placeholder.svgOutputDir" />
                                 <button id="svgOutputDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
+                                <button id="svgOutputDirNew" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirNew"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-save"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-image-count"><span data-i18n="export.imageCount">Images</span>: <strong id="svgImageCount">0</strong></div>
@@ -2120,6 +2132,21 @@ export class LabelMePanel {
         if (!currentValue) return undefined;
         const parent = path.dirname(currentValue);
         return parent && parent !== '.' ? vscode.Uri.file(parent) : undefined;
+    }
+
+    /**
+     * Pick an output directory via a Save dialog so the user can type a path
+     * that doesn't exist yet — the OS offers to create missing parent folders
+     * inline. Returns the chosen absolute path (used as a directory) or
+     * undefined when cancelled.
+     */
+    private async _pickOutputDirViaSave(currentValue?: string): Promise<string | undefined> {
+        const uri = await vscode.window.showSaveDialog({
+            defaultUri: currentValue ? vscode.Uri.file(currentValue) : undefined,
+            saveLabel: 'Use This Folder',
+            title: 'Type or create an output folder'
+        });
+        return uri?.fsPath;
     }
 
     /**

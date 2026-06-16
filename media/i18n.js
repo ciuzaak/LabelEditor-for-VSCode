@@ -434,7 +434,9 @@
             'tip.export.outputDir.title':       'Output Directory',
             'tip.export.outputDir.desc':        'Folder where the converted files will be written.',
             'tip.export.outputDirBrowse.title': 'Browse',
-            'tip.export.outputDirBrowse.desc':  'Pick the output folder.',
+            'tip.export.outputDirBrowse.desc':  'Pick an existing output folder.',
+            'tip.export.outputDirNew.title':    'Type / New Folder',
+            'tip.export.outputDirNew.desc':     'Open a save dialog to type a path or create a new folder; missing folders are created on export.',
             'tip.export.classes.title':         'Classes',
             'tip.export.classes.desc':          'Class order defines numeric indices: first row = class 0 for YOLO, 1 for COCO.'
         },
@@ -835,7 +837,9 @@
             'tip.export.outputDir.title':       '输出目录',
             'tip.export.outputDir.desc':        '写出转换后文件的目录。',
             'tip.export.outputDirBrowse.title': '浏览',
-            'tip.export.outputDirBrowse.desc':  '选择输出目录。',
+            'tip.export.outputDirBrowse.desc':  '选择一个已存在的输出文件夹。',
+            'tip.export.outputDirNew.title':    '输入/新建文件夹',
+            'tip.export.outputDirNew.desc':     '打开保存对话框以输入路径或新建文件夹；缺失的文件夹会在导出时创建。',
             'tip.export.classes.title':         '类别',
             'tip.export.classes.desc':          '类别顺序定义索引:首行 YOLO 是 0,COCO 是 1。'
         }
