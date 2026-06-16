@@ -5605,9 +5605,12 @@ function getSvgExportScope() {
 function showExportSvgModal() {
     if (toolsMenuDropdown) toolsMenuDropdown.style.display = 'none';
     if (!exportSvgModal) return;
-    // Restore the last-used scope.
-    if (initialGlobalSettings && initialGlobalSettings.svgExportScope) {
-        const scopeInput = document.querySelector(`input[name="svgExportScope"][value="${initialGlobalSettings.svgExportScope}"]`);
+    // Restore the last-used scope: session state (survives HTML regeneration)
+    // takes priority, then the persisted global setting.
+    const savedState = vscode.getState() || {};
+    const savedScope = savedState.svgExportScope || (initialGlobalSettings && initialGlobalSettings.svgExportScope);
+    if (savedScope) {
+        const scopeInput = document.querySelector(`input[name="svgExportScope"][value="${savedScope}"]`);
         if (scopeInput) scopeInput.checked = true;
     }
     if (svgImageCountSpan) svgImageCountSpan.textContent = '0';
@@ -5632,7 +5635,7 @@ function submitExportSvg() {
     };
     const override = buildExportCurrentImageOverride();
     if (override) config.currentImage = override;
-    vscode.postMessage({ command: 'saveGlobalSettings', key: 'svgExportScope', value: config.scope });
+    saveGlobalSettings('svgExportScope', config.scope);
     vscode.postMessage({ command: 'exportSvgRun', config });
 }
 
