@@ -2,6 +2,23 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [1.4.1] - 2026-06-16
+
+SVG export reworked into a scope + output-folder dialog, a "type or create a new folder" option for export output directories, and a settings/path-picker hardening pass (Codex-reviewed). The YOLO label picker now matches LabelMe mode.
+
+### Added
+- **SVG export dialog**: Tools → **Export SVG** now opens a modal to choose the **scope** (current image or all annotated images) and an **output folder**, with a live image-count preview — replacing the old one-click "single image, fixed path" export. All-images mode writes one `.svg` per annotated image, preserving the source's relative subfolders and skipping images with no shapes.
+- **Type / create output folder**: the export output-directory picker (dataset export and SVG export) opens a save dialog where you can pick an existing folder or type a new path; missing folders are created (the OS offers to create them inline, and the export confirms/creates a still-missing directory before writing).
+
+### Changed
+- **YOLO label picker unified with LabelMe**: the label dialog no longer lists every `data.yaml` class as a primary section — it shows the current image's labels and your history, like LabelMe mode. Typing a class not in the yaml still prompts to add it.
+- **YOLO panel title** now uses the `data.yaml` filename (e.g. `data.yaml` → "data") instead of its parent directory's name.
+
+### Fixed
+- **Path-picker prefill**: the SAM/ONNX model-dir & python-path and the export output-dir browse dialogs opened pre-selecting the last path segment, which looked like a stale autocomplete of the last directory. They now open at the parent directory (plus `autocomplete="off"` on the inputs).
+- Export now **rejects an output path that is an existing file** (instead of failing mid-run), and **warns instead of reporting success** when an SVG export would write zero files.
+- The last-used SVG export **scope is remembered** across reopens and sessions.
+
 ## [1.4.0] - 2026-06-15
 
 Native YOLO-format annotation: open a YOLO `data.yaml` and import, edit, and save labels as YOLO `.txt` — no LabelMe round-trip. Plus an Export Dataset rework, symlink-aware image scanning, and a Codex-reviewed hardening pass. Built spec-first on a pure, unit-tested module (`src/yoloDataset.ts`).
