@@ -451,7 +451,7 @@ export class LabelMePanel {
                             canSelectFiles: false,
                             canSelectMany: false,
                             openLabel: 'Select Output Directory',
-                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                            defaultUri: this._browseDefaultUri(message.currentValue)
                         });
                         if (folderUris && folderUris.length > 0) {
                             this._safePost({ command: 'svgExportBrowseResult', value: folderUris[0].fsPath });
@@ -473,7 +473,7 @@ export class LabelMePanel {
                             canSelectFiles: false,
                             canSelectMany: false,
                             openLabel: 'Select Model Directory',
-                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                            defaultUri: this._browseDefaultUri(message.currentValue)
                         });
                         if (folderUris && folderUris.length > 0) {
                             this._safePost({
@@ -493,7 +493,7 @@ export class LabelMePanel {
                             filters: process.platform === 'win32'
                                 ? { 'Executable': ['exe'] }
                                 : undefined,
-                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                            defaultUri: this._browseDefaultUri(message.currentValue)
                         });
                         if (fileUris && fileUris.length > 0) {
                             this._safePost({
@@ -554,7 +554,7 @@ export class LabelMePanel {
                             canSelectFiles: false,
                             canSelectMany: false,
                             openLabel: 'Select SAM Model Directory',
-                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                            defaultUri: this._browseDefaultUri(message.currentValue)
                         });
                         if (samFolderUris && samFolderUris.length > 0) {
                             this._safePost({
@@ -574,7 +574,7 @@ export class LabelMePanel {
                             filters: process.platform === 'win32'
                                 ? { 'Executable': ['exe'] }
                                 : undefined,
-                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                            defaultUri: this._browseDefaultUri(message.currentValue)
                         });
                         if (samFileUris && samFileUris.length > 0) {
                             this._safePost({
@@ -591,7 +591,7 @@ export class LabelMePanel {
                             canSelectFiles: false,
                             canSelectMany: false,
                             openLabel: 'Select Output Directory',
-                            defaultUri: message.currentValue ? vscode.Uri.file(message.currentValue) : undefined
+                            defaultUri: this._browseDefaultUri(message.currentValue)
                         });
                         if (folderUris && folderUris.length > 0) {
                             this._safePost({
@@ -2108,6 +2108,18 @@ export class LabelMePanel {
             images.push({ fileName: rel.replace(/\\/g, '/'), width, height, shapes });
         }
         return images;
+    }
+
+    /**
+     * Default location for a browse dialog. Point at the PARENT of the current
+     * value, not the value itself — otherwise the native dialog pre-selects the
+     * last path segment (a file or folder name), which reads like a stale
+     * autocomplete when the user just wants to pick a sibling.
+     */
+    private _browseDefaultUri(currentValue?: string): vscode.Uri | undefined {
+        if (!currentValue) return undefined;
+        const parent = path.dirname(currentValue);
+        return parent && parent !== '.' ? vscode.Uri.file(parent) : undefined;
     }
 
     /**
