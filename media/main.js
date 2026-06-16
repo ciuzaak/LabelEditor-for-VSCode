@@ -5642,15 +5642,6 @@ if (exportSvgMenuItem) {
 if (svgOutputDirBrowse && svgOutputDirInput) {
     svgOutputDirBrowse.addEventListener('click', () => {
         vscode.postMessage({
-            command: 'browseSvgOutputDir',
-            currentValue: svgOutputDirInput.value || undefined
-        });
-    });
-}
-const svgOutputDirNew = document.getElementById('svgOutputDirNew');
-if (svgOutputDirNew && svgOutputDirInput) {
-    svgOutputDirNew.addEventListener('click', () => {
-        vscode.postMessage({
             command: 'saveAsSvgOutputDir',
             currentValue: svgOutputDirInput.value || undefined
         });
@@ -5844,15 +5835,6 @@ if (exportDatasetMenuItem) {
 }
 if (exportOutputDirBrowse && exportOutputDirInput) {
     exportOutputDirBrowse.addEventListener('click', () => {
-        vscode.postMessage({
-            command: 'browseExportOutputDir',
-            currentValue: exportOutputDirInput.value || undefined
-        });
-    });
-}
-const exportOutputDirNew = document.getElementById('exportOutputDirNew');
-if (exportOutputDirNew && exportOutputDirInput) {
-    exportOutputDirNew.addEventListener('click', () => {
         vscode.postMessage({
             command: 'saveAsExportOutputDir',
             currentValue: exportOutputDirInput.value || undefined

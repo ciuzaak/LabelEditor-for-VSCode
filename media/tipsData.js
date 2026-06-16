@@ -81,8 +81,7 @@ const TIPS = {
     'export.format':           { title: 'Format', desc: 'COCO writes one annotations.json; YOLO writes one .txt per image plus classes.txt.' },
     'export.scope':            { title: 'Scope', desc: 'Export every image in the workspace, or only the current image.' },
     'export.outputDir':        { title: 'Output Directory', desc: 'Folder where the converted files will be written.' },
-    'export.outputDirBrowse':  { title: 'Browse', desc: 'Pick an existing output folder.' },
-    'export.outputDirNew':     { title: 'Type / New Folder', desc: 'Open a save dialog to type a path or create a new folder; missing folders are created on export.' },
+    'export.outputDirBrowse':  { title: 'Output Folder', desc: 'Open a dialog to choose or create the output folder; missing folders are created on export.' },
     'export.classes':          { title: 'Classes', desc: 'Class order defines numeric indices: first row = class 0 for YOLO, 1 for COCO.' },
 
     // Per-row controls in the Labels list (dynamically rendered in main.js)

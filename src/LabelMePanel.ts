@@ -445,19 +445,6 @@ export class LabelMePanel {
                     case 'saveGlobalSettings':
                         await this._globalState.update(message.key, message.value);
                         return;
-                    case 'browseSvgOutputDir': {
-                        const folderUris = await vscode.window.showOpenDialog({
-                            canSelectFolders: true,
-                            canSelectFiles: false,
-                            canSelectMany: false,
-                            openLabel: 'Select Output Directory',
-                            defaultUri: this._browseDefaultUri(message.currentValue)
-                        });
-                        if (folderUris && folderUris.length > 0) {
-                            this._safePost({ command: 'svgExportBrowseResult', value: folderUris[0].fsPath });
-                        }
-                        return;
-                    }
                     case 'saveAsExportOutputDir': {
                         const picked = await this._pickOutputDirViaSave(message.currentValue);
                         if (picked) this._safePost({ command: 'exportBrowseResult', value: picked });
@@ -591,22 +578,6 @@ export class LabelMePanel {
                                 command: 'samBrowseResult',
                                 field: 'pythonPath',
                                 value: samFileUris[0].fsPath
-                            });
-                        }
-                        return;
-                    }
-                    case 'browseExportOutputDir': {
-                        const folderUris = await vscode.window.showOpenDialog({
-                            canSelectFolders: true,
-                            canSelectFiles: false,
-                            canSelectMany: false,
-                            openLabel: 'Select Output Directory',
-                            defaultUri: this._browseDefaultUri(message.currentValue)
-                        });
-                        if (folderUris && folderUris.length > 0) {
-                            this._safePost({
-                                command: 'exportBrowseResult',
-                                value: folderUris[0].fsPath
                             });
                         }
                         return;
@@ -1456,7 +1427,6 @@ export class LabelMePanel {
                             <div class="onnx-path-input">
                                 <input type="text" id="exportOutputDir" autocomplete="off" placeholder="Folder to write the converted files" data-i18n-placeholder="placeholder.exportOutputDir" />
                                 <button id="exportOutputDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
-                                <button id="exportOutputDirNew" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirNew"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-save"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-form-group">
@@ -1498,7 +1468,6 @@ export class LabelMePanel {
                             <div class="onnx-path-input">
                                 <input type="text" id="svgOutputDir" autocomplete="off" placeholder="Folder to write the SVG files" data-i18n-placeholder="placeholder.svgOutputDir" />
                                 <button id="svgOutputDirBrowse" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirBrowse"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-folder-open"/></svg></button>
-                                <button id="svgOutputDirNew" class="btn btn-icon onnx-browse-btn" data-tip-id="export.outputDirNew"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-save"/></svg></button>
                             </div>
                         </div>
                         <div class="onnx-image-count"><span data-i18n="export.imageCount">Images</span>: <strong id="svgImageCount">0</strong></div>
