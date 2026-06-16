@@ -31,7 +31,7 @@ const TIPS = {
 
     // Sidebar action buttons
     'actions.settings': { title: 'Settings', desc: 'Open theme, view, annotation style, and image adjustment controls.' },
-    'actions.tools':    { title: 'Tools', desc: 'Export SVG and run ONNX batch inference.' },
+    'actions.tools':    { title: 'Tools', desc: 'Export SVG, export datasets, and run ONNX batch inference.' },
     'actions.save':     { title: 'Save', desc: 'Save annotations to the LabelMe JSON next to the image.', shortcut: 'Ctrl+S', shortcutAction: 'edit.save' },
 
     // Theme
