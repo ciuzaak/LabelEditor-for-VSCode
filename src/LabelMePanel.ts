@@ -325,7 +325,7 @@ export class LabelMePanel {
         dirs.forEach(d => localResourceRoots.push(vscode.Uri.file(d)));
         (vscode.workspace.workspaceFolders || []).forEach(folder => localResourceRoots.push(folder.uri));
 
-        const panelTitle = path.basename(yamlDir) || 'YOLO Dataset';
+        const panelTitle = path.basename(yamlUri.fsPath, path.extname(yamlUri.fsPath)) || 'YOLO Dataset';
         const panel = vscode.window.createWebviewPanel(
             LabelMePanel.viewType,
             panelTitle,
