@@ -2124,7 +2124,16 @@ export class LabelMePanel {
      * they confirm. Returns false when the user declines so callers can abort.
      */
     private async _ensureOutputDir(dir: string): Promise<boolean> {
-        if (existsSync(dir)) return true;
+        if (existsSync(dir)) {
+            // existsSync is also true for a file — reject that here instead of
+            // letting the export fail later when it tries to write into it.
+            try {
+                if ((await fs.stat(dir)).isDirectory()) return true;
+            } catch { /* fall through to the not-a-folder error */ }
+            this._notify('error', 'Output path is not a folder: ' + dir,
+                { i18nKey: 'status.exportNotADir', i18nParams: { dir } });
+            return false;
+        }
         const choice = await vscode.window.showWarningMessage(
             `The output folder does not exist:\n${dir}\n\nCreate it?`,
             { modal: true },
