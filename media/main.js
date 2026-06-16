@@ -4034,21 +4034,6 @@ function renderRecentLabels() {
         return chip;
     }
 
-    // YOLO: list the data.yaml classes as the primary selection source.
-    if (window.annotationFormat === 'yolo' && Array.isArray(window.yoloClasses) && window.yoloClasses.length > 0) {
-        const classSection = document.createElement('div');
-        classSection.className = 'label-section yolo-classes';
-        const classTitle = document.createElement('div');
-        classTitle.className = 'label-section-title';
-        classTitle.textContent = (window.i18n && window.i18n.t) ? window.i18n.t('label.classes') : 'Classes';
-        classSection.appendChild(classTitle);
-        const classChips = document.createElement('div');
-        classChips.className = 'label-chips';
-        window.yoloClasses.forEach(label => classChips.appendChild(buildChip(label, '')));
-        classSection.appendChild(classChips);
-        recentLabelsDiv.appendChild(classSection);
-    }
-
     // 渲染当前图片标签区域（如果有的话）
     if (currentImageLabelsOrdered.length > 0) {
         const currentSection = document.createElement('div');
