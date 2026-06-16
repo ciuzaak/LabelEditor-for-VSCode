@@ -1979,10 +1979,13 @@ export class LabelMePanel {
             return;
         }
         try {
+            if (!(await this._ensureOutputDir(config.outputDir))) {
+                this._safePost({ command: 'exportSvgRunResult', ok: false });
+                return;
+            }
             if (this._workspaceImages.length === 0 && config.scope === 'all') {
                 await this._scanWorkspaceImages();
             }
-            await fs.mkdir(config.outputDir, { recursive: true });
             const images = await this._collectExportImages(config.scope, config.currentImage);
             let count = 0;
             for (const img of images) {
@@ -2107,6 +2110,23 @@ export class LabelMePanel {
         return images;
     }
 
+    /**
+     * Ensure an export output directory exists. If it doesn't, ask the user via
+     * a native modal whether to create it, and only create + return true when
+     * they confirm. Returns false when the user declines so callers can abort.
+     */
+    private async _ensureOutputDir(dir: string): Promise<boolean> {
+        if (existsSync(dir)) return true;
+        const choice = await vscode.window.showWarningMessage(
+            `The output folder does not exist:\n${dir}\n\nCreate it?`,
+            { modal: true },
+            'Create'
+        );
+        if (choice !== 'Create') return false;
+        await fs.mkdir(dir, { recursive: true });
+        return true;
+    }
+
     private async _prepareExportDataset(
         scope: string,
         currentImage?: { shapes: ExportShape[]; width: number; height: number }
@@ -2161,7 +2181,10 @@ export class LabelMePanel {
             return;
         }
         try {
-            await fs.mkdir(config.outputDir, { recursive: true });
+            if (!(await this._ensureOutputDir(config.outputDir))) {
+                this._safePost({ command: 'exportDatasetRunResult', ok: false });
+                return;
+            }
             const images = await this._collectExportImages(config.scope, config.currentImage);
             // Drop images with unknown dimensions (no annotation and no file probe).
             const usable = images.filter(img => img.width > 0 && img.height > 0);
