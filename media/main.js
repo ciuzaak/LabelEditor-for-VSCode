@@ -7823,7 +7823,7 @@ function renderImageBrowserList() {
         // Just update the count area — no extra UI elements needed
         const imageCountEl = document.getElementById('imageCount');
         if (imageCountEl) {
-            imageCountEl.textContent = '(scanning...)';
+            imageCountEl.textContent = `(${tt('status.scanning')})`;
         }
         return;
     }
