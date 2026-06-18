@@ -7638,7 +7638,7 @@ function runAdvancedSearchQuery() {
 function applyAdvancedRunResult(message) {
     // Drop stale/out-of-order responses (and any that arrive after a clear).
     if (message.requestId !== advSearchRunSeq) return;
-    advancedResults = (message.results || []).map(r => r.relPath);
+    advancedResults = message.results || []; // already an array of relative paths, in gallery order
     advancedFilterActive = true;
     // Advanced filter takes over: clear/suppress the quick text search.
     searchQuery = '';

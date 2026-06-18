@@ -21,12 +21,9 @@ describe('runAdvancedSearch — name condition', () => {
         assert.deepEqual(runAdvancedSearch(index, query()), []);
     });
 
-    it('ranks exact stem above prefix above plain substring', () => {
+    it('matches every filename containing the value, in natural path order', () => {
         const res = runAdvancedSearch(index, query({ type: 'name', value: 'cat' }));
-        assert.deepEqual(res.map(r => r.relPath), ['a/cat.jpg', 'b/cat_2.jpg']);
-        assert.equal(res[0].nameMatchKind, 'exact');
-        assert.equal(res[1].nameMatchKind, 'prefix');
-        assert.ok(res[0].score > res[1].score);
+        assert.deepEqual(res, ['a/cat.jpg', 'b/cat_2.jpg']);
     });
 
     it('matches case-insensitively', () => {
@@ -43,8 +40,7 @@ describe('runAdvancedSearch — nameRegex condition', () => {
 
     it('matches filenames against the pattern (case-insensitive)', () => {
         const res = runAdvancedSearch(index, query({ type: 'nameRegex', value: '^img_\\d+' }));
-        assert.deepEqual(res.map(r => r.relPath).sort(), ['a/IMG_001.jpg', 'b/IMG_002.png']);
-        assert.equal(res[0].nameMatchKind, 'regex');
+        assert.deepEqual(res, ['a/IMG_001.jpg', 'b/IMG_002.png']);
     });
 
     it('an invalid pattern matches nothing instead of throwing', () => {
@@ -62,7 +58,7 @@ describe('runAdvancedSearch — nameRegex condition', () => {
             { type: 'nameRegex', value: '^img_' },
             { type: 'class', values: ['car'] },
         ));
-        assert.deepEqual(res.map(r => r.relPath), ['IMG_1.jpg']);
+        assert.deepEqual(res, ['IMG_1.jpg']);
     });
 });
 
@@ -75,14 +71,12 @@ describe('runAdvancedSearch — class condition (OR within one condition)', () =
 
     it('matches images containing ANY of the selected classes', () => {
         const res = runAdvancedSearch(index, query({ type: 'class', values: ['car', 'person'] }));
-        assert.deepEqual(res.map(r => r.relPath).sort(), ['img1.jpg', 'img3.jpg']);
+        assert.deepEqual(res, ['img1.jpg', 'img3.jpg']);
     });
 
-    it('scores more distinct matched classes and more instances higher', () => {
+    it('matches images carrying any selected class, in natural path order', () => {
         const res = runAdvancedSearch(index, query({ type: 'class', values: ['car', 'tree'] }));
-        assert.deepEqual(res.map(r => r.relPath), ['img1.jpg', 'img2.jpg']);
-        assert.equal(res[0].matchedClasses.sort().join(','), 'car,tree');
-        assert.equal(res[0].classInstanceCount, 3);
+        assert.deepEqual(res, ['img1.jpg', 'img2.jpg']);
     });
 });
 
@@ -98,17 +92,27 @@ describe('runAdvancedSearch — multiple conditions are AND', () => {
             { type: 'class', values: ['car', 'person'] },
             { type: 'class', values: ['tree'] },
         ));
-        assert.deepEqual(res.map(r => r.relPath).sort(), ['a.jpg', 'b.jpg']);
+        assert.deepEqual(res, ['a.jpg', 'b.jpg']);
     });
 });
 
-describe('runAdvancedSearch — tie-break', () => {
-    it('equal scores fall back to natural path order', () => {
+describe('runAdvancedSearch — result order', () => {
+    it('returns natural path order, regardless of how strongly each file matches', () => {
         const index: AnnotationRecord[] = [
             rec('z/img10.jpg', { car: 1 }),
             rec('z/img2.jpg', { car: 1 }),
         ];
         const res = runAdvancedSearch(index, query({ type: 'class', values: ['car'] }));
-        assert.deepEqual(res.map(r => r.relPath), ['z/img2.jpg', 'z/img10.jpg']);
+        assert.deepEqual(res, ['z/img2.jpg', 'z/img10.jpg']);
+    });
+
+    it('does not let an exact match jump ahead of an earlier substring match', () => {
+        const index: AnnotationRecord[] = [
+            rec('a/scattered.jpg'), // substring match on "cat"
+            rec('z/cat.jpg'),       // exact stem match on "cat"
+        ];
+        const res = runAdvancedSearch(index, query({ type: 'name', value: 'cat' }));
+        // Output preserves gallery order, so the exact match stays after the earlier file.
+        assert.deepEqual(res, ['a/scattered.jpg', 'z/cat.jpg']);
     });
 });
