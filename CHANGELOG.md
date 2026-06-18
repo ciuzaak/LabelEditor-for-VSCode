@@ -2,6 +2,20 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [1.4.2] - 2026-06-18
+
+Labels-panel selection, selection-clearing polish, and advanced search that preserves the image browser's order. Codex-reviewed.
+
+### Added
+- **Click a label to select its instances**: clicking a row in the **Labels** panel now selects every shape that uses that label. **Ctrl/Cmd-click** adds the label's group to the current selection (or toggles it off if it is already fully selected). The row stays highlighted while all of its instances are selected, and a hover tip documents the gesture.
+- **Clear selection by clicking empty space**: clicking the blank area of the **Labels** or **Instances** panel now clears the selection, matching an empty-canvas click. Clicking away while vertex-editing discards the in-progress edit first (like Esc).
+
+### Changed
+- **Search keeps the gallery order**: advanced search — including class/category queries — now returns results in the image browser's **natural (path) order** instead of ranking them by match relevance. Query/filter only narrows the list; it never reorders it. The matching engine (`src/searchEngine.ts`) was simplified to plain boolean matchers, dropping the now-unused relevance scoring.
+
+### Fixed
+- Localized the **"scanning…" placeholder** shown in the image-count area during the initial workspace scan — the one hardcoded English string left in the webview, now translated (English / 简体中文).
+
 ## [1.4.1] - 2026-06-16
 
 SVG export reworked into a scope + output-folder dialog, a "type or create a new folder" option for export output directories, and a settings/path-picker hardening pass (Codex-reviewed). The YOLO label picker now matches LabelMe mode.

@@ -19,7 +19,8 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 
 ### Selecting & Editing Instances
 - **Smart overlap selection**: clicking overlapping instances picks the **smallest / most specific** one (points and lines before filled shapes); click again in place to **cycle down** the stack with an `N / M` badge; hovering shows a dashed outline of what a click would select
-- **Multi-select**: Ctrl+Click to toggle (canvas or list), Shift+Click to range-select in the list, Ctrl+A for all, drag a box in View mode (Ctrl+Drag to add), Esc to clear
+- **Multi-select**: Ctrl+Click to toggle (canvas or list), Shift+Click to range-select in the list, Ctrl+A for all, drag a box in View mode (Ctrl+Drag to add)
+- **Clear selection**: press Esc, or click empty space — on the canvas, or the blank area of the Labels / Instances panels
 - **Batch operations**: Rename, Hide/Show, or Delete the whole selection from the context menu or sidebar
 - **Eraser**: Shift+Click for a polygon eraser, Shift+Long-press+Drag for a rectangle eraser — boolean-subtracts the area from all overlapping shapes (interior cut-outs become hole-free polygons); right-click / Esc to cancel
 - **Merge** (`Ctrl+G`): union multi-selected overlapping polygons/rectangles (all-rectangles → bounding box; otherwise → polygon); a single undo restores the originals
@@ -56,7 +57,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 ### Image Browser & Navigation
 - **Sidebar image list**: every workspace image organized by folder, click to jump, current image highlighted, resizable — virtual scrolling handles 8000+ images smoothly; **symbolic links** to images and folders are followed (with cycle protection)
 - **Quick search**: filter the list by filename as you type
-- **Advanced search**: the sliders button in the search box opens a condition builder — add **Name** (substring), **Name (regex)**, and **Class** (multi-select via a searchable, scrollable picker) conditions; conditions AND together while multiple classes in one condition OR. Results are **ranked by match relevance** with a clearable banner. Name/regex search reads no annotation files; class search indexes sidecar JSON once (cached, with progress and cancel), so it stays fast on large datasets
+- **Advanced search**: the sliders button in the search box opens a condition builder — add **Name** (substring), **Name (regex)**, and **Class** (multi-select via a searchable, scrollable picker) conditions; conditions AND together while multiple classes in one condition OR. Results **keep the image browser's natural order** — filtering only narrows the list, it never reorders it — shown with a clearable banner. Name/regex search reads no annotation files; class search indexes sidecar JSON once (cached, with progress and cancel), so it stays fast on large datasets
 - **Open Folder for Annotation**: right-click a folder to work with just its images
 - **Multi-panel**: open several images/folders side-by-side; re-opening the same one reveals its existing panel
 - **Zoom & pan** with mouse-centered pivot; prev/next buttons and `A` / `D` (navigation stays within the active filter's results)
@@ -84,6 +85,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 
 ### Labels Panel
 - All label categories with live instance counts; show/hide every instance of a label at once
+- **Click a label to select all its instances** (Ctrl/Cmd-click adds the group to the current selection, or toggles it off); the row stays highlighted while every instance is selected
 - 24 preset colors + custom hex, with per-label reset; colors persist globally
 
 ### Workspace & UX
@@ -128,6 +130,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 5. Save with Ctrl+S — labels are written back as YOLO `.txt`
 
 ### Labels Management
+- Click a **label name** to select all of its instances (Ctrl/Cmd-click to add the group to the current selection)
 - Click the **color indicator** to customize label colors
 - Click **eye icon** to toggle visibility for all instances of a label
 - Click **reset icon** (↻) to restore default color
