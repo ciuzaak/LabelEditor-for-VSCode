@@ -4578,6 +4578,9 @@ function renderShapeList() {
 
     // 滚动选中项到可视区域
     scrollSelectedShapeIntoView();
+
+    // Keep the Labels highlight consistent with whatever is now selected.
+    syncLabelsActiveState();
 }
 
 // 滚动选中的形状到可视区域
@@ -4644,23 +4647,10 @@ function renderLabelsList() {
     // 按标签名称排序
     const sortedLabels = Array.from(labelsStats.keys()).sort();
 
-    // A label row is "active" when every one of its instances is currently
-    // selected — so clicking it (which selects exactly those) and selecting them
-    // by hand both light it up, and the highlight survives re-renders/undo.
-    const selectedCountByLabel = new Map();
-    if (selectedShapeIndices.size > 0) {
-        selectedShapeIndices.forEach(i => {
-            const s = shapes[i];
-            if (s) selectedCountByLabel.set(s.label, (selectedCountByLabel.get(s.label) || 0) + 1);
-        });
-    }
-
     sortedLabels.forEach(label => {
         const stat = labelsStats.get(label);
         const li = document.createElement('li');
-        if (stat.count > 0 && selectedCountByLabel.get(label) === stat.count) {
-            li.classList.add('active');
-        }
+        li.dataset.label = label; // lets syncLabelsActiveState() map rows back to labels
 
         // Clicking the row selects every shape with this label. Ctrl/Cmd-click
         // unions/toggles the group into the current selection. The per-row
@@ -4741,6 +4731,30 @@ function renderLabelsList() {
     const labelsCountEl = document.getElementById('labelsCount');
     if (labelsCountEl) {
         labelsCountEl.textContent = `(${sortedLabels.length})`;
+    }
+
+    syncLabelsActiveState();
+}
+
+// Toggle the .active highlight on each Labels row. A label is active when every
+// one of its instances is currently selected — so clicking a label (which selects
+// exactly those) lights it up, and selecting/clearing instances any other way
+// keeps it in sync. Kept separate from renderLabelsList so a selection change can
+// refresh the highlight (via renderShapeList) without rebuilding the whole list.
+function syncLabelsActiveState() {
+    if (!labelsList) return;
+    const selectedByLabel = new Map();
+    selectedShapeIndices.forEach(i => {
+        const s = shapes[i];
+        if (s) selectedByLabel.set(s.label, (selectedByLabel.get(s.label) || 0) + 1);
+    });
+    const stats = getLabelsStats();
+    for (const li of labelsList.children) {
+        const label = li.dataset ? li.dataset.label : undefined;
+        if (label === undefined) continue;
+        const stat = stats.get(label);
+        const active = !!stat && stat.count > 0 && selectedByLabel.get(label) === stat.count;
+        li.classList.toggle('active', active);
     }
 }
 
@@ -8090,6 +8104,19 @@ let sidebarContentHeight = 0;
         sidebarInstancesSection.style.flex = `${1 - ratio} 1 0`;
     }
 })();
+
+// Clicking the blank area of the Labels or Instances panel (anywhere that isn't
+// a row) clears the selection — mirrors clicking empty space on the canvas.
+function clearSelectionFromPanelBlank(e) {
+    if (e.target.closest('li')) return;      // a row click is handled by the row itself
+    if (selectedShapeIndices.size === 0) return;
+    clearSelection();
+    renderShapeList();
+    renderLabelsList();
+    draw();
+}
+if (sidebarLabelsSection) sidebarLabelsSection.addEventListener('click', clearSelectionFromPanelBlank);
+if (sidebarInstancesSection) sidebarInstancesSection.addEventListener('click', clearSelectionFromPanelBlank);
 
 if (sidebarSectionResizer && sidebarLabelsSection && sidebarInstancesSection) {
     sidebarSectionResizer.addEventListener('mousedown', (e) => {
