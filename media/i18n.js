@@ -356,6 +356,8 @@
             'tip.tools.onnxBatchInfer.desc':  'Run an ONNX segmentation model over selected images and write polygons.',
 
             // Labels list per-row controls
+            'tip.label.selectInstances.title': 'Select All Instances',
+            'tip.label.selectInstances.desc':  'Click to select every shape with this label; Ctrl-click adds them to the current selection.',
             'tip.label.color.title':         'Label Color',
             'tip.label.color.desc':          'Click to change the color used for shapes with this label.',
             'tip.label.colorReset.title':    'Reset Color',
@@ -765,6 +767,8 @@
             'tip.tools.onnxBatchInfer.title': 'ONNX 批量推理',
             'tip.tools.onnxBatchInfer.desc':  '在所选图片上运行 ONNX 分割模型并写出多边形。',
 
+            'tip.label.selectInstances.title': '选中全部实例',
+            'tip.label.selectInstances.desc':  '点击选中使用该标签的所有形状;Ctrl 点击则并入当前选择。',
             'tip.label.color.title':         '标签颜色',
             'tip.label.color.desc':          '点击修改该标签所有形状使用的颜色。',
             'tip.label.colorReset.title':    '重置颜色',

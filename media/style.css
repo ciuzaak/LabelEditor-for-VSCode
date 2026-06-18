@@ -708,6 +708,10 @@ textarea { resize: vertical; min-height: 36px; max-height: 120px; }
     background: var(--color-bg-hover);
 }
 
+#labelsList li.active {
+    background: var(--color-bg-active);
+}
+
 .label-color-indicator {
     width: 14px;
     height: 14px;

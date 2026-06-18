@@ -1870,6 +1870,29 @@ function selectAllShapes() {
     selectedShapeIndex = shapes.length > 0 ? 0 : -1;
 }
 
+// Select every shape carrying `label` (clicking a row in the Labels list).
+// additive mirrors Ctrl/Cmd-click on the Instances list: union/toggle the
+// label's group against the current selection instead of replacing it.
+function selectShapesByLabel(label, additive) {
+    // Multi-selection is incompatible with vertex editing (same as the other helpers).
+    if (isEditingShape) exitShapeEditMode(true);
+
+    const indices = window.LabelSelectionHelpers.computeLabelSelection(
+        shapes, label, [...selectedShapeIndices], additive
+    );
+    selectedShapeIndices.clear();
+    indices.forEach(i => selectedShapeIndices.add(i));
+
+    // Anchor on the label's first instance so the Instances list scrolls to it;
+    // fall back to any remaining selection, else clear.
+    const firstOfLabel = shapes.findIndex(s => s && s.label === label);
+    if (selectedShapeIndices.has(firstOfLabel)) {
+        selectedShapeIndex = firstOfLabel;
+    } else {
+        selectedShapeIndex = indices.length > 0 ? indices[0] : -1;
+    }
+}
+
 function isShapeSelected(index) {
     return selectedShapeIndices.has(index);
 }
@@ -4621,9 +4644,33 @@ function renderLabelsList() {
     // 按标签名称排序
     const sortedLabels = Array.from(labelsStats.keys()).sort();
 
+    // A label row is "active" when every one of its instances is currently
+    // selected — so clicking it (which selects exactly those) and selecting them
+    // by hand both light it up, and the highlight survives re-renders/undo.
+    const selectedCountByLabel = new Map();
+    if (selectedShapeIndices.size > 0) {
+        selectedShapeIndices.forEach(i => {
+            const s = shapes[i];
+            if (s) selectedCountByLabel.set(s.label, (selectedCountByLabel.get(s.label) || 0) + 1);
+        });
+    }
+
     sortedLabels.forEach(label => {
         const stat = labelsStats.get(label);
         const li = document.createElement('li');
+        if (stat.count > 0 && selectedCountByLabel.get(label) === stat.count) {
+            li.classList.add('active');
+        }
+
+        // Clicking the row selects every shape with this label. Ctrl/Cmd-click
+        // unions/toggles the group into the current selection. The per-row
+        // controls below stop propagation, so they keep their own behavior.
+        li.onclick = (e) => {
+            selectShapesByLabel(label, e.ctrlKey || e.metaKey);
+            renderShapeList();
+            renderLabelsList();
+            draw();
+        };
 
         // 颜色指示器
         const colorIndicator = document.createElement('div');
@@ -4640,6 +4687,7 @@ function renderLabelsList() {
         const labelName = document.createElement('span');
         labelName.className = 'label-name';
         labelName.textContent = label;
+        labelName.setAttribute('data-tip-id', 'label.selectInstances');
 
         // 实例数量
         const labelCount = document.createElement('span');

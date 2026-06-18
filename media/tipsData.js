@@ -85,6 +85,7 @@ const TIPS = {
     'export.classes':          { title: 'Classes', desc: 'Class order defines numeric indices: first row = class 0 for YOLO, 1 for COCO.' },
 
     // Per-row controls in the Labels list (dynamically rendered in main.js)
+    'label.selectInstances': { title: 'Select All Instances', desc: 'Click to select every shape with this label; Ctrl-click adds them to the current selection.' },
     'label.color':      { title: 'Label Color', desc: 'Click to change the color used for shapes with this label.' },
     'label.colorReset': { title: 'Reset Color', desc: 'Restore this label color to the default.' },
     'label.toggleVisible': { title: 'Show/Hide All', desc: 'Click to show or hide every shape that uses this label.' },

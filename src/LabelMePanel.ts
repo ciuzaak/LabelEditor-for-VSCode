@@ -1048,6 +1048,11 @@ export class LabelMePanel {
             vscode.Uri.joinPath(this._extensionUri, 'media', 'advancedSearchHelpers.js')
         );
 
+        // Label-selection helpers (pure functions, must load before main.js)
+        const labelSelectionHelpersUri = webview.asWebviewUri(
+            vscode.Uri.joinPath(this._extensionUri, 'media', 'labelSelectionHelpers.js')
+        );
+
         // Keybindings helpers (pure functions + frozen defaults, must load before main.js)
         const keybindingsPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'keybindings.js');
         const keybindingsUri = webview.asWebviewUri(keybindingsPath);
@@ -1613,6 +1618,7 @@ export class LabelMePanel {
                 <script src="${tooltipUri}"></script>
                 <script src="${popoverDismissUri}"></script>
                 <script src="${advancedSearchHelpersUri}"></script>
+                <script src="${labelSelectionHelpersUri}"></script>
                 <script src="${keybindingsUri}"></script>
                 <script src="${i18nUri}"></script>
                 <script src="${scriptUri}"></script>
