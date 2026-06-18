@@ -8108,8 +8108,12 @@ let sidebarContentHeight = 0;
 // Clicking the blank area of the Labels or Instances panel (anywhere that isn't
 // a row) clears the selection — mirrors clicking empty space on the canvas.
 function clearSelectionFromPanelBlank(e) {
-    if (e.target.closest('li')) return;      // a row click is handled by the row itself
-    if (selectedShapeIndices.size === 0) return;
+    if (e.target.closest('li')) return;                          // a row click is handled by the row itself
+    if (e.target.closest('.sidebar-section-header')) return;     // the title/count header is not "blank area"
+    if (!isEditingShape && selectedShapeIndices.size === 0) return; // nothing to clear
+    // Clicking away while vertex-editing discards the edit, matching ESC and an
+    // empty-canvas click (exitShapeEditMode keeps the selection, which we then clear).
+    if (isEditingShape) exitShapeEditMode(false);
     clearSelection();
     renderShapeList();
     renderLabelsList();
