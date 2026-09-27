@@ -137,7 +137,76 @@ describe('getImageMetadata', () => {
             await fs.rm(root, { recursive: true, force: true });
         }
     });
+
+    async function jpegMeta(bytes: Buffer) {
+        const root = await fs.mkdtemp(path.join(os.tmpdir(), 'labeleditor-meta-'));
+        try {
+            const p = path.join(root, 'sample.jpg');
+            await fs.writeFile(p, bytes);
+            return await getImageMetadata(p);
+        } finally {
+            await fs.rm(root, { recursive: true, force: true });
+        }
+    }
+
+    it('reads JPEG dimensions and JFIF DPI', async () => {
+        const meta = await jpegMeta(makeJpeg([jfifSegment(2, 118, 118)], 640, 480));
+        assert.equal(meta.width, 640);
+        assert.equal(meta.height, 480);
+        assert.equal(meta.bitDepth, 24);
+        assert.equal(meta.dpiX, 300);
+    });
+
+    it('finds the JPEG SOF marker past 64 KB of EXIF/XMP data', async () => {
+        const big = [jpegSegment(0xE1, Buffer.alloc(60000, 0x41)), jpegSegment(0xE2, Buffer.alloc(60000, 0x42))];
+        const meta = await jpegMeta(makeJpeg(big, 4032, 3024));
+        assert.equal(meta.width, 4032);
+        assert.equal(meta.height, 3024);
+    });
+
+    it('skips JPEG fill bytes between segments', async () => {
+        const fill = Buffer.from([0xFF, 0xFF, 0xFF]);
+        const meta = await jpegMeta(makeJpeg([jfifSegment(1, 72, 72), fill], 10, 20));
+        assert.equal(meta.width, 10);
+        assert.equal(meta.height, 20);
+    });
+
+    it('leaves JPEG dimensions undefined for a truncated file', async () => {
+        const full = makeJpeg([jpegSegment(0xE1, Buffer.alloc(1000))], 10, 20);
+        const meta = await jpegMeta(full.subarray(0, 600));
+        assert.equal(meta.width, undefined);
+        assert.equal(meta.height, undefined);
+    });
 });
+
+function jpegSegment(marker: number, data: Buffer): Buffer {
+    const head = Buffer.from([0xFF, marker, 0, 0]);
+    head.writeUInt16BE(data.length + 2, 2);
+    return Buffer.concat([head, data]);
+}
+
+function jfifSegment(unit: number, xDen: number, yDen: number): Buffer {
+    const d = Buffer.alloc(14);
+    d.write('JFIF\0', 0, 'ascii');
+    d[5] = 1; d[6] = 1; d[7] = unit;
+    d.writeUInt16BE(xDen, 8);
+    d.writeUInt16BE(yDen, 10);
+    return jpegSegment(0xE0, d);
+}
+
+function makeJpeg(segments: Buffer[], width: number, height: number): Buffer {
+    const sof = Buffer.alloc(15);
+    sof[0] = 8; // precision
+    sof.writeUInt16BE(height, 1);
+    sof.writeUInt16BE(width, 3);
+    sof[5] = 3; // components
+    return Buffer.concat([
+        Buffer.from([0xFF, 0xD8]),
+        ...segments,
+        jpegSegment(0xC0, sof),
+        Buffer.from([0xFF, 0xDA, 0x00, 0x02, 0xFF, 0xD9])
+    ]);
+}
 
 function makePngWithPhys(options: { bitDepth: number; colorType: number; ppmX: number; ppmY: number }): Buffer {
     const signature = Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);

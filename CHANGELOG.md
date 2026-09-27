@@ -14,6 +14,7 @@ Security hardening: data read from disk (file names, annotation JSON) and messag
 
 ### Fixed
 - **macOS: Cmd shortcuts**: shortcuts listed as `Ctrl+…` (save, undo/redo, select all, merge, rename, …) now also fire with `Cmd` on macOS and are shown as `Cmd+…` in tooltips and the Keyboard Shortcuts settings; recording a shortcut with `Cmd` stores it as the primary modifier.
+- **JPEG dimensions past 64 KB**: image size is now read by walking the JPEG segments instead of scanning only the first 64 KB, so photos with large EXIF/XMP/ICC blocks no longer lose their dimensions (which left YOLO labels unloaded).
 
 ## [1.4.2] - 2026-06-18
 

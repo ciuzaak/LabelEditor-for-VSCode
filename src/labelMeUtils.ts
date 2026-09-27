@@ -217,7 +217,7 @@ export async function getImageMetadata(filePath: string): Promise<ImageMetadata>
             if (isPng) {
                 await readPngMetadata(fd, stat.size, result);
             } else if (isJpeg) {
-                await readJpegMetadata(fd, result);
+                await readJpegMetadata(fd, stat.size, result);
             } else if (isBmp) {
                 await readBmpMetadata(fd, result);
             }
@@ -289,52 +289,54 @@ async function readPngMetadata(fd: fs.FileHandle, fileSize: number, result: Imag
     }
 }
 
-async function readJpegMetadata(fd: fs.FileHandle, result: ImageMetadata): Promise<void> {
-    const buf = Buffer.alloc(65536);
-    const { bytesRead } = await fd.read(buf, 0, 65536, 0);
+async function readJpegMetadata(fd: fs.FileHandle, fileSize: number, result: ImageMetadata): Promise<void> {
+    // Walk the marker segments with positioned reads instead of scanning a fixed
+    // prefix: EXIF thumbnails, XMP and ICC profiles routinely push the SOF
+    // marker well past 64 KB, and missing dimensions make YOLO labels unloadable.
+    const head = Buffer.alloc(4);
+    const body = Buffer.alloc(14);
+    let offset = 2; // skip SOI
+    for (let segments = 0; segments < 4096 && offset + 4 <= fileSize; segments++) {
+        const { bytesRead } = await fd.read(head, 0, 4, offset);
+        if (bytesRead < 2 || head[0] !== 0xFF) break;
+        const marker = head[1];
+        // Fill bytes: a marker may be preceded by any number of 0xFF.
+        if (marker === 0xFF) { offset += 1; continue; }
+        // Standalone markers carry no length field.
+        if (marker === 0x01 || (marker >= 0xD0 && marker <= 0xD8)) { offset += 2; continue; }
+        if (marker === 0xD9 || marker === 0xDA || bytesRead < 4) break; // EOI / start of scan
+        const segLen = head.readUInt16BE(2);
+        if (segLen < 2 || offset + 2 + segLen > fileSize) break;
 
-    let i = 2;
-    while (i < bytesRead - 1) {
-        if (buf[i] !== 0xFF) {
-            i++;
-            continue;
-        }
-        while (i + 1 < bytesRead && buf[i + 1] === 0xFF) i++;
-        if (i + 1 >= bytesRead) break;
-        const marker = buf[i + 1];
-
-        if (marker === 0xE0 && i + 16 < bytesRead) {
-            const unit = buf[i + 11];
-            const xDen = buf.readUInt16BE(i + 12);
-            const yDen = buf.readUInt16BE(i + 14);
-            if (unit === 1) {
-                result.dpiX = xDen;
-                result.dpiY = yDen;
-            } else if (unit === 2) {
-                result.dpiX = Math.round(xDen * 2.54);
-                result.dpiY = Math.round(yDen * 2.54);
+        if (marker === 0xE0 && segLen >= 14) {
+            const { bytesRead: n } = await fd.read(body, 0, 14, offset + 4);
+            // JFIF: "JFIF\0" (5) + version (2) + unit (1) + xDensity (2) + yDensity (2)
+            if (n >= 12 && body.toString('ascii', 0, 4) === 'JFIF') {
+                const unit = body[7];
+                const xDen = body.readUInt16BE(8);
+                const yDen = body.readUInt16BE(10);
+                if (unit === 1) {
+                    result.dpiX = xDen;
+                    result.dpiY = yDen;
+                } else if (unit === 2) {
+                    result.dpiX = Math.round(xDen * 2.54);
+                    result.dpiY = Math.round(yDen * 2.54);
+                }
             }
         }
 
-        if ((marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC)
-            && i + 9 < bytesRead) {
-            const precision = buf[i + 4];
+        if (marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC) {
             // SOF segment: precision (1) + height (2) + width (2) + components (1)
-            result.height = buf.readUInt16BE(i + 5);
-            result.width = buf.readUInt16BE(i + 7);
-            const numComponents = buf[i + 9];
-            result.bitDepth = precision * numComponents;
+            const { bytesRead: n } = await fd.read(body, 0, 6, offset + 4);
+            if (n >= 6) {
+                result.height = body.readUInt16BE(1);
+                result.width = body.readUInt16BE(3);
+                result.bitDepth = body[0] * body[5];
+            }
             break;
         }
 
-        if (marker === 0xD9 || marker === 0xDA) break;
-        if (i + 3 < bytesRead) {
-            const segLen = buf.readUInt16BE(i + 2);
-            if (segLen < 2 || i + 2 + segLen > bytesRead) break;
-            i += 2 + segLen;
-        } else {
-            break;
-        }
+        offset += 2 + segLen;
     }
 
     if (!result.bitDepth) result.bitDepth = 24;
