@@ -6,9 +6,6 @@ import {
     escapeHtml,
     isValidGlobalSetting,
     sanitizeStoredSetting,
-    detectShellKind,
-    quoteShellArg,
-    buildShellCommand,
     stripTrailingSeparators,
     validateOnnxLaunchConfig,
     validateSamLaunchConfig
@@ -80,57 +77,6 @@ describe('sanitizeStoredSetting', () => {
         assert.equal(sanitizeStoredSetting('theme', 'light', 'auto'), 'light');
         assert.equal(sanitizeStoredSetting('theme', 'x";alert(1);"', 'auto'), 'auto');
         assert.equal(sanitizeStoredSetting('borderWidth', undefined, 2), 2);
-    });
-});
-
-describe('detectShellKind', () => {
-    it('classifies common shells', () => {
-        assert.equal(detectShellKind('/bin/zsh', 'darwin'), 'posix');
-        assert.equal(detectShellKind('/usr/bin/bash', 'linux'), 'posix');
-        assert.equal(detectShellKind('/opt/homebrew/bin/fish', 'darwin'), 'fish');
-        assert.equal(detectShellKind('C:\\Program Files\\PowerShell\\7\\pwsh.exe', 'win32'), 'powershell');
-        assert.equal(detectShellKind('C:\\Windows\\System32\\WindowsPowerShell\\v1.0\\powershell.exe', 'win32'), 'powershell');
-        assert.equal(detectShellKind('C:\\Windows\\System32\\cmd.exe', 'win32'), 'cmd');
-        assert.equal(detectShellKind('', 'win32'), 'powershell');
-    });
-});
-
-describe('quoteShellArg', () => {
-    it('posix: single-quotes and escapes embedded quotes', () => {
-        assert.equal(quoteShellArg(`/a b/$(rm -rf ~)/it's`, 'posix'), `'/a b/$(rm -rf ~)/it'\\''s'`);
-    });
-
-    it('fish: escapes backslashes and quotes', () => {
-        assert.equal(quoteShellArg(`a\\b'c`, 'fish'), `'a\\\\b\\'c'`);
-    });
-
-    it('powershell: doubles single quotes, including typographic ones', () => {
-        assert.equal(quoteShellArg(`C:\\x\\$env:A\\it's\u2019`, 'powershell'), `'C:\\x\\$env:A\\it''s\u2019\u2019'`);
-    });
-
-    it('cmd: double-quotes, rejects characters it cannot escape', () => {
-        assert.equal(quoteShellArg('C:\\a b\\m & n', 'cmd'), '"C:\\a b\\m & n"');
-        assert.throws(() => quoteShellArg('a"b', 'cmd'));
-        assert.throws(() => quoteShellArg('%PATH%', 'cmd'));
-    });
-
-    it('rejects control characters in every shell', () => {
-        for (const kind of ['posix', 'fish', 'powershell', 'cmd'] as const) {
-            assert.throws(() => quoteShellArg('a\nrm -rf ~', kind));
-        }
-    });
-});
-
-describe('buildShellCommand', () => {
-    it('quotes the executable and every argument', () => {
-        assert.equal(
-            buildShellCommand('python', ['/s.py', '--device', 'cpu'], 'posix'),
-            `'python' '/s.py' '--device' 'cpu'`
-        );
-    });
-
-    it('prefixes the PowerShell call operator', () => {
-        assert.equal(buildShellCommand('python', ['s.py'], 'powershell'), `& 'python' 's.py'`);
     });
 });
 

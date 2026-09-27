@@ -1,7 +1,7 @@
 /**
  * Pure helpers that keep untrusted data (file names, annotation JSON, persisted
- * settings, webview messages) from turning into code — in the webview HTML or
- * in the shell command that launches the bundled Python scripts.
+ * settings, webview messages) from turning into code in the webview HTML, and
+ * that validate the configs used to launch the bundled Python scripts.
  *
  * No `vscode` import so the module stays unit-testable under plain Node.
  */
@@ -124,59 +124,12 @@ export function sanitizeStoredSetting<T>(key: string, stored: unknown, fallback:
 }
 
 // ---------------------------------------------------------------------------
-// Python launcher (webview config → terminal command)
+// Python launcher (webview config → process arguments)
 // ---------------------------------------------------------------------------
 
-export type ShellKind = 'posix' | 'fish' | 'powershell' | 'cmd';
-
-/** Classify VS Code's default shell (`vscode.env.shell`) for quoting purposes. */
-export function detectShellKind(shellPath: string, platform: string): ShellKind {
-    const base = shellPath.split(/[\\/]/).pop()!.toLowerCase().replace(/\.exe$/, '');
-    if (base === 'pwsh' || base === 'powershell') return 'powershell';
-    if (base === 'cmd') return 'cmd';
-    if (base === 'fish') return 'fish';
-    if (!base && platform === 'win32') return 'powershell';
-    return 'posix';
-}
-
 /**
- * Quote one argument so the shell passes it to the program verbatim — no
- * variable, command or glob expansion. Throws on input that cannot be quoted
- * safely (control characters would split the line `sendText` submits; cmd.exe
- * has no way to escape `"` or `%` inside a quoted argument).
- */
-export function quoteShellArg(arg: string, kind: ShellKind): string {
-    if (/[\x00-\x1f\x7f]/.test(arg)) {
-        throw new Error('argument contains control characters');
-    }
-    switch (kind) {
-        case 'posix':
-            return `'${arg.replace(/'/g, `'\\''`)}'`;
-        case 'fish':
-            // Inside fish single quotes only \\ and \' are escapes.
-            return `'${arg.replace(/\\/g, '\\\\').replace(/'/g, `\\'`)}'`;
-        case 'powershell':
-            // PowerShell also treats the typographic single quotes as quote chars.
-            return `'${arg.replace(/['\u2018\u2019\u201a\u201b]/g, '$&$&')}'`;
-        case 'cmd':
-            if (/["%]/.test(arg)) {
-                throw new Error('argument contains characters cmd.exe cannot quote (" or %)');
-            }
-            return `"${arg}"`;
-    }
-}
-
-/** Build a complete command line that runs `exe` with `args`, all quoted. */
-export function buildShellCommand(exe: string, args: string[], kind: ShellKind): string {
-    const parts = [exe, ...args].map(a => quoteShellArg(a, kind));
-    // PowerShell needs the call operator to run a quoted executable path.
-    return (kind === 'powershell' ? '& ' : '') + parts.join(' ');
-}
-
-/**
- * Drop trailing path separators (keeping a bare root such as `/` or `C:\`).
- * On Windows a directory argument ending in `\` would otherwise produce `...\"`,
- * which the C runtime parses as an escaped quote.
+ * Drop trailing path separators (keeping a bare root such as `/` or `C:\`),
+ * so the model directory is passed to the scripts in a normalised form.
  */
 export function stripTrailingSeparators(p: string): string {
     const stripped = p.replace(/[\\/]+$/, '');

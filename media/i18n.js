@@ -145,7 +145,9 @@
             'status.saveImageMismatch': 'The image changed before the save was processed; nothing was written. Please save again.',
             'status.backedUpUnreadable': '{file} could not be fully loaded; the original was backed up to {backup}.',
             'status.onnxInvalidConfig': 'ONNX Batch Infer: invalid setting ({field}).',
-            'status.pythonCommandUnsafe': '{tool}: cannot build the launch command — {reason}.',
+            'status.onnxFinished': 'ONNX Batch Infer finished: {count} images.',
+            'status.onnxFailed': 'ONNX Batch Infer failed ({reason}). See the terminal for details.',
+            'status.onnxCurrentDirty': 'ONNX results were written for the current image, but it has unsaved edits, so it was not reloaded. Saving now will replace the results.',
             'status.samServiceStarting': 'SAM Service starting on port {port}. Check the terminal for status.',
 
             // Image info popup
@@ -581,7 +583,9 @@
             'status.saveImageMismatch': '保存处理前图片已切换，未写入任何内容。请重新保存。',
             'status.backedUpUnreadable': '{file} 未能完整加载，原文件已备份为 {backup}。',
             'status.onnxInvalidConfig': 'ONNX 批量推理:设置无效({field})。',
-            'status.pythonCommandUnsafe': '{tool}:无法生成启动命令 — {reason}。',
+            'status.onnxFinished': 'ONNX 批量推理完成:{count} 张图片。',
+            'status.onnxFailed': 'ONNX 批量推理失败({reason})。详情见终端。',
+            'status.onnxCurrentDirty': 'ONNX 已为当前图片写入结果，但当前图片有未保存的修改，因此没有重新加载。现在保存会覆盖推理结果。',
             'status.samServiceStarting': 'SAM 服务正在端口 {port} 启动,请在终端查看状态。',
 
             'imageInfo.current': '当前图片',

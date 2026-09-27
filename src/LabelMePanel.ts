@@ -34,12 +34,11 @@ import {
     escapeHtml,
     isValidGlobalSetting,
     sanitizeStoredSetting,
-    detectShellKind,
-    buildShellCommand,
     validateOnnxLaunchConfig,
     validateSamLaunchConfig
 } from './webviewSecurity';
 import * as crypto from 'crypto';
+import { runPythonInTerminal, PythonRun, PythonExit } from './pythonProcess';
 
 export class LabelMePanel {
     public static readonly panels: Set<LabelMePanel> = new Set();
@@ -84,7 +83,14 @@ export class LabelMePanel {
 
     // Tracks SAM-service ports already launched in this extension-host session,
     // so a second panel doesn't try to start a conflicting server on the same port.
-    private static readonly _samServicePorts: Set<number> = new Set();
+    // SAM services started by this extension host, by port.
+    private static readonly _samServices: Map<number, PythonRun> = new Map();
+
+    /** Stop every SAM service we started (last panel closed / deactivation). */
+    public static stopSamServices(): void {
+        for (const run of LabelMePanel._samServices.values()) run.kill();
+        LabelMePanel._samServices.clear();
+    }
 
     private readonly _globalState: vscode.Memento;
 
@@ -542,9 +548,10 @@ export class LabelMePanel {
                         // Pre-check: ping the SAM service from the EXTENSION HOST. It
                         // is co-located with the service, so this works under remote-SSH
                         // (where the webview's 127.0.0.1 can't reach it) and is a real
-                        // liveness check — unlike _samServicePorts, which only tracks
-                        // whether a launch terminal is still open (the process may have
-                        // crashed). Also detects services started outside the extension.
+                        // liveness check — unlike _samServices, which only knows about
+                        // processes this extension host started (a started service may
+                        // still be loading its model). Also detects services started
+                        // outside the extension.
                         const queryPort = message.port;
                         const running = await this._samPing(queryPort);
                         this._safePost({
@@ -985,6 +992,11 @@ export class LabelMePanel {
         this._webviewReady = false;
         this._pendingNotifications = [];
         LabelMePanel.panels.delete(this);
+        // A SAM service holds the model (and GPU memory); keep it only while
+        // some editor panel could still use it.
+        if (LabelMePanel.panels.size === 0) {
+            LabelMePanel.stopSamServices();
+        }
         // Bump scan generation so any in-flight scan discards its results.
         this._scanGeneration++;
         // Stop any in-flight annotation-index build.
@@ -2474,8 +2486,8 @@ export class LabelMePanel {
      * Run ONNX batch inference via external Python script in a VS Code terminal.
      */
     private async _runOnnxBatchInfer(rawConfig: unknown) {
-        // The config comes from the webview; everything in it ends up on a
-        // shell command line, so check it against the script's accepted values.
+        // The config comes from the webview; check it against the script's
+        // accepted values before it becomes a command line.
         const validated = validateOnnxLaunchConfig(rawConfig);
         if (!validated.ok) {
             this._notify(
@@ -2523,16 +2535,6 @@ export class LabelMePanel {
             absoluteImagePaths = this._workspaceImages.map(rel => path.join(this._rootPath, rel));
         }
 
-        // Write image list to a temp JSON file.
-        // Include pid + random suffix so two panels starting inference
-        // simultaneously can't collide on the same filename.
-        const tmpDir = os.tmpdir();
-        const tmpFile = path.join(
-            tmpDir,
-            `labeleditor_onnx_images_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.json`
-        );
-        await fs.writeFile(tmpFile, JSON.stringify(absoluteImagePaths, null, 2), 'utf8');
-
         // Locate the bundled Python script
         const scriptPath = path.join(this._extensionUri.fsPath, 'scripts', 'onnx_batch_infer.py');
         if (!existsSync(scriptPath)) {
@@ -2544,70 +2546,98 @@ export class LabelMePanel {
             return;
         }
 
-        const args = [
-            scriptPath,
-            '--model_dir', config.modelDir,
-            '--images_json', tmpFile,
-            '--device', config.device,
-            '--color_format', config.colorFormat,
-            '--mode', config.mode
-        ];
+        // Inputs go through temp JSON files (image list, YOLO class names) to
+        // avoid argv length limits and encoding issues with non-ASCII names.
+        // pid + random suffix so two panels starting inference can't collide.
+        const tmpName = (kind: string) => path.join(
+            os.tmpdir(),
+            `labeleditor_onnx_${kind}_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.json`
+        );
+        const tmpFiles: string[] = [];
+        const writeTmp = async (kind: string, value: unknown) => {
+            const file = tmpName(kind);
+            tmpFiles.push(file);
+            await fs.writeFile(file, JSON.stringify(value, null, 2), 'utf8');
+            return file;
+        };
+        const removeTmpFiles = () => Promise.all(tmpFiles.map(f => fs.rm(f, { force: true }).catch(() => undefined)));
 
-        // In YOLO mode, tell the script to emit YOLO .txt labels and give it the
-        // dataset's class names (written to a temp JSON to avoid CLI quoting issues
-        // with non-ASCII names). Shapes whose label isn't a known class are skipped
-        // by the script — the batch tool does not edit data.yaml.
-        if (this._format === 'yolo') {
-            const classesTmpFile = path.join(
-                tmpDir,
-                `labeleditor_onnx_classes_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.json`
-            );
-            await fs.writeFile(classesTmpFile, JSON.stringify(this._yoloClasses, null, 2), 'utf8');
-            args.push('--format', 'yolo');
-            args.push('--class_names_json', classesTmpFile);
+        let args: string[];
+        try {
+            args = [
+                scriptPath,
+                '--model_dir', config.modelDir,
+                '--images_json', await writeTmp('images', absoluteImagePaths),
+                '--device', config.device,
+                '--color_format', config.colorFormat,
+                '--mode', config.mode
+            ];
+            // In YOLO mode the script emits YOLO .txt labels using the dataset's
+            // class names. Shapes whose label isn't a known class are skipped by
+            // the script — the batch tool does not edit data.yaml.
+            if (this._format === 'yolo') {
+                args.push('--format', 'yolo');
+                args.push('--class_names_json', await writeTmp('classes', this._yoloClasses));
+            }
+        } catch (err) {
+            await removeTmpFiles();
+            throw err;
         }
 
-        const command = this._buildPythonCommand(config.pythonPath, args, 'ONNX Batch Infer');
-        if (command === undefined) return;
-
-        // Create terminal and run
-        const onnxEnv: { [key: string]: string } = {};
+        const env: Record<string, string> = {};
         if (config.device === 'gpu' && config.gpuIndex !== undefined && config.gpuIndex >= 0) {
-            onnxEnv['CUDA_VISIBLE_DEVICES'] = String(config.gpuIndex);
+            env['CUDA_VISIBLE_DEVICES'] = String(config.gpuIndex);
         }
-        const terminal = vscode.window.createTerminal({
-            name: 'ONNX Batch Infer',
-            hideFromUser: false,
-            env: Object.keys(onnxEnv).length > 0 ? onnxEnv : undefined
-        });
-        terminal.show();
-        terminal.sendText(command);
+        const run = runPythonInTerminal({ name: 'ONNX Batch Infer', python: config.pythonPath, args, env });
+        run.terminal.show();
 
         this._notify(
             'info',
             `ONNX Batch Infer started: ${absoluteImagePaths.length} images. Check the terminal for progress.`,
             { i18nKey: 'status.onnxStarted', i18nParams: { count: absoluteImagePaths.length } }
         );
+
+        const result = await run.exited;
+        await removeTmpFiles();
+        await this._onOnnxBatchFinished(result, absoluteImagePaths);
     }
 
     /**
-     * Build the terminal command line for a bundled Python script, quoting every
-     * argument for the user's default shell. Returns undefined (after notifying)
-     * when a path contains characters that can't be passed safely.
+     * After a batch run: annotation files changed on disk behind the editor's
+     * back, so drop the search index and reload the current image — otherwise
+     * it keeps showing the old shapes and the next save overwrites the results.
      */
-    private _buildPythonCommand(pythonPath: string, args: string[], toolName: string): string | undefined {
-        const kind = detectShellKind(vscode.env.shell, process.platform);
-        try {
-            return buildShellCommand(pythonPath, args, kind);
-        } catch (err) {
-            const reason = (err as Error).message;
+    private async _onOnnxBatchFinished(result: PythonExit, processedImages: string[]) {
+        if (this._disposed) return;
+        this._annotationIndex = null;
+        this._indexBuildToken++;
+
+        if (result.error || result.code !== 0) {
+            const reason = result.error ?? (result.signal ? `terminated by ${result.signal}` : `exit code ${result.code}`);
             this._notify(
                 'error',
-                `${toolName}: cannot build the launch command — ${reason}.`,
-                { i18nKey: 'status.pythonCommandUnsafe', i18nParams: { tool: toolName, reason } }
+                `ONNX Batch Infer failed (${reason}). See the terminal for details.`,
+                { i18nKey: 'status.onnxFailed', i18nParams: { reason } }
             );
-            return undefined;
+            // A partial run may still have written files; fall through to reload.
+        } else {
+            this._notify(
+                'success',
+                `ONNX Batch Infer finished: ${processedImages.length} images.`,
+                { i18nKey: 'status.onnxFinished', i18nParams: { count: processedImages.length } }
+            );
         }
+
+        if (!processedImages.includes(this._imageUri.fsPath)) return;
+        if (this._isDirty) {
+            this._notify(
+                'warn',
+                'ONNX results were written for the current image, but it has unsaved edits, so it was not reloaded. Saving now will replace the results.',
+                { i18nKey: 'status.onnxCurrentDirty' }
+            );
+            return;
+        }
+        await this._sendImageUpdate();
     }
 
     /**
@@ -2663,7 +2693,8 @@ export class LabelMePanel {
     }
 
     /**
-     * Run SAM service via external Python script in a VS Code terminal.
+     * Run the SAM service (bundled Python script) as a child process whose
+     * output is shown in a dedicated terminal.
      */
     private async _runSamService(rawConfig: unknown) {
         const validated = validateSamLaunchConfig(rawConfig);
@@ -2693,7 +2724,7 @@ export class LabelMePanel {
 
         // Avoid launching a second SAM service on a port we already started one on
         // in this extension-host session (e.g. from another panel).
-        if (LabelMePanel._samServicePorts.has(config.port)) {
+        if (LabelMePanel._samServices.has(config.port)) {
             this._notify(
                 'warn',
                 `SAM Service already running on port ${config.port} from another panel. Reusing it; change the port in settings if you want a separate instance.`,
@@ -2713,14 +2744,6 @@ export class LabelMePanel {
             return;
         }
 
-        const command = this._buildPythonCommand(config.pythonPath, [
-            scriptPath,
-            '--model_dir', config.modelDir,
-            '--device', config.device,
-            '--port', String(config.port)
-        ], 'SAM Service');
-        if (command === undefined) return;
-
         // The service requires this token on /encode and /decode so other local
         // pages/processes can't drive it. Passed via env, not argv, to keep it
         // out of the process list.
@@ -2728,24 +2751,21 @@ export class LabelMePanel {
         if (config.device === 'gpu' && config.gpuIndex !== undefined && config.gpuIndex >= 0) {
             env['CUDA_VISIBLE_DEVICES'] = String(config.gpuIndex);
         }
-        const terminal = vscode.window.createTerminal({
+        const run = runPythonInTerminal({
             name: 'SAM Service',
-            hideFromUser: false,
+            python: config.pythonPath,
+            args: [scriptPath, '--model_dir', config.modelDir, '--device', config.device, '--port', String(config.port)],
             env
         });
-
-        // Reserve the port and attach the close listener BEFORE launching so a
-        // terminal that exits immediately still releases its port.
-        LabelMePanel._samServicePorts.add(config.port);
-        const disposeListener = vscode.window.onDidCloseTerminal(closed => {
-            if (closed === terminal) {
-                LabelMePanel._samServicePorts.delete(config.port);
-                disposeListener.dispose();
+        // The port stays reserved until the process exits — including when the
+        // user closes the terminal or the last editor panel is closed.
+        LabelMePanel._samServices.set(config.port, run);
+        void run.exited.then(() => {
+            if (LabelMePanel._samServices.get(config.port) === run) {
+                LabelMePanel._samServices.delete(config.port);
             }
         });
-
-        terminal.show();
-        terminal.sendText(command);
+        run.terminal.show();
 
         this._notify(
             'info',

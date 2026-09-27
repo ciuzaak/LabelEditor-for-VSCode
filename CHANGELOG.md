@@ -4,11 +4,11 @@ All notable changes to the "LabelEditor for VSCode" extension will be documented
 
 ## [Unreleased]
 
-Security hardening: data read from disk (file names, annotation JSON) and messages from the webview can no longer become code in the webview or in the terminal that launches the Python tools.
+Security hardening: data read from disk (file names, annotation JSON) and messages from the webview can no longer become code in the webview or in the command that launches the Python tools.
 
 ### Security
 - **Webview Content-Security-Policy**: the editor page now ships a strict CSP (nonce-only scripts). File names, annotation JSON and persisted settings are serialized with `<`/`>`/`&` escaped before being inlined, and the toolbar file name is HTML-escaped — a label such as `</script><script>…` or a file named `a".png` is shown as text instead of breaking or hijacking the page.
-- **Safe Python launch**: ONNX batch inference and the SAM service validate their settings (device, colour format, mode, scope, port) against the scripts' accepted values and quote every argument for the user's shell (bash/zsh, fish, PowerShell, cmd), so paths containing `$(…)`, quotes or backticks are passed verbatim. A model directory ending in `\` no longer mangles the Windows command line.
+- **Safe Python launch**: ONNX batch inference and the SAM service validate their settings (device, colour format, mode, scope, port) against the scripts' accepted values, and the interpreter is started directly with an argument list — no shell is involved, so paths containing `$(…)`, quotes or backticks are passed verbatim.
 - **Webview message validation**: `saveGlobalSettings` accepts only known keys with correctly typed values (stored values are re-checked on load), and image navigation only accepts images from the scanned list — a path like `../../x` is ignored.
 - **SAM service access control**: the extension passes a per-install token to the service it launches (`LABELEDITOR_SAM_TOKEN`); `/encode` and `/decode` reject requests without it, CORS no longer allows every origin, and oversized request bodies are refused. A service started by hand without a token only accepts VS Code webview origins. **Restart a SAM service left running from an older version** — it does not accept the new token header.
 
@@ -18,6 +18,11 @@ Security hardening: data read from disk (file names, annotation JSON) and messag
 - **Fast navigation could mix images**: holding the next/previous key could show one image with another image's annotations, and a save in that window wrote them to the wrong file. Image loads are now sequenced (a stale load is dropped), and each save carries the image path — a save that no longer matches the current image is refused with a message instead of being written.
 - **Unreadable annotations are backed up before being overwritten**: if an existing annotation file could not be fully loaded (invalid LabelMe JSON, an unreadable file, YOLO lines the parser had to drop, or unknown image dimensions), the first save now copies the original to `<file>.bak` (timestamped if that exists) before writing, instead of silently replacing it.
 - **EXIF orientation (rotated phone photos)**: JPEG dimensions now honour the EXIF orientation tag, matching how the editor (Chromium), OpenCV and YOLO/LabelMe tools display the image. Previously, for orientations 5–8 YOLO labels loaded with swapped width/height (boxes in the wrong place) and every save re-wrote them distorted; YOLO/COCO export used the unrotated size too.
+- **Python tools are tracked, not fire-and-forget**: ONNX batch inference and the SAM service now run as child processes whose output is shown in their terminal, so the extension knows when they finish.
+  - When a batch run ends, the current image is **reloaded with the new annotations** (previously it kept showing the old shapes and the next save overwrote the results); if it has unsaved edits you get a warning instead. Success or failure (with the exit code) is reported, and the search index is refreshed.
+  - The temporary image-list / class-name files are deleted afterwards (they were never removed before).
+  - Closing the terminal or pressing Ctrl+C in it stops the process. A SAM service is stopped when the last LabelEditor panel closes or VS Code shuts down, freeing its model and GPU memory.
+  - Because no shell is used, `python` is resolved from VS Code's environment rather than your terminal profile — if you relied on an environment activated only in the terminal, set the Python path in the ONNX/SAM settings.
 
 ## [1.4.2] - 2026-06-18
 

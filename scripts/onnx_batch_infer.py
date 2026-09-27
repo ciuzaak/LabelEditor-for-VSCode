@@ -314,7 +314,7 @@ def main():
     print("-" * 60)
     print(f"Done! Processed: {processed}, Skipped: {skipped}, Errors: {errors}")
     if processed > 0:
-        print("Tip: Switch to another image and back (or reopen) in LabelEditor to see new annotations.")
+        print("LabelEditor reloads the current image automatically; other images show the new annotations when opened.")
 
 
 if __name__ == "__main__":

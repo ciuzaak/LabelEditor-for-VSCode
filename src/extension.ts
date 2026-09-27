@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { LabelMePanel } from './LabelMePanel';
+import { killAllPythonRuns } from './pythonProcess';
 
 export function activate(context: vscode.ExtensionContext) {
     let disposable = vscode.commands.registerCommand('labeleditor-vscode.openEditor', (uri: vscode.Uri) => {
@@ -19,4 +20,8 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(yoloDisposable);
 }
 
-export function deactivate() { }
+export function deactivate() {
+    // Don't leave SAM services / batch runs orphaned when VS Code shuts down.
+    LabelMePanel.stopSamServices();
+    killAllPythonRuns();
+}
