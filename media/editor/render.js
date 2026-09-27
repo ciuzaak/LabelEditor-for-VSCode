@@ -449,6 +449,61 @@ function drawSVGAnnotations(mouseEvent) {
     if (zoomLevel >= PIXEL_VALUES_ZOOM && img.width > 0 && img.height > 0) {
         drawPixelValues();
     }
+
+    // --- Draw dashed crosshair guide in drawing modes (color adapts to image brightness) ---
+    if (crosshairEnabled && crosshairPos && DRAWING_MODES.includes(currentMode) && img.width > 0 && img.height > 0) {
+        const dash = `${6 / zoomLevel} ${4 / zoomLevel}`;
+        const ccx = Math.min(img.width - 1, Math.max(0, Math.round(crosshairPos.x)));
+        const ccy = Math.min(img.height - 1, Math.max(0, Math.round(crosshairPos.y)));
+        const lineColor = getCrosshairColor(ccx, ccy);
+        for (const [x1, y1, x2, y2] of [[0, ccy, img.width, ccy], [ccx, 0, ccx, img.height]]) {
+            const lineEl = document.createElementNS(SVG_NS, 'line');
+            lineEl.setAttribute('x1', x1); lineEl.setAttribute('y1', y1);
+            lineEl.setAttribute('x2', x2); lineEl.setAttribute('y2', y2);
+            lineEl.setAttribute('stroke', lineColor);
+            lineEl.setAttribute('stroke-width', 1.5 / zoomLevel);
+            lineEl.setAttribute('stroke-dasharray', dash);
+            lineEl.style.pointerEvents = 'none';
+            svgOverlay.appendChild(lineEl);
+        }
+    }
+}
+
+// Sample luminance along the crosshair row/column and pick a high-contrast
+// line color. Emulates the CSS brightness/contrast filter applied to the
+// canvas element, since getImageData reads unfiltered pixels.
+// Results are cached per 16px cursor bucket, and invalidated whenever the
+// image or the channel/CLAHE/brightness/contrast state changes.
+const CROSSHAIR_BUCKET = 16; // image px quantization for the luminance cache
+let crosshairColorCache = null;
+
+function getCrosshairColor(cx, cy) {
+    const sig = `${Math.round(cx / CROSSHAIR_BUCKET)}_${Math.round(cy / CROSSHAIR_BUCKET)}_` +
+        `${currentImageLoadId}_${img.width}x${img.height}_` +
+        `${brightness}_${contrast}_${selectedChannel}_${claheEnabled}`;
+    if (crosshairColorCache && crosshairColorCache.sig === sig) {
+        return crosshairColorCache.color;
+    }
+
+    let lum = 0.5;
+    try {
+        const row = ctx.getImageData(0, cy, img.width, 1).data;
+        const col = ctx.getImageData(cx, 0, 1, img.height).data;
+        let sum = 0, n = 0;
+        for (let i = 0; i < row.length; i += 16) { // sample every 4th pixel
+            sum += 0.299 * row[i] + 0.587 * row[i + 1] + 0.114 * row[i + 2];
+            n++;
+        }
+        for (let i = 0; i < col.length; i += 16) {
+            sum += 0.299 * col[i] + 0.587 * col[i + 1] + 0.114 * col[i + 2];
+            n++;
+        }
+        if (n > 0) lum = (sum / n) / 255;
+    } catch (e) { /* tainted canvas or read failure: use mid gray */ }
+    lum = Math.min(1, Math.max(0, ((lum - 0.5) * (contrast / 100) + 0.5) * (brightness / 100)));
+    const color = lum > 0.5 ? 'rgba(0, 110, 40, 0.95)' : 'rgba(0, 255, 120, 0.95)';
+    crosshairColorCache = { sig, color };
+    return color;
 }
 
 // Label text metrics at a 12px screen size, measured once per label with a

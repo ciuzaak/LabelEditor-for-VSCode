@@ -865,6 +865,7 @@ document.addEventListener('mouseup', () => {
 
 // Initialize image browser list
 renderImageBrowserList();
+updateImageCount(); // seed the top-toolbar position counter before the first list update
 
 // Signal the extension that the webview is fully initialized and ready to receive messages.
 // This is critical: postMessage from the extension can be lost if sent before
