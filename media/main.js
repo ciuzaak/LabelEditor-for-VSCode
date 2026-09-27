@@ -8354,6 +8354,15 @@ if (samModelDirInput_) {
 
 // --- SAM Service Communication ---
 
+// /encode and /decode require the shared token the extension passes to the
+// service it launches (LABELEDITOR_SAM_TOKEN); /ping stays unauthenticated.
+function samRequestHeaders() {
+    return {
+        'Content-Type': 'application/json',
+        'X-LabelEditor-Token': initialGlobalSettings.samAuthToken || ''
+    };
+}
+
 async function samPingService() {
     try {
         const resp = await fetch(`http://127.0.0.1:${samServicePort}/ping`, { signal: AbortSignal.timeout(100) });
@@ -8515,7 +8524,7 @@ async function samEncode(imagePath, crop, adjustSig) {
 
             const resp = await fetch(`http://127.0.0.1:${samServicePort}/encode`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: samRequestHeaders(),
                 body: JSON.stringify(payload)
             });
             const data = await resp.json();
@@ -8659,7 +8668,7 @@ async function samDecode() {
     try {
         const resp = await fetch(`http://127.0.0.1:${samServicePort}/decode`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: samRequestHeaders(),
             body: JSON.stringify({ prompts: decodedPrompts })
         });
         const data = await resp.json();

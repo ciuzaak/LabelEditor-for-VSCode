@@ -39,6 +39,7 @@ import {
     validateOnnxLaunchConfig,
     validateSamLaunchConfig
 } from './webviewSecurity';
+import * as crypto from 'crypto';
 
 export class LabelMePanel {
     public static readonly panels: Set<LabelMePanel> = new Set();
@@ -1143,6 +1144,7 @@ export class LabelMePanel {
             samEncodeMode: setting('samEncodeMode', 'full'),
             samEncodeAdjusted: setting('samEncodeAdjusted', false),
             samOutputFormat: setting('samOutputFormat', 'polygon'),
+            samAuthToken: this._getSamAuthToken(),
             drawClickThrough: setting('drawClickThrough', false),
             showShapeLabels: setting('showShapeLabels', false),
             samGpuIndex: setting('samGpuIndex', -1),
@@ -2546,6 +2548,20 @@ export class LabelMePanel {
     }
 
     /**
+     * Shared secret between the extension and the SAM service it launches.
+     * Stable across sessions so a service started earlier keeps working with
+     * newly opened panels. Not in the webview-writable settings allowlist.
+     */
+    private _getSamAuthToken(): string {
+        let token = this._globalState.get<string>('samAuthToken');
+        if (typeof token !== 'string' || !/^[0-9a-f]{48}$/.test(token)) {
+            token = crypto.randomBytes(24).toString('hex');
+            void this._globalState.update('samAuthToken', token);
+        }
+        return token;
+    }
+
+    /**
      * Ping a SAM service on 127.0.0.1:<port>/ping from the extension host (Node,
      * co-located with the service — reaches it even under remote-SSH). Resolves
      * true only if the service answers with { ok: true }. Any error/timeout =>
@@ -2642,15 +2658,17 @@ export class LabelMePanel {
         ], 'SAM Service');
         if (command === undefined) return;
 
-        // Create terminal and run
-        const env: { [key: string]: string } = {};
+        // The service requires this token on /encode and /decode so other local
+        // pages/processes can't drive it. Passed via env, not argv, to keep it
+        // out of the process list.
+        const env: { [key: string]: string } = { LABELEDITOR_SAM_TOKEN: this._getSamAuthToken() };
         if (config.device === 'gpu' && config.gpuIndex !== undefined && config.gpuIndex >= 0) {
             env['CUDA_VISIBLE_DEVICES'] = String(config.gpuIndex);
         }
         const terminal = vscode.window.createTerminal({
             name: 'SAM Service',
             hideFromUser: false,
-            env: Object.keys(env).length > 0 ? env : undefined
+            env
         });
 
         // Reserve the port and attach the close listener BEFORE launching so a

@@ -10,6 +10,7 @@ Security hardening: data read from disk (file names, annotation JSON) and messag
 - **Webview Content-Security-Policy**: the editor page now ships a strict CSP (nonce-only scripts). File names, annotation JSON and persisted settings are serialized with `<`/`>`/`&` escaped before being inlined, and the toolbar file name is HTML-escaped — a label such as `</script><script>…` or a file named `a".png` is shown as text instead of breaking or hijacking the page.
 - **Safe Python launch**: ONNX batch inference and the SAM service validate their settings (device, colour format, mode, scope, port) against the scripts' accepted values and quote every argument for the user's shell (bash/zsh, fish, PowerShell, cmd), so paths containing `$(…)`, quotes or backticks are passed verbatim. A model directory ending in `\` no longer mangles the Windows command line.
 - **Webview message validation**: `saveGlobalSettings` accepts only known keys with correctly typed values (stored values are re-checked on load), and image navigation only accepts images from the scanned list — a path like `../../x` is ignored.
+- **SAM service access control**: the extension passes a per-install token to the service it launches (`LABELEDITOR_SAM_TOKEN`); `/encode` and `/decode` reject requests without it, CORS no longer allows every origin, and oversized request bodies are refused. A service started by hand without a token only accepts VS Code webview origins. **Restart a SAM service left running from an older version** — it does not accept the new token header.
 
 ## [1.4.2] - 2026-06-18
 

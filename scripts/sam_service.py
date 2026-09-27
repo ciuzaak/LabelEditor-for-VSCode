@@ -7,6 +7,7 @@ Supports both SAM1 and SAM2 model variants via auto-detection.
 
 import argparse
 import base64
+import hmac
 import json
 import os
 import sys
@@ -298,23 +299,56 @@ def load_model(model_dir, device):
 # HTTP Request Handler
 # ---------------------------------------------------------------------------
 
+# Upper bound on a request body. The largest legitimate payload is the
+# base64 PNG of an adjusted full-resolution view.
+MAX_BODY_BYTES = 512 * 1024 * 1024
+
+TOKEN_HEADER = "X-LabelEditor-Token"
+WEBVIEW_ORIGIN_PREFIX = "vscode-webview://"
+
 class SAMHandler(BaseHTTPRequestHandler):
     model = None
     cached_embedding = None
     cached_image_path = None
     cached_crop = None  # {"x": int, "y": int, "w": int, "h": int} or None
     cached_adjust_sig = None  # Signature of image-adjustment state (None when raw original was encoded)
+    # Shared secret set by the extension (LABELEDITOR_SAM_TOKEN). When set,
+    # /encode and /decode require it; when unset (service started by hand),
+    # only VS Code webview origins are accepted.
+    auth_token = None
 
     def log_message(self, format, *args):
         """Override to add timestamp and flush."""
         print(f"[{time.strftime('%H:%M:%S')}] {format % args}", flush=True)
 
+    def _origin_allowed(self):
+        """True if the request's Origin (if any) may talk to this service.
+
+        Non-browser clients (the extension host's ping, curl) send no Origin.
+        With a token configured any origin may attempt a request, because the
+        token check rejects it anyway; without one, only webviews are allowed
+        so arbitrary web pages can't drive the service.
+        """
+        origin = self.headers.get("Origin")
+        if origin is None or SAMHandler.auth_token:
+            return True
+        return origin.startswith(WEBVIEW_ORIGIN_PREFIX)
+
+    def _token_ok(self):
+        if not SAMHandler.auth_token:
+            return True
+        supplied = self.headers.get(TOKEN_HEADER, "")
+        return hmac.compare_digest(supplied.encode("utf-8"), SAMHandler.auth_token.encode("utf-8"))
+
     def _set_headers(self, status=200):
         self.send_response(status)
         self.send_header("Content-Type", "application/json")
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        origin = self.headers.get("Origin")
+        if origin is not None and self._origin_allowed():
+            self.send_header("Access-Control-Allow-Origin", origin)
+            self.send_header("Vary", "Origin")
+            self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+            self.send_header("Access-Control-Allow-Headers", f"Content-Type, {TOKEN_HEADER}")
         self.end_headers()
 
     def _send_json(self, data, status=200):
@@ -330,15 +364,33 @@ class SAMHandler(BaseHTTPRequestHandler):
 
     def do_OPTIONS(self):
         """Handle CORS preflight."""
-        self._set_headers(204)
+        self._set_headers(204 if self._origin_allowed() else 403)
 
     def do_GET(self):
+        if not self._origin_allowed():
+            self._send_json({"error": "Origin not allowed"}, 403)
+            return
         if self.path == "/ping":
             self._send_json({"ok": True, "status": "running"})
         else:
             self._send_json({"error": "Not found"}, 404)
 
     def do_POST(self):
+        # Reject before reading the body or touching the filesystem, so an
+        # unauthorised caller learns nothing (e.g. whether a path exists).
+        if not self._origin_allowed():
+            self._send_json({"error": "Origin not allowed"}, 403)
+            return
+        if not self._token_ok():
+            self._send_json({"error": "Missing or invalid token"}, 401)
+            return
+        try:
+            content_length = int(self.headers.get("Content-Length", 0))
+        except ValueError:
+            content_length = -1
+        if content_length < 0 or content_length > MAX_BODY_BYTES:
+            self._send_json({"error": "Invalid or too large request body"}, 413)
+            return
         try:
             body = self._read_body()
 
@@ -514,6 +566,8 @@ def main():
     parser.add_argument("--port", type=int, default=8765)
     args = parser.parse_args()
 
+    SAMHandler.auth_token = os.environ.get("LABELEDITOR_SAM_TOKEN") or None
+
     print("=" * 60)
     print("SAM Service for LabelEditor-for-VSCode")
     print("=" * 60)
@@ -527,6 +581,10 @@ def main():
     print("-" * 60)
     print(f"Server listening on http://127.0.0.1:{args.port}")
     print("Endpoints: /ping, /encode, /decode")
+    if SAMHandler.auth_token:
+        print("Auth: token required for /encode and /decode")
+    else:
+        print("Auth: no token set; accepting VS Code webview origins only")
     print("Press Ctrl+C to stop.")
     print("-" * 60, flush=True)
 
