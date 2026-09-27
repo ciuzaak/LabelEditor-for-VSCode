@@ -8,3 +8,5 @@ samples/
 .DS_Store
 *.log
 __pycache__/
+media/editor.bundle.js
+media/editor.bundle.js.map

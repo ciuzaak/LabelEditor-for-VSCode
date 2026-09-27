@@ -74,9 +74,9 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run clean && npm run compile",
-    "clean": "node -e \"require('fs').rmSync('out', { recursive: true, force: true })\"",
-    "compile": "tsc -p ./",
-    "watch": "tsc -watch -p ./",
+    "clean": "node -e \"const fs = require('fs'); for (const p of ['out', 'media/editor.bundle.js', 'media/editor.bundle.js.map']) fs.rmSync(p, { recursive: true, force: true })\"",
+    "compile": "tsc -p ./ && node build/bundle-webview.js",
+    "watch": "node build/bundle-webview.js --watch",
     "test": "node -e \"require('fs').rmSync('out-test', { recursive: true, force: true })\" && tsc -p ./tsconfig.test.json && node --test \"out-test/test/**/*.test.js\"",
     "vendor": "node -e \"require('fs').copyFileSync('node_modules/polygon-clipping/dist/polygon-clipping.umd.min.js', 'media/polygon-clipping.umd.min.js')\"",
     "package": "vsce package"

@@ -19,3 +19,6 @@ docs/**
 .claude/**
 *.log
 **/__pycache__/**
+# Webview editor sources ship as media/editor.bundle.js (see build/)
+media/editor/**
+build/**

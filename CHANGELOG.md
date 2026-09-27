@@ -50,6 +50,7 @@ Security hardening: data read from disk (file names, annotation JSON) and messag
 - **Reproducible installs**: `package-lock.json` is now committed (it was git-ignored); use `npm ci`.
 - `polygon-clipping` moved to `devDependencies`: the webview uses the vendored `media/polygon-clipping.umd.min.js`, which a test now checks against the pinned package (`npm run vendor` refreshes it).
 - Publishing cleans `out/` first so compiled files of deleted sources can't ship, and `npm test` cleans `out-test/` so deleted tests don't keep running. A test also syntax-checks every webview script.
+- **Webview editor split into modules**: the 9,500-line `media/main.js` is now 18 files under `media/editor/` (state, view, messages, shortcuts, canvas, edit mode, eraser, sidebar, render, export, ONNX, settings, image browser, advanced search, SAM, …). `npm run compile` concatenates them into `media/editor.bundle.js` with a source map, so at runtime it is still one script — loading them as separate `<script>` tags would let queued events (image load, host messages) run between files before their functions exist. The split is purely mechanical: every top-level statement is kept, and the executable ones in their original order.
 
 ## [1.4.2] - 2026-06-18
 

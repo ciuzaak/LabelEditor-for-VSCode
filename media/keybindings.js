@@ -1,5 +1,5 @@
 // Pure helpers for the rebindable keyboard layer. The webview state lives in
-// main.js (a module-scope `currentBindings`); this file only exposes a
+// the editor scripts (a global `currentBindings`, see editor/state.js); this file only exposes a
 // frozen-default table and the matchers/formatters used by both the keydown
 // dispatcher and the settings UI. Wrapped in an IIFE to keep the top-level
 // constants out of the shared classic-script lexical scope.
@@ -37,7 +37,7 @@
         'edit.delete': [{ key: 'Backspace' }]
     };
 
-    // Human-readable labels for the settings UI (English fallback). main.js
+    // Human-readable labels for the settings UI (English fallback). The editor
     // prefers `kb.action.<id>` via i18n.t when the dictionary defines one, so
     // localised builds can override these without touching this module.
     const ACTION_NAMES = {

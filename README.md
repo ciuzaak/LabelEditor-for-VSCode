@@ -108,10 +108,10 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 ### From Source
 1. Clone this repository
 2. Run `npm ci` (installs the exact versions pinned in `package-lock.json`)
-3. Run `npm run compile`
+3. Run `npm run compile` (TypeScript + the webview bundle), or `npm run watch` to rebuild both on change
 4. Press F5 to open Extension Development Host
 
-Run `npm test` for the unit tests (Node 22+). `media/polygon-clipping.umd.min.js` is a vendored copy of the `polygon-clipping` package; after bumping its version run `npm run vendor` (a test checks the two match).
+The webview editor lives in `media/editor/*.js`; `build/bundle-webview.js` concatenates those files, in the order listed there, into `media/editor.bundle.js` (with a source map), which is what the panel loads. Run `npm test` for the unit tests (Node 22+). `media/polygon-clipping.umd.min.js` is a vendored copy of the `polygon-clipping` package; after bumping its version run `npm run vendor` (a test checks the two match).
 
 ## 🚀 Usage
 

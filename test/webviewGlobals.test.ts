@@ -3,15 +3,22 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vm from 'node:vm';
+import { WEBVIEW_HELPER_SCRIPTS } from '../src/webviewScripts';
+
+// Webview source files: the helpers plus the editor sources that
+// build/bundle-webview.js concatenates into media/editor.bundle.js.
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const { EDITOR_SOURCES } = require(path.resolve(__dirname, '..', '..', 'build', 'bundle-webview.js')) as { EDITOR_SOURCES: string[] };
+const WEBVIEW_SOURCES = [...WEBVIEW_HELPER_SCRIPTS, ...EDITOR_SOURCES];
 
 // The webview loads media/*.js as classic <script>s that share one global
 // scope, so a top-level declaration in one file silently replaces a
-// same-named one in another (main.js's signed polygonArea once overrode
+// same-named one in another (the editor's signed polygonArea once overrode
 // shapeHelpers.js's absolute one). Guard against that.
 describe('webview scripts', () => {
     it('declare no top-level name twice across files', () => {
         const mediaDir = path.resolve(__dirname, '..', '..', 'media');
-        const files = fs.readdirSync(mediaDir).filter(f => f.endsWith('.js') && !f.endsWith('.min.js'));
+        const files = WEBVIEW_SOURCES.filter(f => !f.endsWith('.min.js'));
         const owners = new Map<string, string[]>();
         for (const file of files) {
             const src = fs.readFileSync(path.join(mediaDir, file), 'utf8');
@@ -30,7 +37,7 @@ describe('webview scripts', () => {
     it('never write shape points in place (the SVG render cache keys geometry by array identity)', () => {
         const mediaDir = path.resolve(__dirname, '..', '..', 'media');
         const offenders: string[] = [];
-        for (const file of fs.readdirSync(mediaDir).filter(f => f.endsWith('.js') && !f.endsWith('.min.js'))) {
+        for (const file of WEBVIEW_SOURCES.filter(f => !f.endsWith('.min.js'))) {
             const lines = fs.readFileSync(path.join(mediaDir, file), 'utf8').split('\n');
             lines.forEach((line, i) => {
                 if (/^\s*\/\//.test(line)) return;
@@ -46,7 +53,7 @@ describe('webview scripts', () => {
         // The webview scripts are not compiled, so nothing else catches a syntax
         // error before the panel loads blank.
         const mediaDir = path.resolve(__dirname, '..', '..', 'media');
-        for (const file of fs.readdirSync(mediaDir).filter(f => f.endsWith('.js'))) {
+        for (const file of WEBVIEW_SOURCES) {
             assert.doesNotThrow(
                 () => new vm.Script(fs.readFileSync(path.join(mediaDir, file), 'utf8'), { filename: file }),
                 file

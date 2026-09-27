@@ -40,6 +40,7 @@ import {
 import * as crypto from 'crypto';
 import { runPythonInTerminal, PythonRun, PythonExit } from './pythonProcess';
 import { writeFileAtomic } from './atomicWrite';
+import { WEBVIEW_SCRIPTS } from './webviewScripts';
 
 export class LabelMePanel {
     public static readonly panels: Set<LabelMePanel> = new Set();
@@ -1059,66 +1060,10 @@ export class LabelMePanel {
     }
 
     private async _getHtmlForWebview(webview: vscode.Webview): Promise<string> {
-        // Local path to main script run in the webview
-        const scriptPathOnDisk = vscode.Uri.joinPath(this._extensionUri, 'media', 'main.js');
-        const scriptUri = webview.asWebviewUri(scriptPathOnDisk);
-
-        // Polygon-clipping library for eraser feature
-        const polyClipPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'polygon-clipping.umd.min.js');
-        const polyClipUri = webview.asWebviewUri(polyClipPath);
-
-        // SAM prompt helpers (pure functions, must load before main.js)
-        const samHelpersPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'samPromptHelpers.js');
-        const samHelpersUri = webview.asWebviewUri(samHelpersPath);
-
-        // Merge-shape helpers (pure functions, must load before main.js)
-        const mergeHelpersPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'mergeShapesHelpers.js');
-        const mergeHelpersUri = webview.asWebviewUri(mergeHelpersPath);
-
-        // Shape helpers (pure functions, must load before main.js)
-        const shapeHelpersPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'shapeHelpers.js');
-        const shapeHelpersUri = webview.asWebviewUri(shapeHelpersPath);
-
-        // Notification bus (pure helpers + DOM wrapper, must load before main.js)
-        const notifyHelpersUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'notifyBusHelpers.js')
+        // Script tags in load order (see src/webviewScripts.ts).
+        const scriptUris = WEBVIEW_SCRIPTS.map(file =>
+            webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'media', ...file.split('/'))).toString()
         );
-        const notifyBusUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'notifyBus.js')
-        );
-
-        // Rich tooltip (pure helpers + dictionary + DOM wrapper, must load before main.js)
-        const tipsDataUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'tipsData.js')
-        );
-        const tooltipHelpersUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'tooltipHelpers.js')
-        );
-        const tooltipUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'tooltip.js')
-        );
-
-        // Popover dismiss helper (pure function, must load before main.js)
-        const popoverDismissPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'popoverDismiss.js');
-        const popoverDismissUri = webview.asWebviewUri(popoverDismissPath);
-
-        // Advanced-search helpers (pure functions, must load before main.js)
-        const advancedSearchHelpersUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'advancedSearchHelpers.js')
-        );
-
-        // Label-selection helpers (pure functions, must load before main.js)
-        const labelSelectionHelpersUri = webview.asWebviewUri(
-            vscode.Uri.joinPath(this._extensionUri, 'media', 'labelSelectionHelpers.js')
-        );
-
-        // Keybindings helpers (pure functions + frozen defaults, must load before main.js)
-        const keybindingsPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'keybindings.js');
-        const keybindingsUri = webview.asWebviewUri(keybindingsPath);
-
-        // i18n dictionary (must load before main.js so applyI18n can run on boot)
-        const i18nPath = vscode.Uri.joinPath(this._extensionUri, 'media', 'i18n.js');
-        const i18nUri = webview.asWebviewUri(i18nPath);
 
         // Read CSS file content and inline it to prevent race condition on Windows
         // where JS executes before CSS finishes loading via external <link>, causing
@@ -1689,21 +1634,7 @@ export class LabelMePanel {
                     window.annotationFormat = ${serializeForScript(this._format)};
                     window.yoloClasses = ${serializeForScript(this._yoloClasses)};
                 </script>
-                <script nonce="${nonce}" src="${polyClipUri}"></script>
-                <script nonce="${nonce}" src="${samHelpersUri}"></script>
-                <script nonce="${nonce}" src="${mergeHelpersUri}"></script>
-                <script nonce="${nonce}" src="${shapeHelpersUri}"></script>
-                <script nonce="${nonce}" src="${notifyHelpersUri}"></script>
-                <script nonce="${nonce}" src="${notifyBusUri}"></script>
-                <script nonce="${nonce}" src="${tipsDataUri}"></script>
-                <script nonce="${nonce}" src="${tooltipHelpersUri}"></script>
-                <script nonce="${nonce}" src="${tooltipUri}"></script>
-                <script nonce="${nonce}" src="${popoverDismissUri}"></script>
-                <script nonce="${nonce}" src="${advancedSearchHelpersUri}"></script>
-                <script nonce="${nonce}" src="${labelSelectionHelpersUri}"></script>
-                <script nonce="${nonce}" src="${keybindingsUri}"></script>
-                <script nonce="${nonce}" src="${i18nUri}"></script>
-                <script nonce="${nonce}" src="${scriptUri}"></script>
+                ${scriptUris.map(uri => `<script nonce="${nonce}" src="${uri}"></script>`).join('\n                ')}
             </body>
             </html>`;
     }

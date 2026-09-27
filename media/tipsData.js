@@ -84,7 +84,7 @@ const TIPS = {
     'export.outputDirBrowse':  { title: 'Output Folder', desc: 'Open a dialog to choose or create the output folder; missing folders are created on export.' },
     'export.classes':          { title: 'Classes', desc: 'Class order defines numeric indices: first row = class 0 for YOLO, 1 for COCO.' },
 
-    // Per-row controls in the Labels list (dynamically rendered in main.js)
+    // Per-row controls in the Labels list (dynamically rendered in editor/sidebar.js)
     'label.selectInstances': { title: 'Select All Instances', desc: 'Click to select every shape with this label; Ctrl-click adds them to the current selection.' },
     'label.color':      { title: 'Label Color', desc: 'Click to change the color used for shapes with this label.' },
     'label.colorReset': { title: 'Reset Color', desc: 'Restore this label color to the default.' },
@@ -95,7 +95,7 @@ const TIPS = {
     'shape.toggleVisible': { title: 'Show/Hide Shape', desc: 'Toggle visibility of this single shape.' },
     'shape.delete':        { title: 'Delete Shape', desc: 'Delete this shape from the annotation.' },
 
-    // Shape context menu (rendered dynamically in main.js)
+    // Shape context menu (rendered dynamically in editor/canvas.js)
     'context.edit':          { title: 'Edit', desc: 'Edit polygon vertices.' },
     'context.rename':        { title: 'Rename', desc: 'Change the label of the selected shape(s).', shortcut: 'Ctrl+R', shortcutAction: 'edit.rename' },
     'context.merge':         { title: 'Merge', desc: 'Merge the selected shapes (union for overlapping polygons of the same label, otherwise grouped).', shortcut: 'Ctrl+G', shortcutAction: 'edit.merge' },
