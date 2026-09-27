@@ -463,6 +463,12 @@ function applyI18n() {
         const text = window.i18n.t(key);
         if (text) n.setAttribute('placeholder', text);
     }
+    // Accessible names of icon-only controls.
+    for (const n of document.querySelectorAll('[data-i18n-aria-label]')) {
+        const text = window.i18n.t(n.getAttribute('data-i18n-aria-label'));
+        if (text) n.setAttribute('aria-label', text);
+    }
+    if (window.tooltip && window.tooltip.refreshAccessibleNames) window.tooltip.refreshAccessibleNames();
 }
 
 // Boot the keyboard-binding table. Persisted overrides from initialGlobalSettings
@@ -1643,6 +1649,80 @@ function updateImageBrowserHighlight(newRelativePath) {
 function isAnyModalOpen() {
     return [...document.querySelectorAll('.modal')].some(m => m.style.display === 'flex');
 }
+
+// Dialog semantics and focus handling for every .modal overlay, without
+// touching each show/hide function: the dialog is announced as such, focus
+// moves into it when it opens (unless its show function already focused a
+// field), Tab / Shift+Tab stay inside it, and focus returns to the control
+// that opened it when it closes.
+// (a[href], not [href]: the icon sprites' <use href> must not count.)
+const MODAL_FOCUSABLE = 'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), '
+    + 'select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+function modalFocusables(modal) {
+    return [...modal.querySelectorAll(MODAL_FOCUSABLE)].filter(el => el.getClientRects().length > 0);
+}
+
+(function setupModalAccessibility() {
+    // The observer below runs after a show function has already moved focus
+    // into its dialog, so remember the last focus outside any dialog instead.
+    let lastFocusOutsideModals = null;
+    document.addEventListener('focusin', (e) => {
+        if (!(e.target instanceof Element) || !e.target.closest('.modal')) lastFocusOutsideModals = e.target;
+    });
+
+    for (const modal of document.querySelectorAll('.modal')) {
+        const dialog = modal.querySelector('.modal-content') || modal;
+        dialog.setAttribute('role', 'dialog');
+        dialog.setAttribute('aria-modal', 'true');
+        const title = dialog.querySelector('h1, h2, h3');
+        if (title) {
+            if (!title.id) title.id = modal.id + 'Title';
+            dialog.setAttribute('aria-labelledby', title.id);
+        }
+        let isOpen = modal.style.display === 'flex';
+        let returnFocusTo = null;
+        new MutationObserver(() => {
+            const nowOpen = modal.style.display === 'flex';
+            if (nowOpen === isOpen) return;
+            isOpen = nowOpen;
+            if (nowOpen) {
+                returnFocusTo = modal.contains(document.activeElement)
+                    ? lastFocusOutsideModals
+                    : document.activeElement;
+                setTimeout(() => {
+                    if (modal.style.display !== 'flex' || modal.contains(document.activeElement)) return;
+                    const first = modalFocusables(modal).find(el => !el.classList.contains('modal-close'))
+                        || modalFocusables(modal)[0];
+                    if (first) first.focus();
+                }, 0);
+            } else {
+                const target = returnFocusTo;
+                returnFocusTo = null;
+                const focusLost = modal.contains(document.activeElement) || document.activeElement === document.body;
+                if (target && target.isConnected && focusLost && typeof target.focus === 'function') target.focus();
+            }
+        }).observe(modal, { attributes: true, attributeFilter: ['style'] });
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Tab') return;
+        const modal = [...document.querySelectorAll('.modal')].find(m => m.style.display === 'flex');
+        if (!modal) return;
+        const items = modalFocusables(modal);
+        if (items.length === 0) { e.preventDefault(); return; }
+        const first = items[0];
+        const last = items[items.length - 1];
+        const inside = modal.contains(document.activeElement);
+        if (e.shiftKey && (!inside || document.activeElement === first)) {
+            e.preventDefault();
+            last.focus();
+        } else if (!e.shiftKey && (!inside || document.activeElement === last)) {
+            e.preventDefault();
+            first.focus();
+        }
+    });
+})();
 
 // Track Shift press for eraser/negative-point feedback (cursor + status bar).
 document.addEventListener('keydown', (e) => {
@@ -2856,7 +2936,7 @@ function mergeSelectedShapes() {
     }
     const fn = resolveMergeHelpers();
     if (!fn) {
-        setMergeStatus('Merge helpers missing', 'red');
+        setMergeStatus(tt('status.mergeUnavailable'), 'red');
         return;
     }
 
@@ -2889,7 +2969,7 @@ function mergeSelectedShapes() {
         valid.push({ group, out });
     }
     if (valid.length === 0) {
-        setMergeStatus('Merge produced no valid geometry', 'orange');
+        setMergeStatus(tt('status.mergeNoGeometry'), 'orange');
         return;
     }
 
@@ -2978,7 +3058,7 @@ function commitMergePendingFromModal() {
     if (!chosen) return false; // keep modal open; user must pick something
     const fn = resolveMergeHelpers();
     if (!fn) {
-        setMergeStatus('Merge helpers missing', 'red');
+        setMergeStatus(tt('status.mergeUnavailable'), 'red');
         clearMergePendingState();
         hideLabelModal();
         return true;
@@ -4559,6 +4639,60 @@ document.addEventListener('keydown', (e) => {
 });
 
 // --- Sidebar Logic ---
+// --- Keyboard access for the Instances / Labels lists ---
+// A roving tabindex keeps each list a single Tab stop (a Tab stop per row is
+// unusable with hundreds of shapes). Arrow keys / Home / End move between
+// rows and Enter / Space activate the focused row like a click. Row actions
+// have keyboard equivalents on the selection (Delete, Ctrl+R, Ctrl+H), so the
+// small per-row icons are not separate Tab stops.
+
+// Swap a list's rows for `fragment`, keeping keyboard focus on the same row
+// position when the list had focus (activating a row re-renders the list).
+// Otherwise the tabbable row is `preferredIndex`, or the previous one.
+function replaceRovingRows(listEl, fragment, preferredIndex) {
+    const oldRows = [...listEl.children];
+    const focusedIndex = oldRows.indexOf(document.activeElement);
+    const previousTabIndex = oldRows.findIndex(r => r.tabIndex === 0);
+    listEl.innerHTML = '';
+    listEl.appendChild(fragment);
+    const rows = [...listEl.children];
+    if (rows.length === 0) return;
+    let index = focusedIndex !== -1 ? focusedIndex
+        : (preferredIndex >= 0 ? preferredIndex : previousTabIndex);
+    index = Math.min(Math.max(index, 0), rows.length - 1);
+    rows.forEach((row, i) => { row.tabIndex = i === index ? 0 : -1; });
+    if (focusedIndex !== -1) rows[index].focus();
+}
+
+function enableRovingRows(listEl) {
+    if (!listEl) return;
+    listEl.addEventListener('keydown', (e) => {
+        const rows = [...listEl.children];
+        const i = rows.indexOf(document.activeElement);
+        if (i === -1) return;
+        let next;
+        switch (e.key) {
+            case 'ArrowDown': next = Math.min(rows.length - 1, i + 1); break;
+            case 'ArrowUp':   next = Math.max(0, i - 1); break;
+            case 'Home':      next = 0; break;
+            case 'End':       next = rows.length - 1; break;
+            case 'Enter':
+            case ' ':
+                e.preventDefault();
+                rows[i].click();
+                return;
+            default:
+                return;
+        }
+        e.preventDefault();
+        rows.forEach((row, k) => { row.tabIndex = k === next ? 0 : -1; });
+        rows[next].focus();
+        rows[next].scrollIntoView({ block: 'nearest' });
+    });
+}
+enableRovingRows(shapeList);
+enableRovingRows(labelsList);
+
 function renderShapeList() {
     // 使用 DocumentFragment 批量添加 DOM，减少重排
     const fragment = document.createDocumentFragment();
@@ -4609,6 +4743,7 @@ function renderShapeList() {
         visibleBtn.className = 'visible-btn';
         visibleBtn.innerHTML = shape.visible === false ? '&#128065;' : '&#128065;'; // Eye icon
         visibleBtn.setAttribute('data-tip-id', 'shape.toggleVisible');
+        visibleBtn.setAttribute('role', 'button');
         if (shape.visible === false) {
             visibleBtn.classList.add('hidden-shape');
             visibleBtn.style.opacity = '0.5';
@@ -4634,7 +4769,8 @@ function renderShapeList() {
         const editBtn = document.createElement('span');
         editBtn.className = 'edit-btn';
         editBtn.innerHTML = '&#9998;'; // Pencil icon
-        editBtn.setAttribute('data-tip-id', 'shape.editVertices');
+        editBtn.setAttribute('data-tip-id', 'shape.rename'); // opens the label/description dialog
+        editBtn.setAttribute('role', 'button');
         editBtn.onclick = (e) => {
             e.stopPropagation();
             hideShapeContextMenu();
@@ -4650,6 +4786,7 @@ function renderShapeList() {
         delBtn.className = 'delete-btn';
         delBtn.textContent = '×';
         delBtn.setAttribute('data-tip-id', 'shape.delete');
+        delBtn.setAttribute('role', 'button');
         delBtn.onclick = (e) => {
             e.stopPropagation();
             hideShapeContextMenu();
@@ -4673,8 +4810,7 @@ function renderShapeList() {
     if (window.tooltip) window.tooltip.hide();
 
     // 一次性更新 DOM
-    shapeList.innerHTML = '';
-    shapeList.appendChild(fragment);
+    replaceRovingRows(shapeList, fragment, selectedShapeIndex);
 
     // Bind rich tooltips to the freshly-rendered per-row controls. attach()
     // is idempotent (skips already-bound nodes via WeakSet).
@@ -4779,6 +4915,7 @@ function renderLabelsList() {
         const colors = getColorsForLabel(label);
         colorIndicator.style.backgroundColor = colors.stroke;
         colorIndicator.setAttribute('data-tip-id', 'label.color');
+        colorIndicator.setAttribute('role', 'button');
         colorIndicator.onclick = (e) => {
             e.stopPropagation();
             showColorPicker(label);
@@ -4800,6 +4937,7 @@ function renderLabelsList() {
         visibilityBtn.className = 'label-visibility-btn';
         visibilityBtn.innerHTML = '&#128065;'; // Eye icon
         visibilityBtn.setAttribute('data-tip-id', 'label.toggleVisible');
+        visibilityBtn.setAttribute('role', 'button');
         if (stat.allHidden) {
             visibilityBtn.classList.add('all-hidden');
         }
@@ -4813,6 +4951,7 @@ function renderLabelsList() {
         resetBtn.className = 'label-reset-btn';
         resetBtn.innerHTML = '&#8634;'; // Circular arrow icon
         resetBtn.setAttribute('data-tip-id', 'label.colorReset');
+        resetBtn.setAttribute('role', 'button');
         if (customColors.has(label)) {
             resetBtn.classList.add('visible');
         }
@@ -4832,8 +4971,7 @@ function renderLabelsList() {
     // Cancel pending hover timer (see renderShapeList for rationale).
     if (window.tooltip) window.tooltip.hide();
 
-    labelsList.innerHTML = '';
-    labelsList.appendChild(fragment);
+    replaceRovingRows(labelsList, fragment, -1);
 
     // Bind rich tooltips to the freshly-rendered per-row controls.
     if (window.tooltip && window.TIPS) window.tooltip.attach(labelsList, window.TIPS);
@@ -6497,11 +6635,14 @@ function renderKeybindingsList() {
         captureBtn.className = 'btn btn-icon kb-capture';
         captureBtn.textContent = '✎';
         captureBtn.title = tt('kb.captureNewBinding');
+        // Name the action too: every row has the same two icon buttons.
+        captureBtn.setAttribute('aria-label', `${tt('kb.captureNewBinding')}: ${name.textContent}`);
         captureBtn.onclick = () => startKeybindingsCapture(id, row);
         const resetBtn = document.createElement('button');
         resetBtn.className = 'btn btn-icon kb-reset';
         resetBtn.textContent = '↺';
         resetBtn.title = tt('kb.resetToDefault');
+        resetBtn.setAttribute('aria-label', `${tt('kb.resetToDefault')}: ${name.textContent}`);
         resetBtn.onclick = () => resetKeybinding(id);
         const error = document.createElement('div');
         error.className = 'kb-error';
@@ -7693,7 +7834,7 @@ function buildAdvConditionRow(cond) {
     const remove = document.createElement('button');
     remove.className = 'adv-cond__remove';
     remove.type = 'button';
-    remove.setAttribute('aria-label', 'Remove condition');
+    remove.setAttribute('aria-label', tt('aria.removeCondition'));
     remove.innerHTML = '<svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg>';
     remove.onclick = () => removeAdvCondition(cond.id);
     row.appendChild(remove);

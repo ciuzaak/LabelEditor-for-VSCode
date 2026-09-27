@@ -138,6 +138,26 @@
     // focus lands.
     function onMouseDown() { hide(); }
 
+    // Icon-only controls (SVG icons, or glyphs such as ✎ × 👁) have no
+    // accessible name, so a screen reader announces just "button". Name them
+    // after their (localized) tip title. Elements we named are marked so a
+    // locale switch can refresh them; author-provided names are left alone.
+    const NAME_CHARS = /[\p{L}\p{N}]/u;
+    function applyAccessibleName(el) {
+        const ours = el.hasAttribute('data-tip-aria');
+        if (!ours && (el.hasAttribute('aria-label') || el.hasAttribute('aria-labelledby')
+            || NAME_CHARS.test(el.textContent || ''))) return;
+        const tip = tipFor(el);
+        const name = tip && (tip.title || tip.desc);
+        if (!name) return;
+        el.setAttribute('aria-label', name);
+        el.setAttribute('data-tip-aria', '');
+    }
+
+    function refreshAccessibleNames(rootEl) {
+        for (const el of (rootEl || document).querySelectorAll('[data-tip-aria]')) applyAccessibleName(el);
+    }
+
     function attach(rootEl, tips) {
         if (tips) tipsDict = tips;
         const root = rootEl || document;
@@ -152,9 +172,10 @@
             n.addEventListener('mousedown', onMouseDown);
             n.addEventListener('focus', onFocus);
             n.addEventListener('blur', onBlur);
+            applyAccessibleName(n);
         }
     }
 
-    const api = { attach, hide };
+    const api = { attach, hide, refreshAccessibleNames };
     if (typeof window !== 'undefined') window.tooltip = api;
 })();

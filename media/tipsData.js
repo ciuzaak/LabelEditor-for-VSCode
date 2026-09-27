@@ -91,7 +91,7 @@ const TIPS = {
     'label.toggleVisible': { title: 'Show/Hide All', desc: 'Click to show or hide every shape that uses this label.' },
 
     // Per-row controls in the Instances (shape) list (dynamically rendered)
-    'shape.editVertices':  { title: 'Edit Vertices', desc: 'Switch this shape into vertex-edit mode.' },
+    'shape.rename':        { title: 'Rename', desc: 'Change the label and description of this shape (of every selected shape when several are selected).' },
     'shape.toggleVisible': { title: 'Show/Hide Shape', desc: 'Toggle visibility of this single shape.' },
     'shape.delete':        { title: 'Delete Shape', desc: 'Delete this shape from the annotation.' },
 

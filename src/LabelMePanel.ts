@@ -1235,13 +1235,13 @@ export class LabelMePanel {
                             <div class="search-field">
                                 <svg class="icon icon-sm search-field__icon" aria-hidden="true"><use href="#icon-search"/></svg>
                                 <input type="search" id="searchInput" placeholder="Search images…" data-i18n-placeholder="placeholder.searchImages" />
-                                <button id="advancedSearchBtn" class="search-field__advanced" data-tip-id="browser.advancedSearch" aria-label="Advanced search"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-sliders"/></svg></button>
-                                <button id="searchCloseBtn" class="search-field__clear" data-tip-id="browser.searchClose" aria-label="Clear search"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                                <button id="advancedSearchBtn" class="search-field__advanced" data-tip-id="browser.advancedSearch"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-sliders"/></svg></button>
+                                <button id="searchCloseBtn" class="search-field__clear" data-tip-id="browser.searchClose"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                             </div>
                         </div>
                         <div id="advSearchBanner" class="adv-search-banner" style="display: none;">
                             <span id="advSearchBannerText" class="adv-search-banner__text"></span>
-                            <button id="advSearchBannerClear" class="adv-search-banner__clear" aria-label="Clear advanced filter"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                            <button id="advSearchBannerClear" class="adv-search-banner__clear" aria-label="Clear advanced filter" data-i18n-aria-label="aria.clearAdvancedFilter"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         </div>
                         <ul id="imageBrowserList" class="image-browser-list"></ul>
                     </div>
@@ -1381,7 +1381,7 @@ export class LabelMePanel {
                 <!-- Modal for Label Input -->
                 <div id="labelModal" class="modal">
                     <div class="modal-content">
-                        <button class="modal-close" data-modal-close="labelModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <button class="modal-close" data-modal-close="labelModal" aria-label="Close" data-i18n-aria-label="button.close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3 data-i18n="modal.enterLabel">Enter Label</h3>
                         <input type="text" id="labelInput" placeholder="Enter label name" data-i18n-placeholder="placeholder.enterLabel">
                         <textarea id="descriptionInput" placeholder="Add description (optional)" rows="2" data-i18n-placeholder="placeholder.addDescription"></textarea>
@@ -1396,7 +1396,7 @@ export class LabelMePanel {
                 <!-- Modal for Color Picker -->
                 <div id="colorPickerModal" class="modal">
                     <div class="modal-content color-picker-content">
-                        <button class="modal-close" data-modal-close="colorPickerModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <button class="modal-close" data-modal-close="colorPickerModal" aria-label="Close" data-i18n-aria-label="button.close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3 data-i18n="modal.chooseColor">Choose Color</h3>
                         <div class="color-palette"></div>
                         <div class="custom-color-input">
@@ -1413,7 +1413,7 @@ export class LabelMePanel {
                 <!-- Modal for ONNX Batch Inference -->
                 <div id="onnxInferModal" class="modal">
                     <div class="modal-content onnx-infer-content">
-                        <button class="modal-close" data-modal-close="onnxInferModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <button class="modal-close" data-modal-close="onnxInferModal" aria-label="Close" data-i18n-aria-label="button.close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> <span data-i18n="modal.onnxBatchInfer">ONNX Batch Inference</span></h3>
                         <div class="onnx-note" data-i18n="onnx.outputNote">Output: polygon only</div>
                         <div class="onnx-form-group">
@@ -1474,7 +1474,7 @@ export class LabelMePanel {
                 <!-- Modal for SAM AI Service Config -->
                 <div id="samConfigModal" class="modal">
                     <div class="modal-content onnx-infer-content">
-                        <button class="modal-close" data-modal-close="samConfigModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <button class="modal-close" data-modal-close="samConfigModal" aria-label="Close" data-i18n-aria-label="button.close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-sparkles"/></svg> <span data-i18n="modal.samConfig">SAM AI Annotation</span></h3>
                         <div class="onnx-note" data-i18n="sam.configNote">Configure SAM service for interactive annotation</div>
                         <div class="onnx-form-group">
@@ -1537,7 +1537,7 @@ export class LabelMePanel {
                 <!-- Modal for Export Dataset -->
                 <div id="exportDatasetModal" class="modal">
                     <div class="modal-content onnx-infer-content">
-                        <button class="modal-close" data-modal-close="exportDatasetModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <button class="modal-close" data-modal-close="exportDatasetModal" aria-label="Close" data-i18n-aria-label="button.close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg> <span data-i18n="modal.exportDataset">Export Dataset</span></h3>
                         <div class="onnx-form-group">
                             <label data-tip-id="export.format" data-i18n="label.format">Format</label>
@@ -1585,7 +1585,7 @@ export class LabelMePanel {
                 <!-- Modal for Export SVG -->
                 <div id="exportSvgModal" class="modal">
                     <div class="modal-content onnx-infer-content">
-                        <button class="modal-close" data-modal-close="exportSvgModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <button class="modal-close" data-modal-close="exportSvgModal" aria-label="Close" data-i18n-aria-label="button.close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-download"/></svg> <span data-i18n="modal.exportSvg">Export SVG</span></h3>
                         <div class="onnx-form-group">
                             <label data-tip-id="export.scope" data-i18n="label.scope">Scope</label>
@@ -1612,7 +1612,7 @@ export class LabelMePanel {
                 <!-- Modal for Advanced Search -->
                 <div id="advancedSearchModal" class="modal">
                     <div class="modal-content advanced-search-content">
-                        <button class="modal-close" data-modal-close="advancedSearchModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <button class="modal-close" data-modal-close="advancedSearchModal" aria-label="Close" data-i18n-aria-label="button.close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-sliders"/></svg> <span data-i18n="modal.advancedSearch">Advanced Search</span></h3>
                         <div class="adv-search-hint" data-i18n="advSearch.andHint">All conditions must match (AND). Within one class condition, any selected class matches (OR).</div>
                         <div id="advSearchConditions" class="adv-search-conditions"></div>
@@ -1634,7 +1634,7 @@ export class LabelMePanel {
                 <!-- Modal for More Settings (Language + Keyboard Shortcuts) -->
                 <div id="moreSettingsModal" class="modal">
                     <div class="modal-content more-settings-content">
-                        <button class="modal-close" data-modal-close="moreSettingsModal" aria-label="Close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
+                        <button class="modal-close" data-modal-close="moreSettingsModal" aria-label="Close" data-i18n-aria-label="button.close"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-x"/></svg></button>
                         <h3><svg class="icon" aria-hidden="true"><use href="#icon-settings"/></svg> <span data-i18n="modal.moreSettings">More Settings</span></h3>
 
                         <div class="settings-group-header" data-i18n="settings.appearance">Appearance</div>

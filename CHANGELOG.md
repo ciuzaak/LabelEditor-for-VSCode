@@ -12,6 +12,13 @@ Security hardening: data read from disk (file names, annotation JSON) and messag
 - **Webview message validation**: `saveGlobalSettings` accepts only known keys with correctly typed values (stored values are re-checked on load), and image navigation only accepts images from the scanned list — a path like `../../x` is ignored.
 - **SAM service access control**: the extension passes a per-install token to the service it launches (`LABELEDITOR_SAM_TOKEN`); `/encode` and `/decode` reject requests without it, CORS no longer allows every origin, and oversized request bodies are refused. A service started by hand without a token only accepts VS Code webview origins. **Restart a SAM service left running from an older version** — it does not accept the new token header.
 
+### Accessibility
+- **Visible keyboard focus**: buttons and other focusable controls show a focus ring again (a style reset had removed it), and the slider thumb's hover/focus styles now actually apply in VS Code (they were in a rule Chromium discarded).
+- **Named controls**: icon-only buttons — toolbar, mode buttons, the eye / pencil / × icons in the lists — get an accessible name from their tooltip title, in the current language, so screen readers no longer announce just "button". Keyboard-shortcut rows name the action on their record/reset buttons.
+- **Keyboard-operable lists**: the Instances and Labels lists are one Tab stop each; ↑/↓/Home/End move between rows and Enter/Space select, like a click. Selection shortcuts (Delete, `Ctrl+R`, `Ctrl+H`) then act on it.
+- **Dialogs**: every dialog is announced as a modal dialog with its title, focus moves into it when it opens, Tab/Shift+Tab stay inside it, and focus returns to the control that opened it when it closes.
+- The pencil icon's tooltip now says **Rename** (it opens the label dialog; it said "Edit Vertices"). The remaining hard-coded English strings (merge errors, "Remove condition", "Clear advanced filter", dialog close buttons, Advanced Search tooltip) are translated.
+
 ### Performance
 - **Much faster redraws with many shapes**: finished shapes are now cached in the SVG overlay and only the ones that changed are rebuilt, the image is repainted only when it or its channel/CLAHE processing changes, and drag previews are limited to one redraw per frame. With a 24-megapixel image and 1,500 polygons, a hover or vertex-drag redraw went from ~18 ms to ~1 ms and a zoom step from ~17 ms to ~13 ms.
 - **Shape labels no longer stall the editor**: label pills are sized from cached text metrics instead of measuring each SVG label (which forced a layout per label). With labels shown on 1,500 shapes a redraw went from ~1.9 s to ~1 ms (hover) / ~24 ms (zoom).

@@ -62,6 +62,8 @@
             'button.startService': 'Start Service',
             'button.resetAllDefaults': 'Reset all to defaults',
             'button.close': 'Close',
+            'aria.clearAdvancedFilter': 'Clear advanced filter',
+            'aria.removeCondition': 'Remove condition',
 
             // Modals
             'modal.enterLabel': 'Enter Label',
@@ -267,6 +269,8 @@
             'tip.browser.search.desc':     'Filter the image list by filename.',
             'tip.browser.refresh.title':   'Refresh List',
             'tip.browser.refresh.desc':    'Rescan the workspace for image files.',
+            'tip.browser.advancedSearch.title': 'Advanced Search',
+            'tip.browser.advancedSearch.desc':  'Filter images by filename, regex, and annotation class. Conditions combine with AND.',
             'tip.browser.searchClose.title': 'Clear Search',
             'tip.browser.searchClose.desc':  'Clear the search filter and keep focus in the search field.',
 
@@ -373,8 +377,8 @@
             'tip.label.toggleVisible.desc':  'Click to show or hide every shape that uses this label.',
 
             // Instances list per-row controls
-            'tip.shape.editVertices.title':  'Edit Vertices',
-            'tip.shape.editVertices.desc':   'Switch this shape into vertex-edit mode.',
+            'tip.shape.rename.title':  'Rename',
+            'tip.shape.rename.desc':   'Change the label and description of this shape (of every selected shape when several are selected).',
             'tip.shape.toggleVisible.title': 'Show/Hide Shape',
             'tip.shape.toggleVisible.desc':  'Toggle visibility of this single shape.',
             'tip.shape.delete.title':        'Delete Shape',
@@ -504,6 +508,8 @@
             'button.startService': '启动服务',
             'button.resetAllDefaults': '全部重置为默认',
             'button.close': '关闭',
+            'aria.clearAdvancedFilter': '清除高级筛选',
+            'aria.removeCondition': '删除条件',
 
             'modal.enterLabel': '输入标签',
             'modal.chooseColor': '选择颜色',
@@ -695,6 +701,8 @@
             'tip.browser.search.desc':     '按文件名过滤图片列表。',
             'tip.browser.refresh.title':   '刷新列表',
             'tip.browser.refresh.desc':    '重新扫描工作区中的图片文件。',
+            'tip.browser.advancedSearch.title': '高级搜索',
+            'tip.browser.advancedSearch.desc':  '按文件名、正则表达式和标注类别筛选图片，各条件需同时满足。',
             'tip.browser.searchClose.title': '清除搜索',
             'tip.browser.searchClose.desc':  '清除过滤条件并保持焦点在搜索框。',
 
@@ -790,8 +798,8 @@
             'tip.label.toggleVisible.title': '全部显示/隐藏',
             'tip.label.toggleVisible.desc':  '点击显示或隐藏使用该标签的全部形状。',
 
-            'tip.shape.editVertices.title':  '编辑顶点',
-            'tip.shape.editVertices.desc':   '将此形状切换到顶点编辑模式。',
+            'tip.shape.rename.title':  '重命名',
+            'tip.shape.rename.desc':   '修改此形状的标签和描述（多选时修改所有选中的形状）。',
             'tip.shape.toggleVisible.title': '显示/隐藏形状',
             'tip.shape.toggleVisible.desc':  '切换此单个形状的可见性。',
             'tip.shape.delete.title':        '删除形状',
