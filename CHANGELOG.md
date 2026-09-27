@@ -2,7 +2,9 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
-## [Unreleased]
+## [1.5.1] - 2026-09-27
+
+Keyboard access everywhere that was still mouse-only — the image browser, the per-row buttons of the Instances / Labels lists, and the colour picker — plus correct orientation for EXIF-rotated PNGs and cleanup of temp files left by interrupted saves.
 
 ### Accessibility
 - **Image browser from the keyboard**: the image list is one Tab stop; ↑/↓/PageUp/PageDown/Home/End move a highlighted cursor (scrolling the virtual list as needed) and Enter/Space open the image. Screen readers get it as a list box with the cursor row as the active option.
