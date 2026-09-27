@@ -1,0 +1,3 @@
+# Vendored third-party build: keep byte-identical to the npm package on every
+# platform (no CRLF conversion on Windows checkouts); a test compares them.
+media/polygon-clipping.umd.min.js -text
