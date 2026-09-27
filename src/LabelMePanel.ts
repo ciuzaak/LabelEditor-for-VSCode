@@ -11,7 +11,8 @@ import {
     comparePathsNaturally,
     classifyEntry,
     ImageMetadata,
-    LabelMeShape
+    LabelMeShape,
+    AnnotationPayload
 } from './labelMeUtils';
 import {
     parseDataYaml,
@@ -38,9 +39,16 @@ import {
     validateSamLaunchConfig
 } from './webviewSecurity';
 import * as crypto from 'crypto';
+import * as http from 'http';
+import { exec } from 'child_process';
 import { runPythonInTerminal, PythonRun, PythonExit } from './pythonProcess';
 import { writeFileAtomic } from './atomicWrite';
 import { WEBVIEW_SCRIPTS } from './webviewScripts';
+
+/** The webview's `save` payload: the shapes plus the image they belong to. */
+interface SaveRequest extends AnnotationPayload {
+    imagePath?: string;
+}
 
 export class LabelMePanel {
     public static readonly panels: Set<LabelMePanel> = new Set();
@@ -102,7 +110,7 @@ export class LabelMePanel {
     // persisted via _globalState.update. For object-shaped settings this can lose
     // writes if both panels edit the same key. Proper fix requires broadcasting a
     // `globalSettingChanged` message and handling it in the webview; deferred.
-    private _safePost(message: any): void {
+    private _safePost(message: unknown): void {
         if (this._disposed) return;
         // Call the raw webview API directly — do NOT route through _safePost.
         const webview = this._panel.webview;
@@ -248,7 +256,7 @@ export class LabelMePanel {
                             if (found) return found;
                         }
                     }
-                } catch (e) {
+                } catch {
                     // Ignore inaccessible directories
                 }
                 return undefined;
@@ -422,12 +430,12 @@ export class LabelMePanel {
         this._panel.iconPath = vscode.Uri.joinPath(extensionUri, 'icon.png');
 
         // Set the webview's initial html content (with empty image list for fast startup)
-        this._update();
+        this._update().catch(err => LabelMePanel._reportBackgroundError('could not load the editor', err));
 
         // Only trigger async scan for folder mode (empty initial list).
         // Single-image mode (createOrShow) already has the exact list it needs.
         if (!initialWorkspaceImages || initialWorkspaceImages.length === 0) {
-            this._scanAndSendImageList();
+            this._scanAndSendImageList().catch(err => LabelMePanel._reportBackgroundError('could not scan for images', err));
         } else {
             this._isScanFinished = true; // No scan needed for single-image mode
         }
@@ -541,7 +549,7 @@ export class LabelMePanel {
                         return;
                     case 'navigateAfterSave':
                         // Webview confirmed it is clean after save — now safe to navigate
-                        this._executePendingNavigation();
+                        await this._executePendingNavigation();
                         return;
                     case 'samStartService':
                         await this._runSamService(message.config);
@@ -565,8 +573,7 @@ export class LabelMePanel {
                     }
                     case 'detectGpuCount': {
                         // Run nvidia-smi -L to detect GPU list (async to avoid blocking extension host)
-                        const { exec } = require('child_process');
-                        exec('nvidia-smi -L', { encoding: 'utf-8', timeout: 5000 }, (err: any, stdout: string) => {
+                        exec('nvidia-smi -L', { encoding: 'utf-8', timeout: 5000 }, (err, stdout) => {
                             let gpuList: string[] = [];
                             if (!err && stdout) {
                                 gpuList = stdout.trim().split('\n').filter((l: string) => l.startsWith('GPU '));
@@ -674,7 +681,7 @@ export class LabelMePanel {
             this._isDirty = false;
         }
 
-        this._performNavigation(direction);
+        await this._performNavigation(direction);
     }
 
     private async _performNavigation(direction: number) {
@@ -700,7 +707,7 @@ export class LabelMePanel {
         const newRelativePath = this._workspaceImages[newIndex];
         const newImageUri = vscode.Uri.file(path.join(this._rootPath, newRelativePath));
 
-        this.updateImage(newImageUri);
+        await this.updateImage(newImageUri);
     }
 
     private async _navigateToImageByPath(imagePath: unknown) {
@@ -736,7 +743,7 @@ export class LabelMePanel {
         }
 
         const absolutePath = path.join(this._rootPath, imagePath);
-        this.updateImage(vscode.Uri.file(absolutePath));
+        await this.updateImage(vscode.Uri.file(absolutePath));
     }
 
     private async _scanWorkspaceImages(): Promise<string[]> {
@@ -760,8 +767,7 @@ export class LabelMePanel {
 
     private _sendImageListUpdate(isRefresh = false) {
         // Calculate current image relative path
-        let currentImageRelativePath = '';
-        currentImageRelativePath = path.relative(this._rootPath, this._imageUri.fsPath);
+        const currentImageRelativePath = path.relative(this._rootPath, this._imageUri.fsPath);
 
         // Send updated image list to webview. `isRefresh` distinguishes a manual
         // rescan (which invalidates an active advanced filter / class index) from
@@ -862,7 +868,7 @@ export class LabelMePanel {
         const unchanged = current.length === next.length && current.every((v, i) => v === next[i]);
         if (unchanged) return;
 
-        (this._panel.webview as any).options = {
+        this._panel.webview.options = {
             enableScripts: true,
             localResourceRoots: roots
         };
@@ -893,7 +899,7 @@ export class LabelMePanel {
     private async _loadExistingAnnotation(
         imagePath: string,
         meta?: ImageMetadata
-    ): Promise<{ data: any; lossyPath?: string }> {
+    ): Promise<{ data: unknown; lossyPath?: string }> {
         if (this._format === 'yolo') {
             const labelPath = imageToLabelPath(imagePath);
             let w = meta?.width || 0;
@@ -989,6 +995,13 @@ export class LabelMePanel {
         });
     }
 
+    /** Surface a failure from work started without an awaiting caller. */
+    private static _reportBackgroundError(what: string, err: unknown): void {
+        const detail = err instanceof Error ? err.message : String(err);
+        console.error(`LabelEditor: ${what}:`, err);
+        void vscode.window.showErrorMessage(`LabelEditor: ${what} — ${detail}`);
+    }
+
     public dispose() {
         this._disposed = true;
         this._webviewReady = false;
@@ -1081,7 +1094,7 @@ export class LabelMePanel {
         const workspaceImages: string[] = [];
 
         // Calculate current image relative path
-        let currentImageRelativePath = isDummyImage ? '' : path.relative(this._rootPath, this._imageUri.fsPath);
+        const currentImageRelativePath = isDummyImage ? '' : path.relative(this._rootPath, this._imageUri.fsPath);
 
         // Get image file metadata for info popup
         const imageMetadata = isDummyImage ? null : await this._getImageMetadata(this._imageUri.fsPath);
@@ -1755,7 +1768,7 @@ export class LabelMePanel {
         this._indexBuildToken++; // any in-flight _readAllRecords sees the bump and bails
     }
 
-    private _updateIndexForCurrentImage(shapes: any[]): void {
+    private _updateIndexForCurrentImage(shapes: readonly { label?: unknown }[]): void {
         if (!this._annotationIndex) return;
         const rel = path.relative(this._rootPath, this._imageUri.fsPath);
         const labels = new Map<string, number>();
@@ -1844,7 +1857,7 @@ export class LabelMePanel {
         });
     }
 
-    private async saveAnnotation(data: any) {
+    private async saveAnnotation(data: SaveRequest) {
         // The shapes belong to the image the webview was showing when it saved.
         // If the extension has already moved on (navigation in flight), writing
         // them to this._imageUri would put one image's labels in another's file.
@@ -1920,7 +1933,7 @@ export class LabelMePanel {
         );
     }
 
-    private async _saveYoloAnnotation(data: any) {
+    private async _saveYoloAnnotation(data: SaveRequest) {
         const labelPath = imageToLabelPath(this._imageUri.fsPath);
         const { text, warnings } = buildYoloTxt(
             data.shapes || [], data.imageWidth, data.imageHeight, this._yoloClasses
@@ -2131,7 +2144,7 @@ export class LabelMePanel {
             if (existsSync(jsonPath)) {
                 try {
                     const json = JSON.parse(await fs.readFile(jsonPath, 'utf8'));
-                    shapes = (json.shapes || []).map((s: any) => ({
+                    shapes = (json.shapes || []).map((s: LabelMeShape) => ({
                         label: s.label,
                         shape_type: s.shape_type,
                         points: s.points
@@ -2401,16 +2414,17 @@ export class LabelMePanel {
      * Execute any pending navigation that was deferred during save-and-navigate.
      * Called only when the webview confirms it is clean after a save.
      */
-    private _executePendingNavigation() {
+    private async _executePendingNavigation() {
         if (this._pendingNavigation !== undefined) {
-            this._performNavigation(this._pendingNavigation);
+            const direction = this._pendingNavigation;
             this._pendingNavigation = undefined;
+            await this._performNavigation(direction);
         }
 
         if (this._pendingNavigationPath !== undefined) {
             const absolutePath = path.join(this._rootPath, this._pendingNavigationPath);
-            this.updateImage(vscode.Uri.file(absolutePath));
             this._pendingNavigationPath = undefined;
+            await this.updateImage(vscode.Uri.file(absolutePath));
         }
     }
 
@@ -2603,10 +2617,9 @@ export class LabelMePanel {
                 return;
             }
             try {
-                const http = require('http');
-                const req = http.get({ host: '127.0.0.1', port, path: '/ping', timeout: 1500 }, (res: any) => {
+                const req = http.get({ host: '127.0.0.1', port, path: '/ping', timeout: 1500 }, (res: http.IncomingMessage) => {
                     let body = '';
-                    res.on('data', (c: any) => { body += c; });
+                    res.on('data', (c: Buffer) => { body += c; });
                     res.on('end', () => {
                         try { done(JSON.parse(body).ok === true); }
                         catch { done(false); }

@@ -7,7 +7,6 @@ import { WEBVIEW_HELPER_SCRIPTS } from '../src/webviewScripts';
 
 // Webview source files: the helpers plus the editor sources that
 // build/bundle-webview.js concatenates into media/editor.bundle.js.
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const { EDITOR_SOURCES } = require(path.resolve(__dirname, '..', '..', 'build', 'bundle-webview.js')) as { EDITOR_SOURCES: string[] };
 const WEBVIEW_SOURCES = [...WEBVIEW_HELPER_SCRIPTS, ...EDITOR_SOURCES];
 

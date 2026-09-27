@@ -754,7 +754,7 @@ function setMergeStatus(text, color) {
 // the optional `window.mergeShapesHelpers` namespace. Returns null if any
 // helper is missing.
 function resolveMergeHelpers() {
-    const ns = window.mergeShapesHelpers || (typeof mergeShapesHelpers !== 'undefined' ? mergeShapesHelpers : null);
+    const ns = window.mergeShapesHelpers || null;
     const fn = {
         shapeToOuterRing: (typeof shapeToOuterRing !== 'undefined') ? shapeToOuterRing : (ns && ns.shapeToOuterRing),
         buildOverlapGroups: (typeof buildOverlapGroups !== 'undefined') ? buildOverlapGroups : (ns && ns.buildOverlapGroups),

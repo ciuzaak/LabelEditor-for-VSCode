@@ -22,3 +22,4 @@ docs/**
 # Webview editor sources ship as media/editor.bundle.js (see build/)
 media/editor/**
 build/**
+eslint.config.mjs

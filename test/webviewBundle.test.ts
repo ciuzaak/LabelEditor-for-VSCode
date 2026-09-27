@@ -7,7 +7,6 @@ import { EDITOR_BUNDLE } from '../src/webviewScripts';
 
 const root = path.resolve(__dirname, '..', '..');
 const mediaDir = path.join(root, 'media');
-// eslint-disable-next-line @typescript-eslint/no-var-requires
 const bundler = require(path.join(root, 'build', 'bundle-webview.js')) as {
     EDITOR_SOURCES: string[];
     BUNDLE: string;

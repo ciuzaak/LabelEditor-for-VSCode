@@ -355,7 +355,7 @@ let scanComplete = false;
 
 // Handle refreshed image list from extension
 function handleUpdateImageList(message) {
-    scanComplete = message.hasOwnProperty('isScanFinished') ? !!message.isScanFinished : true;
+    scanComplete = Object.prototype.hasOwnProperty.call(message, 'isScanFinished') ? !!message.isScanFinished : true;
     // A manual refresh resets the cached class universe (annotations may have
     // changed), so the next class condition re-indexes. We never auto-CLEAR an
     // active advanced filter here — doing so wiped filters when the async initial

@@ -77,15 +77,20 @@
     "clean": "node -e \"const fs = require('fs'); for (const p of ['out', 'media/editor.bundle.js', 'media/editor.bundle.js.map']) fs.rmSync(p, { recursive: true, force: true })\"",
     "compile": "tsc -p ./ && node build/bundle-webview.js",
     "watch": "node build/bundle-webview.js --watch",
+    "lint": "eslint .",
     "test": "node -e \"require('fs').rmSync('out-test', { recursive: true, force: true })\" && tsc -p ./tsconfig.test.json && node --test \"out-test/test/**/*.test.js\"",
     "vendor": "node -e \"require('fs').copyFileSync('node_modules/polygon-clipping/dist/polygon-clipping.umd.min.js', 'media/polygon-clipping.umd.min.js')\"",
     "package": "vsce package"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/node": "18.x",
     "@types/vscode": "^1.80.0",
     "@vscode/vsce": "^3.7.1",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
     "polygon-clipping": "^0.15.7",
-    "typescript": "^5.1.3"
+    "typescript": "^5.1.3",
+    "typescript-eslint": "^8.70.1"
   }
 }
