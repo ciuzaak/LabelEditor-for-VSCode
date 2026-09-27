@@ -125,6 +125,14 @@ let boxSelectStart = null;   // {x, y} in image coords
 let boxSelectCurrent = null; // {x, y} in image coords
 let editingShapeIndex = -1;
 let recentLabels = initialGlobalSettings.recentLabels || [];
+let managedLabels = initialGlobalSettings.managedLabels || []; // user-added preset labels (may have 0 instances)
+let activeLabel = null; // default category for new shapes (★ row in the Labels panel)
+
+// --- Crosshair guide state (drawing modes) ---
+let crosshairPos = null;   // {x, y} image coords while the mouse is over the canvas
+let crosshairRafId = null; // rAF throttle for crosshair hover redraws
+let crosshairEnabled = true; // toggled in More Settings → Annotation Behavior
+const DRAWING_MODES = ['point', 'line', 'polygon', 'rectangle', 'circle'];
 
 // Dirty State
 let isDirty = false;
@@ -173,7 +181,7 @@ let eraserIsDragging = false;      // Whether mouse has moved enough to be a dra
 let eraserDragCurrent = null;      // {x, y} current drag position for rectangle preview during initial drag
 let eraserRectSecondClick = false; // Whether we're waiting for second click after long-press/drag to complete rectangle
 const ERASER_LONG_PRESS_MS = 300;  // Long-press threshold (ms)
-const ERASER_DRAG_THRESHOLD = 5;   // Drag threshold (px in image coords)
+const ERASER_DRAG_THRESHOLD = 5;   // Drag threshold (screen px; divide by zoomLevel when comparing image coords)
 
 // Zoom & Pan variables
 let zoomLevel = 1;
@@ -230,7 +238,12 @@ let lastClickTime = 0;
 let lastClickX = 0;
 let lastClickY = 0;
 const CLICK_THRESHOLD_TIME = 500; // 500ms内视为同一位置的连续点击
-const CLICK_THRESHOLD_DISTANCE = 5; // 5px内视为同一位置
+// True when an Enter keydown only confirms an IME composition (e.g. Chinese
+// input selecting a candidate) — text inputs must not treat it as submit.
+function isImeEnter(e) {
+    return e.key === 'Enter' && (e.isComposing || e.keyCode === 229);
+}
+const CLICK_THRESHOLD_DISTANCE = 5; // 5 screen px内视为同一位置（图像坐标比较时需除以 zoomLevel）
 
 // 光标状态追踪 - 避免频繁更新样式
 let currentCursor = 'default';
@@ -452,6 +465,9 @@ if (vscodeState && vscodeState.drawClickThrough !== undefined) {
     drawClickThrough = vscodeState.drawClickThrough;
 } else if (initialGlobalSettings.drawClickThrough !== undefined) {
     drawClickThrough = initialGlobalSettings.drawClickThrough;
+}
+if (initialGlobalSettings.crosshairEnabled !== undefined) {
+    crosshairEnabled = initialGlobalSettings.crosshairEnabled;
 }
 if (vscodeState && vscodeState.showShapeLabels !== undefined) {
     showShapeLabels = vscodeState.showShapeLabels;
@@ -1718,6 +1734,10 @@ function handleAction(id, e) {
                 hideShapeContextMenu();
                 return;
             }
+            if (labelContextMenu && labelContextMenu.style.display !== 'none') {
+                hideLabelContextMenu();
+                return;
+            }
             if (isBoxSelecting) {
                 isBoxSelecting = false;
                 boxSelectStart = null;
@@ -1828,6 +1848,16 @@ function selectShape(index) {
     selectedShapeIndex = index;
     if (index !== -1) {
         selectedShapeIndices.add(index);
+    }
+}
+
+// Select a shape and show its vertex handles (view mode only — in drawing
+// modes auto-entering edit mode would intercept the next draw click)
+function selectShapeAndEdit(index) {
+    if (index !== -1 && currentMode === 'view') {
+        enterShapeEditMode(index);
+    } else {
+        selectShape(index);
     }
 }
 
@@ -2085,6 +2115,9 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     hideCycleBadge();
                 } else {
                     // Smallest-first selection; repeat clicks on the same stack cycle down
+                    const prevSelected = selectedShapeIndex;
+                    const sameSpot = Math.hypot(x - lastClickX, y - lastClickY) < CLICK_THRESHOLD_DISTANCE / zoomLevel &&
+                        (now - lastClickTime) < CLICK_THRESHOLD_TIME;
                     const r = resolveOverlapSelection({
                         ordered: overlappingShapes,
                         prevMembers: overlapCycleState.members,
@@ -2094,15 +2127,26 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     selectShape(r.targetIndex);
                     overlapCycleState = { members: r.members, pos: r.pos };
                     updateCycleBadge(e.clientX, e.clientY, r.pos, r.members.length);
+                    // View mode: selecting a shape shows its vertex handles right
+                    // away. Other tool modes: a second click on the same single
+                    // shape (manual double-click — the browser's dblclick is
+                    // unreliable because draw() replaces the SVG target between
+                    // clicks) enters edit mode, e.g. to adjust a just-drawn box.
+                    if (currentMode === 'view') {
+                        enterShapeEditMode(r.targetIndex);
+                    } else if (sameSpot && overlappingShapes.length === 1 && r.targetIndex === prevSelected) {
+                        enterShapeEditMode(r.targetIndex);
+                    }
                 }
 
-                // 更新点击位置和时间
+                // 更新点击位置和时间。时间戳在重绘完成后记录：处理器自身的
+                // 渲染耗时不应侵占双击判定的 500ms 窗口（慢机器/大图时尤其明显）
                 lastClickX = x;
                 lastClickY = y;
-                lastClickTime = now;
 
                 renderShapeList();
                 draw();
+                lastClickTime = Date.now();
                 return;
             } else {
                 // Click on empty area
@@ -2161,7 +2205,7 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     // Double-click detection on last point (within threshold distance and time)
                     const now = Date.now();
                     const timeDiff = now - lastClickTime;
-                    const isDoubleClickOnLast = distanceToLast < CLICK_THRESHOLD_DISTANCE && timeDiff < CLICK_THRESHOLD_TIME;
+                    const isDoubleClickOnLast = distanceToLast < CLICK_THRESHOLD_DISTANCE / zoomLevel && timeDiff < CLICK_THRESHOLD_TIME;
 
                     if (isDoubleClickOnLast && currentPoints.length >= 2) {
                         // Double-click on last point - finish the line
@@ -2317,6 +2361,22 @@ canvasWrapper.addEventListener('mousedown', (e) => {
 });
 
 canvasWrapper.addEventListener('mousemove', (e) => {
+    // --- Update crosshair guide position (rendered in drawSVGAnnotations) ---
+    if (crosshairEnabled) {
+        const chRect = canvas.getBoundingClientRect();
+        crosshairPos = {
+            x: (e.clientX - chRect.left) / zoomLevel,
+            y: (e.clientY - chRect.top) / zoomLevel
+        };
+        if (!isDrawing && !isBoxSelecting && !eraserActive && !eraserMouseDownPos &&
+            DRAWING_MODES.includes(currentMode) && crosshairRafId === null) {
+            crosshairRafId = requestAnimationFrame(() => {
+                crosshairRafId = null;
+                draw();
+            });
+        }
+    }
+
     // --- Eraser mousemove handling ---
     // Phase 1: During initial mousedown-hold (before mouseup determines mode)
     if (eraserMouseDownPos && !eraserActive) {
@@ -2325,7 +2385,7 @@ canvasWrapper.addEventListener('mousemove', (e) => {
         const y = (e.clientY - rect.top) / zoomLevel;
         const dx = x - eraserMouseDownPos.x;
         const dy = y - eraserMouseDownPos.y;
-        if (Math.sqrt(dx * dx + dy * dy) > ERASER_DRAG_THRESHOLD) {
+        if (Math.sqrt(dx * dx + dy * dy) > ERASER_DRAG_THRESHOLD / zoomLevel) {
             eraserIsDragging = true;
         }
         eraserDragCurrent = { x, y };
@@ -2435,6 +2495,10 @@ canvasWrapper.addEventListener('mousemove', (e) => {
 });
 
 canvasWrapper.addEventListener('mouseleave', () => {
+    if (crosshairPos) {
+        crosshairPos = null;
+        if (DRAWING_MODES.includes(currentMode)) draw();
+    }
     if (hoveredShapeIndex !== -1) {
         hoveredShapeIndex = -1;
         draw();
@@ -2451,7 +2515,7 @@ document.addEventListener('mouseup', (e) => {
             const dx = boxSelectCurrent.x - boxSelectStart.x;
             const dy = boxSelectCurrent.y - boxSelectStart.y;
             // Only select if dragged enough (not a simple click)
-            if (Math.sqrt(dx * dx + dy * dy) > CLICK_THRESHOLD_DISTANCE) {
+            if (Math.sqrt(dx * dx + dy * dy) > CLICK_THRESHOLD_DISTANCE / zoomLevel) {
                 const found = findShapesInRect(boxSelectStart.x, boxSelectStart.y, boxSelectCurrent.x, boxSelectCurrent.y);
                 if (e.ctrlKey || e.metaKey) {
                     // Ctrl+drag: add to existing selection
@@ -3008,6 +3072,13 @@ canvasWrapper.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return; // Only left click
 
     if (isEditingShape && shapeBeingEdited !== -1) {
+        // Mid-draw or erasing — editing must not intercept; save and exit, and
+        // let the main handler process this click normally
+        if (isDrawing || eraserActive || eraserMouseDownPos) {
+            exitShapeEditMode(true);
+            return;
+        }
+
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
@@ -3028,6 +3099,18 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         // Check if clicked on the shape itself (for whole shape dragging)
         const clickedIndex = findShapeIndexAt(x, y);
         if (clickedIndex === shapeBeingEdited) {
+            // Repeated click at the same spot over stacked shapes: exit edit
+            // mode and let the main handler cycle through overlapping shapes
+            const overlaps = findAllShapesAt(x, y);
+            const distToLast = Math.hypot(x - lastClickX, y - lastClickY);
+            const isCycling = !e.ctrlKey && !e.metaKey && overlaps.length > 1 &&
+                distToLast < CLICK_THRESHOLD_DISTANCE / zoomLevel &&
+                (Date.now() - lastClickTime) < CLICK_THRESHOLD_TIME;
+            if (isCycling) {
+                exitShapeEditMode(true);
+                return;
+            }
+
             isDraggingWholeShape = true;
             dragStartPoint = { x, y };
             // Don't overwrite the Shift feedback cursor; it'll be cleared on Shift-up.
@@ -3039,13 +3122,39 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             return;
         }
 
-        // Clicked outside the shape - exit edit mode without saving (like ESC)
-        exitShapeEditMode(false);
-        e.stopPropagation();
-        e.preventDefault();
-        return;
+        // Clicked elsewhere — keep the edits and fall through (no stopPropagation)
+        // so the main handler selects the clicked shape / clears selection /
+        // starts box selection as usual, without needing a second click
+        exitShapeEditMode(true);
     }
 }, true); // Use capture phase to intercept before other handlers
+
+// Double-click a shape to enter vertex edit mode (every tool mode — e.g.
+// right after drawing a box). Manual mousedown detection covers the normal
+// case; this listener is the jitter-tolerant fallback when the browser does
+// fire dblclick (e.g. clicks on the Instances list bubbling over).
+canvasWrapper.addEventListener('dblclick', (e) => {
+    if (e.button !== 0) return;
+    if (currentMode === 'sam' || isDrawing || eraserActive || eraserMouseDownPos) return;
+    if (labelModal && labelModal.style.display === 'flex') return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoomLevel;
+    const y = (e.clientY - rect.top) / zoomLevel;
+    let idx = findShapeIndexAt(x, y);
+    if (idx === -1) {
+        const m = 10 / zoomLevel;
+        for (const [dx, dy] of [[m, 0], [-m, 0], [0, m], [0, -m], [m, m], [-m, -m], [m, -m], [-m, m]]) {
+            idx = findShapeIndexAt(x + dx, y + dy);
+            if (idx !== -1) break;
+        }
+    }
+    if (idx !== -1) {
+        enterShapeEditMode(idx);
+        renderShapeList();
+        draw();
+    }
+});
 
 document.addEventListener('mousemove', (e) => {
     if (!isEditingShape || shapeBeingEdited === -1) return;
@@ -3379,7 +3488,14 @@ function isPointNearLinestrip(point, vs, threshold) {
 
 function finishPolygon() {
     isDrawing = false;
-    showLabelModal();
+    if (activeLabel && window.annotationFormat !== 'yolo') {
+        // Default label exists: create the shape immediately without the modal
+        labelInput.value = activeLabel;
+        descriptionInput.value = '';
+        confirmLabel();
+    } else {
+        showLabelModal();
+    }
 }
 
 // --- Eraser Logic ---
@@ -4005,7 +4121,8 @@ function showLabelModal(editIndex = -1) {
         labelInput.value = shapes[editIndex].label;
         descriptionInput.value = shapes[editIndex].description || '';
     } else {
-        labelInput.value = '';
+        // New shape: default to the label selected in the Labels list
+        labelInput.value = activeLabel || '';
         descriptionInput.value = '';
     }
 
@@ -4141,6 +4258,9 @@ function confirmLabel() {
 
     // 持久化到全局状态（同时保存到vscodeState和extension globalState）
     saveGlobalSettings('recentLabels', recentLabels);
+
+    // Remember this label as the active/default for subsequent new shapes
+    activeLabel = label;
 
     const description = descriptionInput.value.trim();
 
@@ -4354,7 +4474,7 @@ document.querySelectorAll('.modal-close').forEach((btn) => {
 
 // 在labelInput上监听Enter键
 labelInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !isImeEnter(e)) {
         e.preventDefault();
         e.stopPropagation();
         confirmLabel();
@@ -4371,7 +4491,7 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             cancelLabelInput();
-        } else if (e.key === 'Enter' && activeTag !== 'TEXTAREA' && activeTag !== 'BUTTON') {
+        } else if (e.key === 'Enter' && !isImeEnter(e) && activeTag !== 'TEXTAREA' && activeTag !== 'BUTTON') {
             e.preventDefault();
             e.stopPropagation();
             confirmLabel();
@@ -4384,7 +4504,7 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             hideColorPicker();
-        } else if (e.key === 'Enter' && activeTag !== 'BUTTON') {
+        } else if (e.key === 'Enter' && !isImeEnter(e) && activeTag !== 'BUTTON') {
             e.preventDefault();
             e.stopPropagation();
             confirmColorPicker();
@@ -4397,7 +4517,7 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             hideOnnxInferModal();
-        } else if (e.key === 'Enter' && activeTag !== 'BUTTON') {
+        } else if (e.key === 'Enter' && !isImeEnter(e) && activeTag !== 'BUTTON') {
             e.preventDefault();
             e.stopPropagation();
             submitOnnxInfer();
@@ -4410,7 +4530,7 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             hideSamConfigModal();
-        } else if (e.key === 'Enter' && activeTag !== 'BUTTON') {
+        } else if (e.key === 'Enter' && !isImeEnter(e) && activeTag !== 'BUTTON') {
             e.preventDefault();
             e.stopPropagation();
             submitSamConfig();
@@ -4426,6 +4546,7 @@ document.addEventListener('keydown', (e) => {
             e.stopPropagation();
             hideExportDatasetModal();
         } else if (e.key === 'Enter'
+                   && !isImeEnter(e)
                    && activeTag !== 'BUTTON'
                    && document.activeElement !== exportAddClassInput) {
             e.preventDefault();
@@ -4460,6 +4581,23 @@ function renderShapeList() {
         const labelSpan = document.createElement('span');
         labelSpan.className = 'shape-label-text';
         labelSpan.textContent = shape.label;
+        labelSpan.setAttribute('data-tip-id', 'shape.renameLabel');
+        // Click label text to rename directly (no right-click menu needed)
+        labelSpan.onclick = (e) => {
+            e.stopPropagation();
+            hideShapeContextMenu();
+            if (selectedShapeIndices.size > 1 && isShapeSelected(index)) {
+                showBatchRenameModal();
+            } else {
+                if (!isShapeSelected(index)) {
+                    selectShape(index);
+                    renderShapeList();
+                    draw();
+                }
+                showLabelModal(index);
+            }
+        };
+        labelSpan.ondblclick = (e) => e.stopPropagation();
         li.appendChild(labelSpan);
 
         // Description subtitle (if present)
@@ -4488,8 +4626,17 @@ function renderShapeList() {
                 // Shift+click: range select
                 selectShapeRange(selectedShapeIndex, index);
             } else {
-                selectShape(index);
+                selectShapeAndEdit(index);
             }
+            renderShapeList();
+            draw();
+        };
+
+        // Double-click a row to enter vertex edit mode
+        li.ondblclick = (e) => {
+            e.preventDefault();
+            selectShape(index);
+            enterShapeEditMode(index);
             renderShapeList();
             draw();
         };
@@ -4644,13 +4791,18 @@ function renderLabelsList() {
     const labelsStats = getLabelsStats();
     const fragment = document.createDocumentFragment();
 
-    // 按标签名称排序
-    const sortedLabels = Array.from(labelsStats.keys()).sort();
+    // 按标签名称排序（形状标签 ∪ 用户预设标签）
+    const allLabelNames = new Set(labelsStats.keys());
+    managedLabels.forEach(l => allLabelNames.add(l));
+    const sortedLabels = Array.from(allLabelNames).sort();
 
     sortedLabels.forEach(label => {
-        const stat = labelsStats.get(label);
+        const stat = labelsStats.get(label) || { count: 0, allHidden: false };
         const li = document.createElement('li');
         li.dataset.label = label; // lets syncLabelsActiveState() map rows back to labels
+
+        // Mark the default label for new shapes with a star
+        li.classList.toggle('default-label', label === activeLabel);
 
         // Clicking the row selects every shape with this label. Ctrl/Cmd-click
         // unions/toggles the group into the current selection. The per-row
@@ -4660,6 +4812,18 @@ function renderLabelsList() {
             renderShapeList();
             renderLabelsList();
             draw();
+        };
+
+        // Double-click renames the whole category; right-click opens the menu
+        li.ondblclick = (e) => {
+            if (e.target !== li && !e.target.classList.contains('label-name')) return;
+            e.preventDefault();
+            startLabelRename(label);
+        };
+        li.oncontextmenu = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showLabelContextMenu(e.clientX, e.clientY, label);
         };
 
         // 颜色指示器
@@ -4684,18 +4848,21 @@ function renderLabelsList() {
         labelCount.className = 'label-count';
         labelCount.textContent = `(${stat.count})`;
 
-        // 可见性切换按钮
-        const visibilityBtn = document.createElement('span');
-        visibilityBtn.className = 'label-visibility-btn';
-        visibilityBtn.innerHTML = '&#128065;'; // Eye icon
-        visibilityBtn.setAttribute('data-tip-id', 'label.toggleVisible');
-        if (stat.allHidden) {
-            visibilityBtn.classList.add('all-hidden');
+        // 可见性切换按钮（预设空标签无实例，不显示）
+        let visibilityBtn = null;
+        if (stat.count > 0) {
+            visibilityBtn = document.createElement('span');
+            visibilityBtn.className = 'label-visibility-btn';
+            visibilityBtn.innerHTML = '&#128065;'; // Eye icon
+            visibilityBtn.setAttribute('data-tip-id', 'label.toggleVisible');
+            if (stat.allHidden) {
+                visibilityBtn.classList.add('all-hidden');
+            }
+            visibilityBtn.onclick = (e) => {
+                e.stopPropagation();
+                toggleLabelVisibility(label);
+            };
         }
-        visibilityBtn.onclick = (e) => {
-            e.stopPropagation();
-            toggleLabelVisibility(label);
-        };
 
         // Reset按钮（只在有自定义颜色时显示）
         const resetBtn = document.createElement('span');
@@ -4710,11 +4877,25 @@ function renderLabelsList() {
             resetLabelColor(label);
         };
 
+        // 删除按钮（仅未被使用的预设标签）
+        let removeBtn = null;
+        if (stat.count === 0 && managedLabels.includes(label)) {
+            removeBtn = document.createElement('span');
+            removeBtn.className = 'label-remove-btn';
+            removeBtn.textContent = '×';
+            removeBtn.title = 'Remove preset label';
+            removeBtn.onclick = (e) => {
+                e.stopPropagation();
+                removeManagedLabel(label);
+            };
+        }
+
         li.appendChild(colorIndicator);
         li.appendChild(labelName);
         li.appendChild(labelCount);
-        li.appendChild(visibilityBtn);
+        if (visibilityBtn) li.appendChild(visibilityBtn);
         li.appendChild(resetBtn);
+        if (removeBtn) li.appendChild(removeBtn);
         fragment.appendChild(li);
     });
 
@@ -4734,6 +4915,191 @@ function renderLabelsList() {
     }
 
     syncLabelsActiveState();
+}
+
+// --- Labels panel: context menu, category rename, add/remove presets ---
+
+const labelContextMenu = document.getElementById('labelContextMenu');
+const labelContextMenuSetDefault = document.getElementById('labelContextMenuSetDefault');
+const labelContextMenuRename = document.getElementById('labelContextMenuRename');
+const labelContextMenuRemove = document.getElementById('labelContextMenuRemove');
+let labelContextMenuTarget = null;
+
+function showLabelContextMenu(clientX, clientY, label) {
+    if (!labelContextMenu) return;
+    labelContextMenuTarget = label;
+    if (labelContextMenuRemove) {
+        const used = shapes.some(s => s.label === label);
+        labelContextMenuRemove.style.display = (!used && managedLabels.includes(label)) ? '' : 'none';
+    }
+    labelContextMenu.style.display = 'block';
+    const mw = labelContextMenu.offsetWidth;
+    const mh = labelContextMenu.offsetHeight;
+    labelContextMenu.style.left = Math.min(clientX, window.innerWidth - mw - 4) + 'px';
+    labelContextMenu.style.top = Math.min(clientY, window.innerHeight - mh - 4) + 'px';
+}
+
+function hideLabelContextMenu() {
+    if (labelContextMenu) labelContextMenu.style.display = 'none';
+    labelContextMenuTarget = null;
+}
+
+if (labelContextMenuSetDefault) {
+    labelContextMenuSetDefault.onclick = (e) => {
+        e.stopPropagation();
+        const label = labelContextMenuTarget;
+        hideLabelContextMenu();
+        if (label) {
+            activeLabel = label;
+            renderLabelsList();
+        }
+    };
+}
+if (labelContextMenuRename) {
+    labelContextMenuRename.onclick = (e) => {
+        e.stopPropagation();
+        const label = labelContextMenuTarget;
+        hideLabelContextMenu();
+        if (label) startLabelRename(label);
+    };
+}
+if (labelContextMenuRemove) {
+    labelContextMenuRemove.onclick = (e) => {
+        e.stopPropagation();
+        const label = labelContextMenuTarget;
+        hideLabelContextMenu();
+        if (label) removeManagedLabel(label);
+    };
+}
+
+document.addEventListener('mousedown', (e) => {
+    if (labelContextMenu && labelContextMenu.style.display !== 'none' && !labelContextMenu.contains(e.target)) {
+        hideLabelContextMenu();
+    }
+});
+
+function removeManagedLabel(label) {
+    managedLabels = managedLabels.filter(l => l !== label);
+    saveGlobalSettings('managedLabels', managedLabels);
+    if (activeLabel === label) activeLabel = null;
+    renderLabelsList();
+}
+
+// Rename an entire label category: all shapes with the old name, plus the
+// preset list, custom color, visibility state and recent-labels entry.
+function renameLabelCategory(oldName, rawNewName) {
+    const newName = (rawNewName || '').trim();
+    if (!newName || newName === oldName) { renderLabelsList(); return; }
+
+    let shapesChanged = false;
+    shapes.forEach(s => {
+        if (s.label === oldName) { s.label = newName; shapesChanged = true; }
+    });
+
+    if (managedLabels.includes(oldName)) {
+        managedLabels = [...new Set(managedLabels.map(l => l === oldName ? newName : l))];
+        saveGlobalSettings('managedLabels', managedLabels);
+    }
+    if (customColors.has(oldName)) {
+        customColors.set(newName, customColors.get(oldName));
+        customColors.delete(oldName);
+        saveGlobalSettings('customColors', Object.fromEntries(customColors));
+        invalidateColorCache();
+    }
+    if (labelVisibilityState.has(oldName)) {
+        labelVisibilityState.set(newName, labelVisibilityState.get(oldName));
+        labelVisibilityState.delete(oldName);
+        saveState();
+    }
+    const ri = recentLabels.indexOf(oldName);
+    if (ri !== -1) {
+        recentLabels.splice(ri, 1);
+        if (!recentLabels.includes(newName)) recentLabels.unshift(newName);
+        saveGlobalSettings('recentLabels', recentLabels);
+    }
+    if (activeLabel === oldName) activeLabel = newName;
+
+    if (shapesChanged) {
+        markDirty();
+        saveHistory();
+        renderShapeList();
+    }
+    renderLabelsList();
+    draw();
+}
+
+// Turn a Labels-list row into an inline rename editor (IME-safe Enter commits,
+// Esc cancels, blur commits)
+function startLabelRename(oldLabel) {
+    if (!labelsList) return;
+    const li = [...labelsList.querySelectorAll('li')].find(
+        l => l.querySelector('.label-name')?.textContent === oldLabel);
+    if (!li || li.querySelector('input')) return;
+    hideLabelContextMenu();
+    li.innerHTML = '';
+    li.classList.add('label-rename-row');
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = oldLabel;
+    let done = false;
+    const finish = (commit) => {
+        if (done) return;
+        done = true;
+        if (commit) renameLabelCategory(oldLabel, input.value);
+        else renderLabelsList();
+    };
+    input.onkeydown = (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' && !isImeEnter(e)) finish(true);
+        else if (e.key === 'Escape') finish(false);
+    };
+    input.onblur = () => { if (labelsList.contains(input)) finish(true); };
+    li.appendChild(input);
+    input.focus();
+    input.select();
+}
+
+// "Add label" button: inline input at the top of the Labels list
+const addLabelBtn = document.getElementById('addLabelBtn');
+if (addLabelBtn && labelsList) {
+    addLabelBtn.onclick = () => {
+        if (labelsList.querySelector('.add-label-row')) return; // already open
+        hideLabelContextMenu();
+        const row = document.createElement('li');
+        row.className = 'add-label-row';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = tt('label.newPlaceholder');
+        let committed = false;
+        const commit = () => {
+            if (committed) return;
+            committed = true;
+            const name = input.value.trim();
+            row.remove();
+            if (!name) { renderLabelsList(); return; }
+            if (!managedLabels.includes(name) && !shapes.some(s => s.label === name)) {
+                managedLabels.push(name);
+                saveGlobalSettings('managedLabels', managedLabels);
+            }
+            activeLabel = name; // newly added label becomes the default
+            renderLabelsList();
+        };
+        const cancel = () => {
+            if (committed) return;
+            committed = true;
+            row.remove();
+            renderLabelsList();
+        };
+        input.onkeydown = (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter' && !isImeEnter(e)) commit();
+            else if (e.key === 'Escape') cancel();
+        };
+        input.onblur = () => { if (row.parentNode) commit(); };
+        row.appendChild(input);
+        labelsList.prepend(row);
+        input.focus();
+    };
 }
 
 // Toggle the .active highlight on each Labels row. A label is active when every
@@ -5346,6 +5712,61 @@ function drawSVGAnnotations(mouseEvent) {
     if (zoomLevel >= PIXEL_VALUES_ZOOM && img.width > 0 && img.height > 0) {
         drawPixelValues();
     }
+
+    // --- Draw dashed crosshair guide in drawing modes (color adapts to image brightness) ---
+    if (crosshairEnabled && crosshairPos && DRAWING_MODES.includes(currentMode) && img.width > 0 && img.height > 0) {
+        const dash = `${6 / zoomLevel} ${4 / zoomLevel}`;
+        const ccx = Math.min(img.width - 1, Math.max(0, Math.round(crosshairPos.x)));
+        const ccy = Math.min(img.height - 1, Math.max(0, Math.round(crosshairPos.y)));
+        const lineColor = getCrosshairColor(ccx, ccy);
+        for (const [x1, y1, x2, y2] of [[0, ccy, img.width, ccy], [ccx, 0, ccx, img.height]]) {
+            const lineEl = document.createElementNS(SVG_NS, 'line');
+            lineEl.setAttribute('x1', x1); lineEl.setAttribute('y1', y1);
+            lineEl.setAttribute('x2', x2); lineEl.setAttribute('y2', y2);
+            lineEl.setAttribute('stroke', lineColor);
+            lineEl.setAttribute('stroke-width', 1.5 / zoomLevel);
+            lineEl.setAttribute('stroke-dasharray', dash);
+            lineEl.style.pointerEvents = 'none';
+            svgOverlay.appendChild(lineEl);
+        }
+    }
+}
+
+// Sample luminance along the crosshair row/column and pick a high-contrast
+// line color. Emulates the CSS brightness/contrast filter applied to the
+// canvas element, since getImageData reads unfiltered pixels.
+// Results are cached per 16px cursor bucket, and invalidated whenever the
+// image or the channel/CLAHE/brightness/contrast state changes.
+const CROSSHAIR_BUCKET = 16; // image px quantization for the luminance cache
+let crosshairColorCache = null;
+
+function getCrosshairColor(cx, cy) {
+    const sig = `${Math.round(cx / CROSSHAIR_BUCKET)}_${Math.round(cy / CROSSHAIR_BUCKET)}_` +
+        `${currentImageLoadId}_${img.width}x${img.height}_` +
+        `${brightness}_${contrast}_${selectedChannel}_${claheEnabled}`;
+    if (crosshairColorCache && crosshairColorCache.sig === sig) {
+        return crosshairColorCache.color;
+    }
+
+    let lum = 0.5;
+    try {
+        const row = ctx.getImageData(0, cy, img.width, 1).data;
+        const col = ctx.getImageData(cx, 0, 1, img.height).data;
+        let sum = 0, n = 0;
+        for (let i = 0; i < row.length; i += 16) { // sample every 4th pixel
+            sum += 0.299 * row[i] + 0.587 * row[i + 1] + 0.114 * row[i + 2];
+            n++;
+        }
+        for (let i = 0; i < col.length; i += 16) {
+            sum += 0.299 * col[i] + 0.587 * col[i + 1] + 0.114 * col[i + 2];
+            n++;
+        }
+        if (n > 0) lum = (sum / n) / 255;
+    } catch (e) { /* tainted canvas or read failure: use mid gray */ }
+    lum = Math.min(1, Math.max(0, ((lum - 0.5) * (contrast / 100) + 0.5) * (brightness / 100)));
+    const color = lum > 0.5 ? 'rgba(0, 110, 40, 0.95)' : 'rgba(0, 255, 120, 0.95)';
+    crosshairColorCache = { sig, color };
+    return color;
 }
 
 // Draw an instance's class name as a small colored pill at its top-left.
@@ -6232,6 +6653,7 @@ function showMoreSettingsModal() {
     if (settingsMenuDropdown) settingsMenuDropdown.style.display = 'none';
     if (!moreSettingsModal) return;
     updateDrawClickThroughToggleUI();
+    updateCrosshairToggleUI();
     updateShowShapeLabelsToggleUI();
     moreSettingsModal.style.display = 'flex';
 }
@@ -6449,6 +6871,7 @@ if (languageSelect && window.i18n) {
         updateImageInfoPopup();
         updateClaheToggleUI();
         updateDrawClickThroughToggleUI();
+        updateCrosshairToggleUI();
         updateShowShapeLabelsToggleUI();
         draw();
         vscode.postMessage({ command: 'saveGlobalSettings', key: 'locale', value: e.target.value });
@@ -6813,6 +7236,24 @@ if (drawClickThroughToggleBtn) {
         hoveredShapeIndex = -1;
         overlapCycleState = { members: [], pos: -1 };
         hideCycleBadge();
+        draw();
+    };
+}
+
+// Crosshair guide toggle button
+const crosshairToggleBtn = document.getElementById('crosshairToggleBtn');
+function updateCrosshairToggleUI() {
+    if (!crosshairToggleBtn) return;
+    const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
+    crosshairToggleBtn.textContent = crosshairEnabled ? tt('toggle.on') : tt('toggle.off');
+    crosshairToggleBtn.classList.toggle('active', crosshairEnabled);
+}
+if (crosshairToggleBtn) {
+    crosshairToggleBtn.onclick = () => {
+        crosshairEnabled = !crosshairEnabled;
+        updateCrosshairToggleUI();
+        saveGlobalSettings('crosshairEnabled', crosshairEnabled);
+        if (!crosshairEnabled) crosshairPos = null;
         draw();
     };
 }
@@ -7243,24 +7684,28 @@ function getEffectiveImageList() {
 // Update image count display with current position: (current/total) or (current/filtered/total)
 function updateImageCount() {
     const imageCountEl = document.getElementById('imageCount');
-    if (!imageCountEl) return;
+    const topCountEl = document.getElementById('topImageCount');
+    if (!imageCountEl && !topCountEl) return;
 
     const effectiveImages = getEffectiveImageList();
     const total = typeof workspaceImages !== 'undefined' ? workspaceImages.length : 0;
     const currentIndex = effectiveImages.indexOf(currentImageRelativePathMutable);
 
     const filteredMode = advancedFilterActive || !!searchQuery;
+    let text;
     if (currentIndex === -1) {
         // Position unknown — show count only
-        imageCountEl.textContent = filteredMode
+        text = filteredMode
             ? `(${effectiveImages.length}/${total})`
             : `(${total})`;
     } else {
         const currentPos = currentIndex + 1;
-        imageCountEl.textContent = filteredMode
+        text = filteredMode
             ? `(${currentPos}/${effectiveImages.length}/${total})`
             : `(${currentPos}/${total})`;
     }
+    if (imageCountEl) imageCountEl.textContent = text;
+    if (topCountEl) topCountEl.textContent = text;
 }
 
 // Filter images based on search query
@@ -8069,6 +8514,7 @@ document.addEventListener('mouseup', () => {
 
 // Initialize image browser list
 renderImageBrowserList();
+updateImageCount(); // seed the top-toolbar position counter before the first list update
 
 // Signal the extension that the webview is fully initialized and ready to receive messages.
 // This is critical: postMessage from the extension can be lost if sent before

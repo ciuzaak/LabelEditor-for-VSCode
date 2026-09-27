@@ -86,12 +86,15 @@ const TIPS = {
 
     // Per-row controls in the Labels list (dynamically rendered in main.js)
     'label.selectInstances': { title: 'Select All Instances', desc: 'Click to select every shape with this label; Ctrl-click adds them to the current selection.' },
+    'label.add': { title: 'Add Label', desc: 'Pre-create a category label; it becomes the default for new shapes drawn without the dialog.' },
+    'behavior.crosshair': { title: 'Crosshair Guide', desc: 'Show a dashed crosshair following the cursor in drawing modes; its color adapts to image brightness.' },
     'label.color':      { title: 'Label Color', desc: 'Click to change the color used for shapes with this label.' },
     'label.colorReset': { title: 'Reset Color', desc: 'Restore this label color to the default.' },
     'label.toggleVisible': { title: 'Show/Hide All', desc: 'Click to show or hide every shape that uses this label.' },
 
     // Per-row controls in the Instances (shape) list (dynamically rendered)
     'shape.editVertices':  { title: 'Edit Vertices', desc: 'Switch this shape into vertex-edit mode.' },
+    'shape.renameLabel':   { title: 'Rename', desc: 'Click to rename this instance\'s label; batch rename when several are selected.' },
     'shape.toggleVisible': { title: 'Show/Hide Shape', desc: 'Toggle visibility of this single shape.' },
     'shape.delete':        { title: 'Delete Shape', desc: 'Delete this shape from the annotation.' },
 

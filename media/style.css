@@ -270,6 +270,65 @@ body {
 .sidebar-section-header h3 { margin: 0; }
 .sidebar-section-header .section-count { margin-left: auto; }
 
+/* Labels panel: add-label button, inline input rows, default marker, menu */
+.add-label-btn {
+    background: none;
+    border: 1px solid var(--color-border-input);
+    color: var(--color-text-secondary);
+    border-radius: 4px;
+    cursor: pointer;
+    padding: 1px 5px;
+    margin-left: 8px;
+    display: inline-flex;
+    align-items: center;
+}
+.add-label-btn:hover {
+    color: var(--color-text-primary);
+    background-color: var(--color-bg-hover);
+}
+.add-label-row,
+.label-rename-row {
+    padding: 2px 0 !important;
+    display: block !important;
+    background: none !important;
+}
+.add-label-row input,
+.label-rename-row input {
+    width: 100%;
+    box-sizing: border-box;
+    background-color: var(--color-bg-input);
+    border: 1px solid var(--color-border-input);
+    color: var(--color-text-primary);
+    border-radius: 4px;
+    padding: 3px 6px;
+    font-size: 12px;
+}
+#labelsList li.default-label .label-name::before {
+    content: '★ ';
+    color: var(--color-accent);
+}
+.label-remove-btn {
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    font-weight: bold;
+    margin-left: 6px;
+}
+.label-remove-btn:hover {
+    color: var(--color-danger);
+}
+.label-context-menu {
+    position: fixed;
+    background-color: var(--color-bg-popover);
+    border: 1px solid var(--color-border-secondary);
+    border-radius: 6px;
+    box-shadow: 0 4px 14px var(--color-shadow);
+    z-index: 2000;
+    min-width: 150px;
+    overflow: hidden;
+}
+.shape-label-text { cursor: pointer; }
+.shape-label-text:hover { text-decoration: underline; }
+
 /* Resizers - hairline at rest, accent + thicker on hover */
 .resizer, .image-browser-resizer {
     width: 1px;
@@ -1141,6 +1200,16 @@ input[type="range"]:focus-visible::-moz-range-thumb {
 .image-browser-header #imageCount {
     font-size: 12px;
     color: var(--color-text-muted);
+}
+
+/* Position counter in the top toolbar, left of the filename */
+.top-image-count {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    font-variant-numeric: tabular-nums;
+    margin-right: 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .image-browser-header .header-btn {

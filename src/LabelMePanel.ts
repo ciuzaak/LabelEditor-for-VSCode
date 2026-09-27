@@ -970,6 +970,7 @@ export class LabelMePanel {
             <symbol id="icon-sliders" viewBox="0 0 24 24" ${SW}><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></symbol>
             <symbol id="icon-refresh-cw" viewBox="0 0 24 24" ${SW}><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></symbol>
             <symbol id="icon-x" viewBox="0 0 24 24" ${SW}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+            <symbol id="icon-plus" viewBox="0 0 24 24" ${SW}><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
             <symbol id="icon-panel-left" viewBox="0 0 24 24" ${SW}><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="9" y1="3" x2="9" y2="21"/></symbol>
             <symbol id="icon-chevron-left" viewBox="0 0 24 24" ${SW}><polyline points="15 18 9 12 15 6"/></symbol>
             <symbol id="icon-chevron-right" viewBox="0 0 24 24" ${SW}><polyline points="9 18 15 12 9 6"/></symbol>
@@ -1125,6 +1126,7 @@ export class LabelMePanel {
                             <button id="imageBrowserToggleBtn" class="btn btn-icon nav-btn" data-tip-id="nav.toggleBrowser"><svg class="icon" aria-hidden="true"><use href="#icon-panel-left"/></svg></button>
                             <button id="prevImageBtn" class="btn btn-icon nav-btn" data-tip-id="nav.prev"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"/></svg></button>
                             <button id="nextImageBtn" class="btn btn-icon nav-btn" data-tip-id="nav.next"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-right"/></svg></button>
+                            <span id="topImageCount" class="top-image-count" title="Current image position / total"></span>
                             <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" data-tip-id="nav.fileName">${isDummyImage ? '' : (currentImageRelativePath || path.basename(this._imageUri.fsPath))}</span>
                             <span id="status"></span>
                             <span id="imageInfoBtn" class="image-info-btn" data-tip-id="nav.imageInfo"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span>
@@ -1237,8 +1239,14 @@ export class LabelMePanel {
                                 <div class="sidebar-section-header">
                                     <h3 data-i18n="section.labels">Labels</h3>
                                     <span id="labelsCount" class="section-count"></span>
+                                    <button id="addLabelBtn" class="add-label-btn" data-tip-id="label.add" aria-label="Add label"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-plus"/></svg></button>
                                 </div>
                                 <ul id="labelsList"></ul>
+                                <div id="labelContextMenu" class="label-context-menu" style="display: none;">
+                                    <div class="context-menu-item" id="labelContextMenuSetDefault" data-i18n="label.setDefault">Set as Default Label</div>
+                                    <div class="context-menu-item" id="labelContextMenuRename" data-i18n="label.rename">Rename Label</div>
+                                    <div class="context-menu-item context-menu-danger" id="labelContextMenuRemove" data-i18n="label.removePreset" style="display: none;">Remove Preset</div>
+                                </div>
                             </div>
                             <div id="sidebarSectionResizer" class="sidebar-section-resizer"></div>
                             <div class="sidebar-instances-section" id="sidebarInstancesSection">
@@ -1537,6 +1545,10 @@ export class LabelMePanel {
                             <label data-i18n="label.drawClickThrough">Draw over instances</label>
                             <button id="drawClickThroughToggleBtn" class="channel-btn" data-tip-id="behavior.drawClickThrough">Off</button>
                         </div>
+                        <div class="more-settings-row">
+                            <label data-i18n="label.crosshairGuide">Crosshair guide</label>
+                            <button id="crosshairToggleBtn" class="channel-btn" data-tip-id="behavior.crosshair">On</button>
+                        </div>
 
                         <div class="settings-group-header" data-i18n="settings.keyboardShortcuts">Keyboard Shortcuts</div>
                         <div class="keybindings-list" id="keybindingsList"></div>
@@ -1565,6 +1577,7 @@ export class LabelMePanel {
                         borderWidth: ${this._globalState.get('borderWidth') ?? 2},
                         fillOpacity: ${this._globalState.get('fillOpacity') ?? 0.3},
                         recentLabels: ${JSON.stringify(this._globalState.get('recentLabels') || [])},
+                        managedLabels: ${JSON.stringify(this._globalState.get('managedLabels') || [])},
                         theme: "${this._globalState.get('theme') ?? 'auto'}",
                         brightness: ${this._globalState.get('brightness') ?? 100},
                         contrast: ${this._globalState.get('contrast') ?? 100},
@@ -1591,6 +1604,7 @@ export class LabelMePanel {
                         samEncodeAdjusted: ${this._globalState.get('samEncodeAdjusted') ?? false},
                         samOutputFormat: ${JSON.stringify(this._globalState.get('samOutputFormat') || 'polygon')},
                         drawClickThrough: ${this._globalState.get('drawClickThrough') ?? false},
+                        crosshairEnabled: ${this._globalState.get('crosshairEnabled') ?? true},
                         showShapeLabels: ${this._globalState.get('showShapeLabels') ?? false},
                         samGpuIndex: ${this._globalState.get('samGpuIndex') ?? -1},
                         onnxGpuIndex: ${this._globalState.get('onnxGpuIndex') ?? -1},
