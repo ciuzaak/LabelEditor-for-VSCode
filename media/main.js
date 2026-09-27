@@ -3482,7 +3482,7 @@ function performErase(eraserPolygon) {
         } else if (shape.shape_type === 'rectangle') {
             // Rectangle: convert to polygon, compute difference
             const rectPoly = getRectPoints(shape.points);
-            const originalArea = Math.abs(polygonArea(rectPoly));
+            const originalArea = Math.abs(signedPolygonArea(rectPoly));
             const result = computePolygonDifference(rectPoly, clipGeom);
             if (result.length === 0) {
                 shapesToRemove.push(i);
@@ -3499,7 +3499,7 @@ function performErase(eraserPolygon) {
                     modified = true;
                 } else {
                     // Check if area changed (no-op detection)
-                    const resultArea = flatPolys.reduce((sum, pts) => sum + Math.abs(polygonArea(pts)), 0);
+                    const resultArea = flatPolys.reduce((sum, pts) => sum + Math.abs(signedPolygonArea(pts)), 0);
                     if (Math.abs(resultArea - originalArea) < 1e-4) {
                         // No actual change - eraser didn't overlap
                     } else if (flatPolys.length === 1 && isAxisAlignedRect(flatPolys[0]) && flatPolys[0].length === 4) {
@@ -3537,7 +3537,7 @@ function performErase(eraserPolygon) {
             // difference + decomposition flow as polygon. The shape decays to
             // a polygon (or multiple polygons) whenever the eraser changes its area.
             const circlePoly = polygonizeCircle(shape.points[0][0], shape.points[0][1], getCircleRadius(shape.points), 32);
-            const originalArea = Math.abs(polygonArea(circlePoly));
+            const originalArea = Math.abs(signedPolygonArea(circlePoly));
             const result = computePolygonDifference(circlePoly, clipGeom);
             if (result.length === 0) {
                 shapesToRemove.push(i);
@@ -3552,7 +3552,7 @@ function performErase(eraserPolygon) {
                     shapesToRemove.push(i);
                     modified = true;
                 } else {
-                    const resultArea = flatPolys.reduce((sum, pts) => sum + Math.abs(polygonArea(pts)), 0);
+                    const resultArea = flatPolys.reduce((sum, pts) => sum + Math.abs(signedPolygonArea(pts)), 0);
                     if (Math.abs(resultArea - originalArea) < 1e-4) {
                         // No actual overlap with the circle.
                     } else {
@@ -3581,7 +3581,7 @@ function performErase(eraserPolygon) {
             }
         } else {
             // Polygon: compute difference directly
-            const originalArea = Math.abs(polygonArea(shape.points));
+            const originalArea = Math.abs(signedPolygonArea(shape.points));
             const result = computePolygonDifference(shape.points, clipGeom);
             if (result.length === 0) {
                 shapesToRemove.push(i);
@@ -3598,7 +3598,7 @@ function performErase(eraserPolygon) {
                     modified = true;
                 } else {
                     // Check if area changed (no-op detection)
-                    const resultArea = flatPolys.reduce((sum, pts) => sum + Math.abs(polygonArea(pts)), 0);
+                    const resultArea = flatPolys.reduce((sum, pts) => sum + Math.abs(signedPolygonArea(pts)), 0);
                     if (Math.abs(resultArea - originalArea) < 1e-4) {
                         // No actual change - eraser didn't overlap this shape
                     } else {
@@ -3705,7 +3705,10 @@ function isAxisAlignedRect(points) {
 
 // Compute signed area of a polygon (shoelace formula).
 // Positive = counter-clockwise, negative = clockwise.
-function polygonArea(pts) {
+// (Named distinctly from shapeHelpers.js's absolute-value polygonArea: all
+// webview scripts share one global scope, and a same-named declaration here
+// used to replace that one, making overlap-click ordering area-sign dependent.)
+function signedPolygonArea(pts) {
     let area = 0;
     for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
         area += (pts[j][0] + pts[i][0]) * (pts[j][1] - pts[i][1]);
