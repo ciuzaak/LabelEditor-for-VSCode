@@ -25,4 +25,19 @@ describe('webview scripts', () => {
         const dupes = [...owners].filter(([, fs_]) => fs_.length > 1).map(([n, fs_]) => `${n}: ${fs_.join(', ')}`);
         assert.deepEqual(dupes, []);
     });
+
+    it('never write shape points in place (the SVG render cache keys geometry by array identity)', () => {
+        const mediaDir = path.resolve(__dirname, '..', '..', 'media');
+        const offenders: string[] = [];
+        for (const file of fs.readdirSync(mediaDir).filter(f => f.endsWith('.js') && !f.endsWith('.min.js'))) {
+            const lines = fs.readFileSync(path.join(mediaDir, file), 'utf8').split('\n');
+            lines.forEach((line, i) => {
+                if (/^\s*\/\//.test(line)) return;
+                if (/\.points\[[^\]]+\](\[[^\]]+\])?\s*(=|\+=|-=)(?!=)|\.points\.(push|pop|splice|shift|unshift|reverse|sort|fill|copyWithin)\(/.test(line)) {
+                    offenders.push(`${file}:${i + 1}: ${line.trim()}`);
+                }
+            });
+        }
+        assert.deepEqual(offenders, []);
+    });
 });

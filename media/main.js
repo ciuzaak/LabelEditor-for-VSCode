@@ -221,6 +221,20 @@ const MAX_HISTORY = 50; // 最大历史记录数
 
 // 性能优化变量
 let animationFrameId = null; // requestAnimationFrame节流
+// scheduleDraw(): coalesce redraws from high-frequency input (mice can report
+// 500+ moves/s) into one per animation frame, drawn with the latest event.
+let scheduledDrawFrame = null;
+let scheduledDrawEvent = null;
+function scheduleDraw(e) {
+    scheduledDrawEvent = e;
+    if (scheduledDrawFrame !== null) return;
+    scheduledDrawFrame = requestAnimationFrame(() => {
+        scheduledDrawFrame = null;
+        const ev = scheduledDrawEvent;
+        scheduledDrawEvent = null;
+        draw(ev);
+    });
+}
 const colorCache = new Map(); // 颜色计算缓存
 
 // Image load request ID to prevent stale callbacks
@@ -229,6 +243,21 @@ let currentImageLoadId = 0;
 // the previous picture until then, so drawing would overlay the new image's
 // shapes on the old image at the old zoom.
 let imageLoadPending = false;
+
+// What the canvas currently shows. The canvas only holds the image (shapes
+// live in the SVG overlay, brightness/contrast is a CSS filter), so it needs
+// repainting only when the image, its channel/CLAHE processing or the canvas
+// size changes — not on every mouse move.
+let imageLayerKey = '';
+
+// Completed-shape SVG layer and its per-shape node cache (see drawSVGAnnotations).
+const svgShapesLayer = document.createElementNS(SVG_NS, 'g');
+let shapeNodeCache = new Map(); // signature -> <g>, from the previous frame
+
+// Label text metrics cache (see measureLabel).
+const LABEL_FONT_PX = 12;
+const labelMetricsCache = new Map();
+let labelMeasureCtx = null;
 
 // Image metadata for info popup (initialImageMetadata is injected via HTML script tag)
 let currentImageMetadata = (typeof initialImageMetadata !== 'undefined') ? initialImageMetadata : null;
@@ -1048,9 +1077,13 @@ function fitImageToScreen() {
 }
 
 function updateCanvasTransform() {
-    // Canvas 保持原始图片尺寸 (resolution)
-    canvas.width = img.width;
-    canvas.height = img.height;
+    // Canvas 保持原始图片尺寸 (resolution). Assigning width/height clears the
+    // canvas even when the value is unchanged, so only do it on a real change.
+    if (canvas.width !== img.width || canvas.height !== img.height) {
+        canvas.width = img.width;
+        canvas.height = img.height;
+        imageLayerKey = '';
+    }
 
     // When zoomLevel >= PIXEL_RENDER_THRESHOLD it is already snapped to an integer,
     // so img.width * zoomLevel produces exact integer display dimensions.
@@ -1323,6 +1356,7 @@ function handleImageUpdate(message) {
     // Force-invalidate the processed-image cache: a same-URL image may carry different
     // bytes after an external edit, so we cannot rely on the URL alone for invalidation.
     processedKey = '';
+    imageLayerKey = '';
 
     // Exit shape edit mode if currently editing (without saving changes to the old image)
     if (isEditingShape) {
@@ -3107,7 +3141,7 @@ document.addEventListener('mousemove', (e) => {
         const shape = shapes[shapeBeingEdited];
         shape.points = originalEditPoints.map(p => clampImageCoords(p[0] + dx, p[1] + dy));
 
-        draw();
+        scheduleDraw(e);
     } else if (isDraggingVertex && activeVertexIndex !== -1) {
         const shape = shapes[shapeBeingEdited];
 
@@ -3119,9 +3153,9 @@ document.addEventListener('mousemove', (e) => {
             if (activeVertexIndex === 0 || activeVertexIndex === 2) {
                 // Moving a diagonal corner - straightforward
                 if (activeVertexIndex === 0) {
-                    shape.points[0] = clampImageCoords(x, y);
+                    shape.points = [clampImageCoords(x, y), shape.points[1]];
                 } else {
-                    shape.points[1] = clampImageCoords(x, y);
+                    shape.points = [shape.points[0], clampImageCoords(x, y)];
                 }
             } else {
                 // Moving non-diagonal corner - need to update both stored points.
@@ -3157,14 +3191,17 @@ document.addEventListener('mousemove', (e) => {
             } else {
                 // Clamp the dragged edge to image bounds so a vertex edit can
                 // never push the recorded edge point outside [0,w]×[0,h].
-                shape.points[1] = clampImageCoords(x, y);
+                shape.points = [shape.points[0], clampImageCoords(x, y)];
             }
         } else {
-            // For polygon/line/point, just update the vertex directly
-            shape.points[activeVertexIndex] = clampImageCoords(x, y);
+            // For polygon/line/point, replace the dragged vertex. (A new array
+            // rather than an in-place write: the render cache identifies a
+            // shape's geometry by its points array — see pointsRenderId.)
+            const moved = clampImageCoords(x, y);
+            shape.points = shape.points.map((p, i) => i === activeVertexIndex ? moved : p);
         }
 
-        draw();
+        scheduleDraw(e);
     } else if (isEditingShape && !shiftPressed) {
         // Update cursor based on what's under the mouse
         // (skip while Shift feedback owns the cursor)
@@ -5189,26 +5226,85 @@ function updateModeButtons() {
 function draw(mouseEvent) {
     if (imageLoadPending) return; // img.onload redraws
     // Canvas只绘制图片
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
     const needsProcessing = selectedChannel !== 'rgb' || claheEnabled;
     const source = needsProcessing ? getProcessedCanvas() : null;
-    if (source) {
-        ctx.drawImage(source, 0, 0, img.width, img.height);
-    } else {
-        ctx.drawImage(img, 0, 0, img.width, img.height);
+    const key = (source ? 'p:' + processedKey : 'i:' + img.src)
+        + `|${img.width}x${img.height}|${canvas.width}x${canvas.height}`;
+    if (key !== imageLayerKey) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(source || img, 0, 0, img.width, img.height);
+        imageLayerKey = key;
     }
 
     // SVG绘制标注
     drawSVGAnnotations(mouseEvent);
 }
 
+// Completed shapes are rendered into svgShapesLayer, one <g> per shape, reused
+// across frames while nothing that affects its markup changes. Rebuilding
+// every shape's DOM on every mouse move was the dominant redraw cost with many
+// shapes. Everything after the layer in svgOverlay (drawing/eraser/box-select
+// previews, SAM overlay, pixel values) is transient and rebuilt each frame.
+// Geometry identity for the render cache: points arrays are treated as
+// immutable (every edit assigns a new array — keep it that way), so the
+// array's identity stands in for its contents without serialising every
+// shape's coordinates each frame.
+const pointsRenderIds = new WeakMap();
+let nextPointsRenderId = 1;
+function pointsRenderId(points) {
+    let id = pointsRenderIds.get(points);
+    if (id === undefined) {
+        id = nextPointsRenderId++;
+        pointsRenderIds.set(points, id);
+    }
+    return id;
+}
+
+function shapeRenderSignature(shape, index, strokeColor, fillColor, strokeDash, labelColor) {
+    return [
+        index, shape.shape_type, pointsRenderId(shape.points),
+        strokeColor, fillColor, strokeDash, zoomLevel, borderWidth,
+        allowSelectByClick(currentMode, drawClickThrough),
+        isEditingShape && index === shapeBeingEdited,
+        showShapeLabels && shape.label ? shape.label + '|' + labelColor : ''
+    ].join('\u0001');
+}
+
+// Make svgShapesLayer's children exactly `nodes`, touching only what changed.
+// `reused` = how many of them were taken from the cache.
+function reconcileShapeNodes(nodes, reused) {
+    const layer = svgShapesLayer;
+    if (reused === 0) {
+        // Everything changed (zoom, new image, undo): swap the lot in one go.
+        const frag = document.createDocumentFragment();
+        for (const node of nodes) frag.appendChild(node);
+        layer.textContent = '';
+        layer.appendChild(frag);
+        return;
+    }
+    const keep = new Set(nodes);
+    for (let i = 0; i < nodes.length; i++) {
+        const current = layer.childNodes[i];
+        if (current === nodes[i]) continue;
+        if (current && !keep.has(current)) layer.replaceChild(nodes[i], current);
+        else layer.insertBefore(nodes[i], current || null);
+    }
+    while (layer.childNodes.length > nodes.length) layer.removeChild(layer.lastChild);
+}
+
 function drawSVGAnnotations(mouseEvent) {
     if (imageLoadPending) return; // img.onload redraws
-    // 清除SVG内容
-    svgOverlay.innerHTML = '';
+    // 清除上一帧的临时内容（保留已缓存的形状层）
+    if (svgOverlay.firstChild !== svgShapesLayer) {
+        svgOverlay.textContent = '';
+        svgOverlay.appendChild(svgShapesLayer);
+    }
+    while (svgOverlay.lastChild !== svgShapesLayer) svgOverlay.removeChild(svgOverlay.lastChild);
 
     // 绘制已完成的形状
+    const nextCache = new Map();
+    const nodes = [];
+    let reused = 0;
     shapes.forEach((shape, index) => {
         if (shape.visible === false) return; // Skip hidden shapes
 
@@ -5232,16 +5328,26 @@ function drawSVGAnnotations(mouseEvent) {
             strokeDash = `${6 / zoomLevel},${4 / zoomLevel}`;
         }
 
-        let points = shape.points;
-        if (shape.shape_type === 'rectangle') {
-            points = getRectPoints(points);
+        const signature = shapeRenderSignature(shape, index, strokeColor, fillColor, strokeDash, colors.stroke);
+        let node = shapeNodeCache.get(signature);
+        if (node && !nextCache.has(signature)) {
+            reused++;
+        } else {
+            let points = shape.points;
+            if (shape.shape_type === 'rectangle') {
+                points = getRectPoints(points);
+            }
+            node = document.createElementNS(SVG_NS, 'g');
+            drawSVGShape(shape.shape_type, points, strokeColor, fillColor, false, index, strokeDash, node);
+            if (showShapeLabels && shape.label) {
+                drawShapeLabel(shape, points, colors.stroke, node);
+            }
         }
-
-        drawSVGShape(shape.shape_type, points, strokeColor, fillColor, false, index, strokeDash);
-        if (showShapeLabels && shape.label) {
-            drawShapeLabel(shape, points, colors.stroke);
-        }
+        nextCache.set(signature, node);
+        nodes.push(node);
     });
+    reconcileShapeNodes(nodes, reused);
+    shapeNodeCache = nextCache;
 
     // Draw SAM overlay (prompts and mask)
     if (currentMode === 'sam') {
@@ -5414,56 +5520,76 @@ function drawSVGAnnotations(mouseEvent) {
     }
 }
 
+// Label text metrics at a 12px screen size, measured once per label with a
+// canvas context. Measuring the SVG <text> with getBBox() instead forced a
+// synchronous layout for every label on every frame (seconds per redraw with
+// a thousand labelled shapes).
+function measureLabel(label) {
+    let m = labelMetricsCache.get(label);
+    if (!m) {
+        if (!labelMeasureCtx) {
+            labelMeasureCtx = document.createElement('canvas').getContext('2d');
+            labelMeasureCtx.font = `${LABEL_FONT_PX}px sans-serif`;
+        }
+        const tm = labelMeasureCtx.measureText(label);
+        m = {
+            width: tm.width,
+            ascent: tm.fontBoundingBoxAscent ?? LABEL_FONT_PX * 0.8,
+            descent: tm.fontBoundingBoxDescent ?? LABEL_FONT_PX * 0.2
+        };
+        labelMetricsCache.set(label, m);
+    }
+    return m;
+}
+
 // Draw an instance's class name as a small colored pill at its top-left.
 // `points` is already rect-expanded by the caller; `color` is the shape's stroke.
-function drawShapeLabel(shape, points, color) {
+function drawShapeLabel(shape, points, color, parent = svgOverlay) {
     const label = shape && shape.label;
     if (!label) return;
     const anchor = labelAnchorFromPoints(points);
     if (!anchor) return;
 
-    const fontSize = 12 / zoomLevel;
+    const fontSize = LABEL_FONT_PX / zoomLevel;
     const padX = 4 / zoomLevel;
     const padY = 2 / zoomLevel;
 
-    // Text first, so we can measure it, then put the pill behind it.
+    // Text box in image units: baseline at (anchor.y - padY), font ascent above.
+    const metrics = measureLabel(label);
+    const boxW = metrics.width / zoomLevel;
+    const boxH = (metrics.ascent + metrics.descent) / zoomLevel;
+    const textX = anchor.x + padX;
+    const baselineY = anchor.y - padY;
+    const boxY = baselineY - metrics.ascent / zoomLevel;
+
+    // Keep the label inside the image: if the pill would overflow the top or
+    // left edge (shapes touching y=0 / x=0), shift the text + pill back in by
+    // the overflow so it stays visible instead of rendering outside the viewBox.
+    const pillX = textX - padX;
+    const pillY = boxY - padY;
+    const dx = pillX < 0 ? -pillX : 0;
+    const dy = pillY < 0 ? -pillY : 0;
+
+    const rect = document.createElementNS(SVG_NS, 'rect');
+    rect.setAttribute('x', pillX + dx);
+    rect.setAttribute('y', pillY + dy);
+    rect.setAttribute('width', boxW + padX * 2);
+    rect.setAttribute('height', boxH + padY * 2);
+    rect.setAttribute('rx', 2 / zoomLevel);
+    rect.setAttribute('fill', color);
+    rect.style.pointerEvents = 'none';
+    parent.appendChild(rect); // pill behind the text
+
     const text = document.createElementNS(SVG_NS, 'text');
-    text.setAttribute('x', anchor.x + padX);
-    text.setAttribute('y', anchor.y - padY);
+    text.setAttribute('x', textX + dx);
+    text.setAttribute('y', baselineY + dy);
     text.setAttribute('fill', '#ffffff');
     text.setAttribute('font-size', fontSize);
     text.setAttribute('font-family', 'sans-serif');
     text.setAttribute('dominant-baseline', 'alphabetic');
     text.style.pointerEvents = 'none';
     text.textContent = label;
-    svgOverlay.appendChild(text);
-
-    let box;
-    try { box = text.getBBox(); } catch (e) { box = null; }
-    if (!box || box.width === 0) { svgOverlay.removeChild(text); return; } // not measurable yet; skip this frame
-
-    // Keep the label inside the image: if the pill would overflow the top or
-    // left edge (shapes touching y=0 / x=0), shift the text + pill back in by
-    // the overflow so it stays visible instead of rendering outside the viewBox.
-    const pillX = box.x - padX;
-    const pillY = box.y - padY;
-    const dx = pillX < 0 ? -pillX : 0;
-    const dy = pillY < 0 ? -pillY : 0;
-    if (dx || dy) {
-        text.setAttribute('x', anchor.x + padX + dx);
-        text.setAttribute('y', anchor.y - padY + dy);
-    }
-
-    const rect = document.createElementNS(SVG_NS, 'rect');
-    rect.setAttribute('x', pillX + dx);
-    rect.setAttribute('y', pillY + dy);
-    rect.setAttribute('width', box.width + padX * 2);
-    rect.setAttribute('height', box.height + padY * 2);
-    rect.setAttribute('rx', 2 / zoomLevel);
-    rect.setAttribute('fill', color);
-    rect.style.pointerEvents = 'none';
-    // Insert the pill BEHIND the text.
-    svgOverlay.insertBefore(rect, text);
+    parent.appendChild(text);
 }
 
 // Draw pixel RGB value labels on the SVG overlay
@@ -5529,7 +5655,7 @@ function drawPixelValues() {
     svgOverlay.appendChild(pvGroup);
 }
 
-function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = false, shapeIndex = -1, strokeDashArray = null) {
+function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = false, shapeIndex = -1, strokeDashArray = null, parent = svgOverlay) {
     if (points.length === 0) return;
 
     const group = document.createElementNS(SVG_NS, 'g');
@@ -5657,7 +5783,7 @@ function drawSVGShape(shapeType, points, strokeColor, fillColor, showVertices = 
         });
     }
 
-    svgOverlay.appendChild(group);
+    parent.appendChild(group);
 }
 
 // Shape selection is handled entirely by the canvasWrapper 'mousedown' handler
@@ -9009,7 +9135,7 @@ canvasWrapper.addEventListener('mousemove', (e) => {
     // Box mode waiting for second click: update preview
     if (samBoxSecondClick) {
         samDragCurrent = { x, y };
-        draw();
+        scheduleDraw(e);
         return;
     }
 
@@ -9022,7 +9148,7 @@ canvasWrapper.addEventListener('mousemove', (e) => {
         samIsDragging = true;
         samDragCurrent = { x, y };
         // Draw drag rectangle preview
-        draw();
+        scheduleDraw(e);
     }
 });
 

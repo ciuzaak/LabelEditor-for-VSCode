@@ -12,6 +12,10 @@ Security hardening: data read from disk (file names, annotation JSON) and messag
 - **Webview message validation**: `saveGlobalSettings` accepts only known keys with correctly typed values (stored values are re-checked on load), and image navigation only accepts images from the scanned list — a path like `../../x` is ignored.
 - **SAM service access control**: the extension passes a per-install token to the service it launches (`LABELEDITOR_SAM_TOKEN`); `/encode` and `/decode` reject requests without it, CORS no longer allows every origin, and oversized request bodies are refused. A service started by hand without a token only accepts VS Code webview origins. **Restart a SAM service left running from an older version** — it does not accept the new token header.
 
+### Performance
+- **Much faster redraws with many shapes**: finished shapes are now cached in the SVG overlay and only the ones that changed are rebuilt, the image is repainted only when it or its channel/CLAHE processing changes, and drag previews are limited to one redraw per frame. With a 24-megapixel image and 1,500 polygons, a hover or vertex-drag redraw went from ~18 ms to ~1 ms and a zoom step from ~17 ms to ~13 ms.
+- **Shape labels no longer stall the editor**: label pills are sized from cached text metrics instead of measuring each SVG label (which forced a layout per label). With labels shown on 1,500 shapes a redraw went from ~1.9 s to ~1 ms (hover) / ~24 ms (zoom).
+
 ### Fixed
 - **macOS: Cmd shortcuts**: shortcuts listed as `Ctrl+…` (save, undo/redo, select all, merge, rename, …) now also fire with `Cmd` on macOS and are shown as `Cmd+…` in tooltips and the Keyboard Shortcuts settings; recording a shortcut with `Cmd` stores it as the primary modifier.
 - **JPEG dimensions past 64 KB**: image size is now read by walking the JPEG segments instead of scanning only the first 64 KB, so photos with large EXIF/XMP/ICC blocks no longer lose their dimensions (which left YOLO labels unloaded).
