@@ -23,7 +23,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - **Multi-select**: Ctrl+Click to toggle (canvas or list), Shift+Click to range-select in the list, Ctrl+A for all, drag a box in View mode (Ctrl+Drag to add)
 - **Clear selection**: press Esc, or click empty space — on the canvas, or the blank area of the Labels / Instances panels
 - **Batch operations**: Rename, Hide/Show, or Delete the whole selection from the context menu or sidebar
-- **Eraser**: Shift+Click for a polygon eraser, Shift+Long-press+Drag for a rectangle eraser — boolean-subtracts the area from all overlapping shapes (interior cut-outs become hole-free polygons); right-click / Esc to cancel
+- **Eraser**: Shift+Click for a polygon eraser, Shift+Long-press+Drag for a rectangle eraser — boolean-subtracts the area from all overlapping visible shapes (interior cut-outs become hole-free polygons; hidden shapes are left untouched); right-click / Esc to cancel
 - **Merge** (`Ctrl+G`): union multi-selected overlapping polygons/rectangles (all-rectangles → bounding box; otherwise → polygon); a single undo restores the originals
 - **Draw Over Instances** (opt-in): when on, clicking inside an existing instance in a drawing mode starts a **new** annotation instead of selecting it; right-click still selects/deletes
 - Per-instance visibility toggle, in-place label editing, and delete
@@ -35,22 +35,22 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - **Encode mode**: Full Image (default) or Local Crop — Local Crop encodes only the zoomed viewport for far better accuracy on small targets (encoded region shown as a yellow dashed box)
 - **Encode source**: Original file (default) or Adjusted View — encodes with Brightness/Contrast/CLAHE/Channel baked in, useful for low-contrast / medical / microscopy data
 - **Output shape**: Polygon (default) or Rectangle (mask reduced to its bounding box, with a WYSIWYG preview)
-- Supports SAM1 & SAM2 ONNX models (auto-detected); runs as a standalone Python HTTP server in a VS Code terminal and works over **Remote-SSH**
+- Supports SAM1 & SAM2 ONNX models (auto-detected); runs as a local Python HTTP service (output in its own terminal, token-protected, stopped when the last editor panel closes) and works over **Remote-SSH**
 - Requires Python with `onnxruntime`, `opencv-python`, `numpy`
 
 **SAM model setup**
 1. Download SAM2 ONNX models from [HuggingFace](https://huggingface.co/vietanhdev/segment-anything-2-onnx-models)
 2. Put the encoder and decoder `.onnx` files in one folder (filenames containing "encoder"/"decoder"; otherwise the larger file is assumed to be the encoder)
-3. Press `I` to enter SAM mode; if the service isn't running, a config modal lets you pick the model folder and Python interpreter and starts it in a terminal tab
+3. Press `I` to enter SAM mode; if the service isn't running, a config modal lets you pick the model folder and Python interpreter and starts it in a terminal tab. The interpreter is looked up in VS Code's environment, so for a conda/venv environment give its full path
 
 ### ONNX Batch Inference
 - Tools menu → **ONNX Batch Infer**: run an ONNX segmentation model across all images or just the current one
-- Configurable model directory, Python interpreter, CPU/GPU, and RGB/BGR; existing annotations can skip / merge / overwrite; progress shown in the terminal
+- Configurable model directory, Python interpreter, CPU/GPU, and RGB/BGR; existing annotations can skip / merge / overwrite; progress shown in the terminal, and when the run finishes the current image reloads with the new annotations
 - Requires Python with `onnxruntime`, `opencv-python`, `numpy`, `tqdm` (outputs LabelMe polygons, or YOLO `.txt` when launched from a YOLO dataset)
 
 ### YOLO Format Mode
 - **Work directly in YOLO format** — right-click a YOLO `data.yaml` → **"LabelEditor: Open as YOLO Dataset"**
-- Resolves the dataset's `path` + `train` / `val` / `test` image directories and **imports existing `.txt` labels** (Ultralytics `images/` → `labels/` convention); detection lines (`cls cx cy w h`) load as rectangles, segmentation lines as polygons
+- Resolves the dataset's `path` + `train` / `val` / `test` image directories and **imports existing `.txt` labels** (Ultralytics `images/` → `labels/` convention); detection lines (`cls cx cy w h`) load as rectangles, segmentation lines as polygons. Coordinates follow the EXIF-rotated image, as OpenCV and Ultralytics do
 - Edits **save back as `.txt`**, choosing bbox vs segmentation per shape automatically (one file may mix both)
 - Drawing is scoped to 👁️ View · ✨ SAM · ⬠ Polygon · ▭ Rectangle
 - **Label dialog matches LabelMe mode**: it shows the current image's labels and your history (not the full `data.yaml` class list); entering a class that isn't in the yaml prompts to add it, appended at the next index and written straight back to `data.yaml` (its list / dict / block-sequence style is preserved, `nc` is bumped)
@@ -91,6 +91,8 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 
 ### Workspace & UX
 - **Rebindable keyboard shortcuts** (Settings → Keyboard Shortcuts) with conflict detection and per-row / global reset; `Ctrl+Y` and `Backspace` stay as secondary Redo / Delete. On macOS, `Cmd` works wherever `Ctrl` is listed
+- **Safe saving**: files are written atomically (a crash never leaves a half-written annotation), and an existing annotation the editor could not fully read is backed up to `<file>.bak` before it is overwritten
+- **Keyboard & screen-reader friendly**: visible focus, named icon buttons, arrow-key navigation in the Instances / Labels lists, and dialogs that keep focus inside while open
 - **Multi-language**: English / 简体中文 (Settings → Language) — strings live in `media/i18n.js`, PRs for more locales welcome
 - **In-webview notifications**: status messages appear inline in the toolbar (severity-colored) instead of stacking as native popups; native dialogs are reserved for Save / Discard / Cancel prompts
 - **Rich hover tooltips** on every control (title, description, and the live keyboard shortcut)
@@ -169,6 +171,7 @@ The webview editor lives in `media/editor/*.js`; `build/bundle-webview.js` conca
 - **D**: Next image
 - **Ctrl+S** (`Cmd+S` on Mac): Save annotations
 - **Delete/Backspace**: Delete selected shape
+- **↑ / ↓ / Home / End, Enter / Space** (in the Instances or Labels list): Move between rows and select
 - **Ctrl+D** (in label modal, New in v0.14.1): Reveal chip shortcut badges, then press a digit (`1`-`9`, or `0` for the 10th) to commit that label
 
 ### Toolbar Buttons
@@ -224,6 +227,7 @@ This extension is still under active development. Some known limitations include
 - **Claude Opus 4.6**
 - **Claude Opus 4.7** (1M context)
 - **Claude Opus 4.8** (1M context)
+- **Claude Opus 5.5**
 
 **Code review by AI:**
 - **GPT 5.3 Codex**

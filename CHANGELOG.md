@@ -2,9 +2,15 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
-## [Unreleased]
+## [1.5.0] - 2026-09-27
 
-Security hardening: data read from disk (file names, annotation JSON) and messages from the webview can no longer become code in the webview or in the command that launches the Python tools.
+A hardening release: security fixes for the webview and the Python tools; data-safety fixes (image mix-ups during fast navigation, unreadable annotation files being overwritten, EXIF-rotated photos, crash-safe saves); much faster redraws with many shapes; keyboard and screen-reader access; and CI, linting and a modular webview codebase behind it all.
+
+### Upgrade notes
+- **Restart a SAM service that is still running from an older version** (close its terminal and start SAM again): the editor now sends an access token that older services reject.
+- **Python interpreter path**: ONNX batch inference and the SAM service are no longer typed into a shell, so `python` is looked up in VS Code's environment rather than your terminal profile. If you relied on an environment activated only in the terminal (e.g. `conda activate`), set the full interpreter path in the ONNX / SAM settings.
+- **The eraser now leaves hidden shapes untouched** — hide a class to protect it while erasing others.
+- A SAM service started by the editor now stops when the last LabelEditor panel closes.
 
 ### Security
 - **Webview Content-Security-Policy**: the editor page now ships a strict CSP (nonce-only scripts). File names, annotation JSON and persisted settings are serialized with `<`/`>`/`&` escaped before being inlined, and the toolbar file name is HTML-escaped — a label such as `</script><script>…` or a file named `a".png` is shown as text instead of breaking or hijacking the page.
