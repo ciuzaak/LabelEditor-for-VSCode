@@ -2,6 +2,15 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [Unreleased]
+
+Security hardening: data read from disk (file names, annotation JSON) and messages from the webview can no longer become code in the webview or in the terminal that launches the Python tools.
+
+### Security
+- **Webview Content-Security-Policy**: the editor page now ships a strict CSP (nonce-only scripts). File names, annotation JSON and persisted settings are serialized with `<`/`>`/`&` escaped before being inlined, and the toolbar file name is HTML-escaped — a label such as `</script><script>…` or a file named `a".png` is shown as text instead of breaking or hijacking the page.
+- **Safe Python launch**: ONNX batch inference and the SAM service validate their settings (device, colour format, mode, scope, port) against the scripts' accepted values and quote every argument for the user's shell (bash/zsh, fish, PowerShell, cmd), so paths containing `$(…)`, quotes or backticks are passed verbatim. A model directory ending in `\` no longer mangles the Windows command line.
+- **Webview message validation**: `saveGlobalSettings` accepts only known keys with correctly typed values (stored values are re-checked on load), and image navigation only accepts images from the scanned list — a path like `../../x` is ignored.
+
 ## [1.4.2] - 2026-06-18
 
 Labels-panel selection, selection-clearing polish, and advanced search that preserves the image browser's order. Codex-reviewed.

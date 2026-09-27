@@ -28,6 +28,17 @@ import {
     ExportShape
 } from './exportFormats';
 import { AnnotationRecord, SearchQuery, runAdvancedSearch } from './searchEngine';
+import {
+    makeNonce,
+    serializeForScript,
+    escapeHtml,
+    isValidGlobalSetting,
+    sanitizeStoredSetting,
+    detectShellKind,
+    buildShellCommand,
+    validateOnnxLaunchConfig,
+    validateSamLaunchConfig
+} from './webviewSecurity';
 
 export class LabelMePanel {
     public static readonly panels: Set<LabelMePanel> = new Set();
@@ -443,6 +454,10 @@ export class LabelMePanel {
                         }
                         return;
                     case 'saveGlobalSettings':
+                        if (!isValidGlobalSetting(message.key, message.value)) {
+                            console.warn('LabelEditor: rejected invalid global setting', message.key);
+                            return;
+                        }
                         await this._globalState.update(message.key, message.value);
                         return;
                     case 'saveAsExportOutputDir': {
@@ -670,7 +685,14 @@ export class LabelMePanel {
         this.updateImage(newImageUri);
     }
 
-    private async _navigateToImageByPath(imagePath: string) {
+    private async _navigateToImageByPath(imagePath: unknown) {
+        // Only navigate to images the extension itself listed. The path comes
+        // from the webview, and joining an arbitrary one (e.g. "../../x") onto
+        // the root would retarget saves and widen localResourceRoots.
+        if (typeof imagePath !== 'string' || !this._workspaceImages.includes(imagePath)) {
+            console.warn('LabelEditor: ignoring navigation to unlisted image', imagePath);
+            return;
+        }
 
         // Handle dirty state
         if (this._isDirty) {
@@ -1087,10 +1109,74 @@ export class LabelMePanel {
             existingData = await this._loadExistingAnnotation(imageMetadata || undefined);
         }
 
+        // Persisted settings are re-validated on read so a value stored by an
+        // older version (before saveGlobalSettings was checked) can't leak through.
+        const setting = <T>(key: string, fallback: T): T =>
+            sanitizeStoredSetting(key, this._globalState.get(key), fallback);
+        const initialGlobalSettings = {
+            customColors: setting('customColors', {}),
+            borderWidth: setting('borderWidth', 2),
+            fillOpacity: setting('fillOpacity', 0.3),
+            recentLabels: setting('recentLabels', []),
+            theme: setting('theme', 'auto'),
+            brightness: setting('brightness', 100),
+            contrast: setting('contrast', 100),
+            brightnessLocked: setting('brightnessLocked', false),
+            contrastLocked: setting('contrastLocked', false),
+            selectedChannel: setting('selectedChannel', 'rgb'),
+            channelLocked: setting('channelLocked', false),
+            claheEnabled: setting('claheEnabled', false),
+            claheClipLimit: setting('claheClipLimit', 2.0),
+            claheLocked: setting('claheLocked', false),
+            lockViewEnabled: setting('lockViewEnabled', false),
+            vscodeThemeKind: vscode.window.activeColorTheme.kind,
+            onnxModelDir: setting('onnxModelDir', ''),
+            onnxPythonPath: setting('onnxPythonPath', ''),
+            onnxDevice: setting('onnxDevice', 'cpu'),
+            onnxColor: setting('onnxColor', 'rgb'),
+            onnxScope: setting('onnxScope', 'all'),
+            onnxMode: setting('onnxMode', 'skip'),
+            samModelDir: setting('samModelDir', ''),
+            samPythonPath: setting('samPythonPath', ''),
+            samDevice: setting('samDevice', 'cpu'),
+            samPort: setting('samPort', 8765),
+            samEncodeMode: setting('samEncodeMode', 'full'),
+            samEncodeAdjusted: setting('samEncodeAdjusted', false),
+            samOutputFormat: setting('samOutputFormat', 'polygon'),
+            drawClickThrough: setting('drawClickThrough', false),
+            showShapeLabels: setting('showShapeLabels', false),
+            samGpuIndex: setting('samGpuIndex', -1),
+            onnxGpuIndex: setting('onnxGpuIndex', -1),
+            // Written only by the extension itself (see _runExportDataset).
+            exportFormat: this._globalState.get('exportFormat') || 'coco',
+            exportScope: this._globalState.get('exportScope') || 'all',
+            exportOutputDir: this._globalState.get('exportOutputDir') || '',
+            exportClasses: this._globalState.get('exportClasses') || [],
+            exportCopyImages: this._globalState.get('exportCopyImages') ?? false,
+            svgExportScope: setting('svgExportScope', 'all'),
+            defaultExportDir: path.join(this._rootPath, 'export'),
+            keyboardBindings: setting('keyboardBindings', null),
+            locale: setting('locale', 'en')
+        };
+
+        const nonce = makeNonce();
+        const csp = [
+            `default-src 'none'`,
+            `img-src ${webview.cspSource} data: blob:`,
+            // Inline <style> block and style="" attributes are used throughout.
+            `style-src ${webview.cspSource} 'unsafe-inline'`,
+            `font-src ${webview.cspSource}`,
+            `script-src 'nonce-${nonce}'`,
+            // The SAM service is reached directly from the webview.
+            `connect-src ${webview.cspSource} http://127.0.0.1:* http://localhost:*`
+        ].join('; ');
+        const fileNameText = isDummyImage ? '' : (currentImageRelativePath || path.basename(this._imageUri.fsPath));
+
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
+                <meta http-equiv="Content-Security-Policy" content="${csp}">
                 <meta name="viewport" content="width=device-width, initial-scale=1.0">
                 <style>${cssContent}</style>
                 <title>LabelMe</title>
@@ -1125,7 +1211,7 @@ export class LabelMePanel {
                             <button id="imageBrowserToggleBtn" class="btn btn-icon nav-btn" data-tip-id="nav.toggleBrowser"><svg class="icon" aria-hidden="true"><use href="#icon-panel-left"/></svg></button>
                             <button id="prevImageBtn" class="btn btn-icon nav-btn" data-tip-id="nav.prev"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-left"/></svg></button>
                             <button id="nextImageBtn" class="btn btn-icon nav-btn" data-tip-id="nav.next"><svg class="icon" aria-hidden="true"><use href="#icon-chevron-right"/></svg></button>
-                            <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" data-tip-id="nav.fileName">${isDummyImage ? '' : (currentImageRelativePath || path.basename(this._imageUri.fsPath))}</span>
+                            <span id="fileName" style="margin-right: auto; font-weight: bold; cursor: pointer;" data-tip-id="nav.fileName">${escapeHtml(fileNameText)}</span>
                             <span id="status"></span>
                             <span id="imageInfoBtn" class="image-info-btn" data-tip-id="nav.imageInfo"><svg class="icon icon-sm" aria-hidden="true"><use href="#icon-info"/></svg></span>
                             <div id="imageInfoPopup" class="image-info-popup hidden"></div>
@@ -1550,78 +1636,34 @@ export class LabelMePanel {
                     </div>
                 </div>
 
-                <script>
+                <script nonce="${nonce}">
                     const vscode = acquireVsCodeApi();
-                    const imageUrl = "${imageUri}";
-                    const imageName = "${isDummyImage ? '' : path.basename(this._imageUri.fsPath)}";
-                    const imagePath = "${isDummyImage ? '' : this._imageUri.fsPath.replace(/\\/g, '\\\\')}";
-                    const existingData = ${JSON.stringify(existingData)};
-                    const workspaceImages = ${JSON.stringify(workspaceImages)};
-                    const currentImageRelativePath = "${currentImageRelativePath.replace(/\\/g, '\\\\')}";
-                    const initialImageMetadata = ${JSON.stringify(imageMetadata)};
-
-                    const initialGlobalSettings = {
-                        customColors: ${JSON.stringify(this._globalState.get('customColors') || {})},
-                        borderWidth: ${this._globalState.get('borderWidth') ?? 2},
-                        fillOpacity: ${this._globalState.get('fillOpacity') ?? 0.3},
-                        recentLabels: ${JSON.stringify(this._globalState.get('recentLabels') || [])},
-                        theme: "${this._globalState.get('theme') ?? 'auto'}",
-                        brightness: ${this._globalState.get('brightness') ?? 100},
-                        contrast: ${this._globalState.get('contrast') ?? 100},
-                        brightnessLocked: ${this._globalState.get('brightnessLocked') ?? false},
-                        contrastLocked: ${this._globalState.get('contrastLocked') ?? false},
-                        selectedChannel: ${JSON.stringify(this._globalState.get('selectedChannel') ?? 'rgb')},
-                        channelLocked: ${this._globalState.get('channelLocked') ?? false},
-                        claheEnabled: ${this._globalState.get('claheEnabled') ?? false},
-                        claheClipLimit: ${this._globalState.get('claheClipLimit') ?? 2.0},
-                        claheLocked: ${this._globalState.get('claheLocked') ?? false},
-                        lockViewEnabled: ${this._globalState.get('lockViewEnabled') ?? false},
-                        vscodeThemeKind: ${vscode.window.activeColorTheme.kind},
-                        onnxModelDir: ${JSON.stringify(this._globalState.get('onnxModelDir') || '')},
-                        onnxPythonPath: ${JSON.stringify(this._globalState.get('onnxPythonPath') || '')},
-                        onnxDevice: ${JSON.stringify(this._globalState.get('onnxDevice') || 'cpu')},
-                        onnxColor: ${JSON.stringify(this._globalState.get('onnxColor') || 'rgb')},
-                        onnxScope: ${JSON.stringify(this._globalState.get('onnxScope') || 'all')},
-                        onnxMode: ${JSON.stringify(this._globalState.get('onnxMode') || 'skip')},
-                        samModelDir: ${JSON.stringify(this._globalState.get('samModelDir') || '')},
-                        samPythonPath: ${JSON.stringify(this._globalState.get('samPythonPath') || '')},
-                        samDevice: ${JSON.stringify(this._globalState.get('samDevice') || 'cpu')},
-                        samPort: ${this._globalState.get('samPort') ?? 8765},
-                        samEncodeMode: ${JSON.stringify(this._globalState.get('samEncodeMode') || 'full')},
-                        samEncodeAdjusted: ${this._globalState.get('samEncodeAdjusted') ?? false},
-                        samOutputFormat: ${JSON.stringify(this._globalState.get('samOutputFormat') || 'polygon')},
-                        drawClickThrough: ${this._globalState.get('drawClickThrough') ?? false},
-                        showShapeLabels: ${this._globalState.get('showShapeLabels') ?? false},
-                        samGpuIndex: ${this._globalState.get('samGpuIndex') ?? -1},
-                        onnxGpuIndex: ${this._globalState.get('onnxGpuIndex') ?? -1},
-                        exportFormat: ${JSON.stringify(this._globalState.get('exportFormat') || 'coco')},
-                        exportScope: ${JSON.stringify(this._globalState.get('exportScope') || 'all')},
-                        exportOutputDir: ${JSON.stringify(this._globalState.get('exportOutputDir') || '')},
-                        exportClasses: ${JSON.stringify(this._globalState.get('exportClasses') || [])},
-                        exportCopyImages: ${this._globalState.get('exportCopyImages') ?? false},
-                        svgExportScope: ${JSON.stringify(this._globalState.get('svgExportScope') || 'all')},
-                        defaultExportDir: ${JSON.stringify(path.join(this._rootPath, 'export'))},
-                        keyboardBindings: ${JSON.stringify(this._globalState.get('keyboardBindings') || null)},
-                        locale: ${JSON.stringify(this._globalState.get('locale') || 'en')}
-                    };
-                    window.annotationFormat = ${JSON.stringify(this._format)};
-                    window.yoloClasses = ${JSON.stringify(this._yoloClasses)};
+                    const imageUrl = ${serializeForScript(imageUri)};
+                    const imageName = ${serializeForScript(isDummyImage ? '' : path.basename(this._imageUri.fsPath))};
+                    const imagePath = ${serializeForScript(isDummyImage ? '' : this._imageUri.fsPath)};
+                    const existingData = ${serializeForScript(existingData)};
+                    const workspaceImages = ${serializeForScript(workspaceImages)};
+                    const currentImageRelativePath = ${serializeForScript(currentImageRelativePath)};
+                    const initialImageMetadata = ${serializeForScript(imageMetadata)};
+                    const initialGlobalSettings = ${serializeForScript(initialGlobalSettings)};
+                    window.annotationFormat = ${serializeForScript(this._format)};
+                    window.yoloClasses = ${serializeForScript(this._yoloClasses)};
                 </script>
-                <script src="${polyClipUri}"></script>
-                <script src="${samHelpersUri}"></script>
-                <script src="${mergeHelpersUri}"></script>
-                <script src="${shapeHelpersUri}"></script>
-                <script src="${notifyHelpersUri}"></script>
-                <script src="${notifyBusUri}"></script>
-                <script src="${tipsDataUri}"></script>
-                <script src="${tooltipHelpersUri}"></script>
-                <script src="${tooltipUri}"></script>
-                <script src="${popoverDismissUri}"></script>
-                <script src="${advancedSearchHelpersUri}"></script>
-                <script src="${labelSelectionHelpersUri}"></script>
-                <script src="${keybindingsUri}"></script>
-                <script src="${i18nUri}"></script>
-                <script src="${scriptUri}"></script>
+                <script nonce="${nonce}" src="${polyClipUri}"></script>
+                <script nonce="${nonce}" src="${samHelpersUri}"></script>
+                <script nonce="${nonce}" src="${mergeHelpersUri}"></script>
+                <script nonce="${nonce}" src="${shapeHelpersUri}"></script>
+                <script nonce="${nonce}" src="${notifyHelpersUri}"></script>
+                <script nonce="${nonce}" src="${notifyBusUri}"></script>
+                <script nonce="${nonce}" src="${tipsDataUri}"></script>
+                <script nonce="${nonce}" src="${tooltipHelpersUri}"></script>
+                <script nonce="${nonce}" src="${tooltipUri}"></script>
+                <script nonce="${nonce}" src="${popoverDismissUri}"></script>
+                <script nonce="${nonce}" src="${advancedSearchHelpersUri}"></script>
+                <script nonce="${nonce}" src="${labelSelectionHelpersUri}"></script>
+                <script nonce="${nonce}" src="${keybindingsUri}"></script>
+                <script nonce="${nonce}" src="${i18nUri}"></script>
+                <script nonce="${nonce}" src="${scriptUri}"></script>
             </body>
             </html>`;
     }
@@ -2366,15 +2408,20 @@ export class LabelMePanel {
     /**
      * Run ONNX batch inference via external Python script in a VS Code terminal.
      */
-    private async _runOnnxBatchInfer(config: {
-        modelDir: string;
-        pythonPath: string;
-        device: string;
-        colorFormat: string;
-        mode: string;
-        scope: string;
-        gpuIndex?: number;
-    }) {
+    private async _runOnnxBatchInfer(rawConfig: unknown) {
+        // The config comes from the webview; everything in it ends up on a
+        // shell command line, so check it against the script's accepted values.
+        const validated = validateOnnxLaunchConfig(rawConfig);
+        if (!validated.ok) {
+            this._notify(
+                'error',
+                `ONNX Batch Infer: invalid setting (${validated.error}).`,
+                { i18nKey: 'status.onnxInvalidConfig', i18nParams: { field: validated.error } }
+            );
+            return;
+        }
+        const config = validated.value;
+
         // Validate model directory
         if (!config.modelDir || !existsSync(config.modelDir)) {
             this._notify('error', 'ONNX Batch Infer: Model directory does not exist.', { i18nKey: 'status.onnxModelDirMissing' });
@@ -2432,17 +2479,13 @@ export class LabelMePanel {
             return;
         }
 
-        // Determine Python interpreter
-        const pythonPath = config.pythonPath || 'python';
-
-        // Build command
         const args = [
-            `"${scriptPath}"`,
-            `--model_dir "${config.modelDir}"`,
-            `--images_json "${tmpFile}"`,
-            `--device ${config.device}`,
-            `--color_format ${config.colorFormat}`,
-            `--mode ${config.mode}`
+            scriptPath,
+            '--model_dir', config.modelDir,
+            '--images_json', tmpFile,
+            '--device', config.device,
+            '--color_format', config.colorFormat,
+            '--mode', config.mode
         ];
 
         // In YOLO mode, tell the script to emit YOLO .txt labels and give it the
@@ -2455,17 +2498,12 @@ export class LabelMePanel {
                 `labeleditor_onnx_classes_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.json`
             );
             await fs.writeFile(classesTmpFile, JSON.stringify(this._yoloClasses, null, 2), 'utf8');
-            args.push('--format yolo');
-            args.push(`--class_names_json "${classesTmpFile}"`);
+            args.push('--format', 'yolo');
+            args.push('--class_names_json', classesTmpFile);
         }
 
-        // PowerShell requires & (call operator) for quoted executable paths;
-        // bash/zsh/cmd do not need it.
-        const shell = vscode.env.shell.toLowerCase();
-        const isPowerShell = shell.includes('powershell') || shell.includes('pwsh');
-        const command = isPowerShell
-            ? `& "${pythonPath}" ${args.join(' ')}`
-            : `"${pythonPath}" ${args.join(' ')}`;
+        const command = this._buildPythonCommand(config.pythonPath, args, 'ONNX Batch Infer');
+        if (command === undefined) return;
 
         // Create terminal and run
         const onnxEnv: { [key: string]: string } = {};
@@ -2485,6 +2523,26 @@ export class LabelMePanel {
             `ONNX Batch Infer started: ${absoluteImagePaths.length} images. Check the terminal for progress.`,
             { i18nKey: 'status.onnxStarted', i18nParams: { count: absoluteImagePaths.length } }
         );
+    }
+
+    /**
+     * Build the terminal command line for a bundled Python script, quoting every
+     * argument for the user's default shell. Returns undefined (after notifying)
+     * when a path contains characters that can't be passed safely.
+     */
+    private _buildPythonCommand(pythonPath: string, args: string[], toolName: string): string | undefined {
+        const kind = detectShellKind(vscode.env.shell, process.platform);
+        try {
+            return buildShellCommand(pythonPath, args, kind);
+        } catch (err) {
+            const reason = (err as Error).message;
+            this._notify(
+                'error',
+                `${toolName}: cannot build the launch command — ${reason}.`,
+                { i18nKey: 'status.pythonCommandUnsafe', i18nParams: { tool: toolName, reason } }
+            );
+            return undefined;
+        }
     }
 
     /**
@@ -2528,13 +2586,18 @@ export class LabelMePanel {
     /**
      * Run SAM service via external Python script in a VS Code terminal.
      */
-    private async _runSamService(config: {
-        modelDir: string;
-        pythonPath: string;
-        device: string;
-        port: number;
-        gpuIndex?: number;
-    }) {
+    private async _runSamService(rawConfig: unknown) {
+        const validated = validateSamLaunchConfig(rawConfig);
+        if (!validated.ok) {
+            this._notify(
+                'error',
+                `SAM Service: invalid setting (${validated.error}).`,
+                { i18nKey: 'status.samInvalidConfig', i18nParams: { field: validated.error } }
+            );
+            return;
+        }
+        const config = validated.value;
+
         // Validate model directory
         if (!config.modelDir || !existsSync(config.modelDir)) {
             this._notify('error', 'SAM Service: Model directory does not exist.', { i18nKey: 'status.samModelDirMissing' });
@@ -2571,23 +2634,13 @@ export class LabelMePanel {
             return;
         }
 
-        // Determine Python interpreter
-        const pythonPath = config.pythonPath || 'python';
-
-        // Build command
-        const args = [
-            `"${scriptPath}"`,
-            `--model_dir "${config.modelDir}"`,
-            `--device ${config.device}`,
-            `--port ${config.port}`
-        ];
-
-        // PowerShell requires & (call operator) for quoted executable paths
-        const shell = vscode.env.shell.toLowerCase();
-        const isPowerShell = shell.includes('powershell') || shell.includes('pwsh');
-        const command = isPowerShell
-            ? `& "${pythonPath}" ${args.join(' ')}`
-            : `"${pythonPath}" ${args.join(' ')}`;
+        const command = this._buildPythonCommand(config.pythonPath, [
+            scriptPath,
+            '--model_dir', config.modelDir,
+            '--device', config.device,
+            '--port', String(config.port)
+        ], 'SAM Service');
+        if (command === undefined) return;
 
         // Create terminal and run
         const env: { [key: string]: string } = {};

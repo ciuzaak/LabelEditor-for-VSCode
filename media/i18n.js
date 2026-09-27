@@ -141,6 +141,9 @@
             'status.samNeedTwoOnnx': 'SAM Service: Need at least 2 ONNX files (encoder + decoder) in model directory.',
             'status.samAlreadyRunning': 'SAM Service already running on port {port} from another panel. Reusing it; change the port in settings if you want a separate instance.',
             'status.samNoScript': 'SAM Service: Service script not found at {path}',
+            'status.samInvalidConfig': 'SAM Service: invalid setting ({field}).',
+            'status.onnxInvalidConfig': 'ONNX Batch Infer: invalid setting ({field}).',
+            'status.pythonCommandUnsafe': '{tool}: cannot build the launch command — {reason}.',
             'status.samServiceStarting': 'SAM Service starting on port {port}. Check the terminal for status.',
 
             // Image info popup
@@ -572,6 +575,9 @@
             'status.samNeedTwoOnnx': 'SAM 服务:模型目录至少需要 2 个 ONNX 文件(encoder + decoder)。',
             'status.samAlreadyRunning': '端口 {port} 上已有其他面板运行的 SAM 服务,将复用它;如需独立实例请在设置中修改端口。',
             'status.samNoScript': 'SAM 服务:服务脚本不存在 {path}',
+            'status.samInvalidConfig': 'SAM 服务:设置无效({field})。',
+            'status.onnxInvalidConfig': 'ONNX 批量推理:设置无效({field})。',
+            'status.pythonCommandUnsafe': '{tool}:无法生成启动命令 — {reason}。',
             'status.samServiceStarting': 'SAM 服务正在端口 {port} 启动,请在终端查看状态。',
 
             'imageInfo.current': '当前图片',
