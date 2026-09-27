@@ -7,6 +7,7 @@ import {
     buildLabelMeAnnotation,
     buildSvg,
     getImageMetadata,
+    parseExifOrientation,
     scanWorkspaceImages
 } from '../src/labelMeUtils';
 
@@ -171,6 +172,28 @@ describe('getImageMetadata', () => {
         assert.equal(meta.height, 20);
     });
 
+    it('swaps JPEG dimensions for EXIF orientations that rotate 90°', async () => {
+        for (const o of [5, 6, 7, 8]) {
+            const meta = await jpegMeta(makeJpeg([exifSegment(o, 'MM')], 4032, 3024));
+            assert.equal(meta.orientation, o);
+            assert.deepEqual([meta.width, meta.height], [3024, 4032], `orientation ${o}`);
+        }
+    });
+
+    it('keeps JPEG dimensions for orientations 1–4', async () => {
+        for (const o of [1, 2, 3, 4]) {
+            const meta = await jpegMeta(makeJpeg([exifSegment(o, 'II')], 4032, 3024));
+            assert.equal(meta.orientation, o);
+            assert.deepEqual([meta.width, meta.height], [4032, 3024], `orientation ${o}`);
+        }
+    });
+
+    it('reads EXIF orientation after an XMP APP1 segment', async () => {
+        const xmp = jpegSegment(0xE1, Buffer.from('http://ns.adobe.com/xap/1.0/\0<x:xmpmeta/>', 'latin1'));
+        const meta = await jpegMeta(makeJpeg([xmp, exifSegment(6, 'II')], 640, 480));
+        assert.deepEqual([meta.width, meta.height], [480, 640]);
+    });
+
     it('leaves JPEG dimensions undefined for a truncated file', async () => {
         const full = makeJpeg([jpegSegment(0xE1, Buffer.alloc(1000))], 10, 20);
         const meta = await jpegMeta(full.subarray(0, 600));
@@ -178,6 +201,53 @@ describe('getImageMetadata', () => {
         assert.equal(meta.height, undefined);
     });
 });
+
+describe('parseExifOrientation', () => {
+    it('reads the tag in either byte order', () => {
+        assert.equal(parseExifOrientation(exifPayload(6, 'II')), 6);
+        assert.equal(parseExifOrientation(exifPayload(8, 'MM')), 8);
+    });
+
+    it('finds the tag after other IFD0 entries', () => {
+        assert.equal(parseExifOrientation(exifPayload(3, 'II', 4)), 3);
+    });
+
+    it('rejects non-EXIF, malformed or out-of-range data', () => {
+        assert.equal(parseExifOrientation(Buffer.from('http://ns.adobe.com/xap/1.0/\0', 'latin1')), undefined);
+        assert.equal(parseExifOrientation(exifPayload(9, 'II')), undefined);
+        assert.equal(parseExifOrientation(exifPayload(6, 'II').subarray(0, 20)), undefined);
+        const noTag = exifPayload(6, 'II');
+        noTag.writeUInt16LE(0x010F, 6 + 8 + 2); // retag the entry as Make
+        assert.equal(parseExifOrientation(noTag), undefined);
+    });
+});
+
+// APP1 payload: "Exif\0\0" + TIFF header + IFD0 with `before` filler entries
+// followed by the Orientation entry.
+function exifPayload(orientation: number, order: 'II' | 'MM', before = 0): Buffer {
+    const le = order === 'II';
+    const entries = before + 1;
+    const tiff = Buffer.alloc(8 + 2 + entries * 12 + 4);
+    const w16 = (v: number, o: number) => le ? tiff.writeUInt16LE(v, o) : tiff.writeUInt16BE(v, o);
+    const w32 = (v: number, o: number) => le ? tiff.writeUInt32LE(v, o) : tiff.writeUInt32BE(v, o);
+    tiff.write(order, 0, 'ascii');
+    w16(42, 2);
+    w32(8, 4);
+    w16(entries, 8);
+    for (let e = 0; e < entries; e++) {
+        const at = 10 + e * 12;
+        const isOrientation = e === entries - 1;
+        w16(isOrientation ? 0x0112 : 0x0100 + e, at); // filler tags: ImageWidth, ImageLength, ...
+        w16(3, at + 2);
+        w32(1, at + 4);
+        w16(isOrientation ? orientation : 0, at + 8);
+    }
+    return Buffer.concat([Buffer.from('Exif\0\0', 'latin1'), tiff]);
+}
+
+function exifSegment(orientation: number, order: 'II' | 'MM'): Buffer {
+    return jpegSegment(0xE1, exifPayload(orientation, order));
+}
 
 function jpegSegment(marker: number, data: Buffer): Buffer {
     const head = Buffer.from([0xFF, marker, 0, 0]);

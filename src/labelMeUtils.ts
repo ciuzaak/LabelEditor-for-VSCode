@@ -20,8 +20,12 @@ export interface ImageMetadata {
     bitDepth?: number;
     dpiX?: number;
     dpiY?: number;
+    // Display dimensions: for JPEGs whose EXIF orientation rotates by 90°
+    // (5–8) these are the stored dimensions swapped, matching what the
+    // browser, OpenCV and YOLO/LabelMe tooling use for coordinates.
     width?: number;
     height?: number;
+    orientation?: number; // EXIF orientation tag (1–8), JPEG only
 }
 
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp'];
@@ -289,6 +293,35 @@ async function readPngMetadata(fd: fs.FileHandle, fileSize: number, result: Imag
     }
 }
 
+/**
+ * Extract the EXIF orientation (tag 0x0112) from the payload of a JPEG APP1
+ * segment (the bytes after the length field). Returns undefined when the
+ * segment isn't EXIF, the tag is absent, or the value is out of range.
+ */
+export function parseExifOrientation(app1: Buffer): number | undefined {
+    if (app1.length < 14 || app1.toString('ascii', 0, 6) !== 'Exif\0\0') return undefined;
+    const tiff = 6;
+    const order = app1.toString('ascii', tiff, tiff + 2);
+    if (order !== 'II' && order !== 'MM') return undefined;
+    const le = order === 'II';
+    const u16 = (o: number) => le ? app1.readUInt16LE(o) : app1.readUInt16BE(o);
+    const u32 = (o: number) => le ? app1.readUInt32LE(o) : app1.readUInt32BE(o);
+    if (u16(tiff + 2) !== 42) return undefined;
+    const ifd0 = tiff + u32(tiff + 4);
+    if (ifd0 + 2 > app1.length) return undefined;
+    const count = u16(ifd0);
+    for (let e = 0; e < count; e++) {
+        const entry = ifd0 + 2 + e * 12;
+        if (entry + 12 > app1.length) return undefined;
+        if (u16(entry) !== 0x0112) continue;
+        // SHORT (type 3), count 1: the value sits in the first 2 bytes of the value field.
+        if (u16(entry + 2) !== 3) return undefined;
+        const value = u16(entry + 8);
+        return value >= 1 && value <= 8 ? value : undefined;
+    }
+    return undefined;
+}
+
 async function readJpegMetadata(fd: fs.FileHandle, fileSize: number, result: ImageMetadata): Promise<void> {
     // Walk the marker segments with positioned reads instead of scanning a fixed
     // prefix: EXIF thumbnails, XMP and ICC profiles routinely push the SOF
@@ -325,6 +358,14 @@ async function readJpegMetadata(fd: fs.FileHandle, fileSize: number, result: Ima
             }
         }
 
+        // EXIF lives in APP1 ahead of SOF; XMP also uses APP1, hence the
+        // header check inside parseExifOrientation.
+        if (marker === 0xE1 && result.orientation === undefined) {
+            const app1 = Buffer.alloc(segLen - 2);
+            const { bytesRead: n } = await fd.read(app1, 0, app1.length, offset + 4);
+            result.orientation = parseExifOrientation(app1.subarray(0, n));
+        }
+
         if (marker >= 0xC0 && marker <= 0xCF && marker !== 0xC4 && marker !== 0xC8 && marker !== 0xCC) {
             // SOF segment: precision (1) + height (2) + width (2) + components (1)
             const { bytesRead: n } = await fd.read(body, 0, 6, offset + 4);
@@ -337,6 +378,12 @@ async function readJpegMetadata(fd: fs.FileHandle, fileSize: number, result: Ima
         }
 
         offset += 2 + segLen;
+    }
+
+    // Orientations 5–8 transpose the image: the displayed width is the stored height.
+    if (result.orientation !== undefined && result.orientation >= 5
+        && result.width !== undefined && result.height !== undefined) {
+        [result.width, result.height] = [result.height, result.width];
     }
 
     if (!result.bitDepth) result.bitDepth = 24;
