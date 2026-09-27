@@ -8,6 +8,7 @@ import {
     buildSvg,
     getImageMetadata,
     parseExifOrientation,
+    parseTiffOrientation,
     scanWorkspaceImages
 } from '../src/labelMeUtils';
 
@@ -194,6 +195,38 @@ describe('getImageMetadata', () => {
         assert.deepEqual([meta.width, meta.height], [480, 640]);
     });
 
+    async function pngMeta(bytes: Buffer) {
+        const root = await fs.mkdtemp(path.join(os.tmpdir(), 'labeleditor-meta-'));
+        try {
+            const p = path.join(root, 'sample.png');
+            await fs.writeFile(p, bytes);
+            return await getImageMetadata(p);
+        } finally {
+            await fs.rm(root, { recursive: true, force: true });
+        }
+    }
+
+    it('applies a PNG eXIf orientation (raw TIFF payload) after pHYs', async () => {
+        const meta = await pngMeta(makePng(400, 200, [
+            physChunk(3780),
+            pngChunk('eXIf', exifPayload(6, 'MM').subarray(6)),
+        ]));
+        assert.equal(meta.orientation, 6);
+        assert.deepEqual([meta.width, meta.height], [200, 400]);
+        assert.equal(meta.dpiX, 96);
+    });
+
+    it('accepts a PNG eXIf payload that keeps the "Exif\\0\\0" prefix', async () => {
+        const meta = await pngMeta(makePng(400, 200, [pngChunk('eXIf', exifPayload(8, 'II'))]));
+        assert.deepEqual([meta.width, meta.height], [200, 400]);
+    });
+
+    it('ignores a PNG eXIf chunk after the image data', async () => {
+        const meta = await pngMeta(makePng(400, 200, [], [pngChunk('eXIf', exifPayload(6, 'II').subarray(6))]));
+        assert.equal(meta.orientation, undefined);
+        assert.deepEqual([meta.width, meta.height], [400, 200]);
+    });
+
     it('leaves JPEG dimensions undefined for a truncated file', async () => {
         const full = makeJpeg([jpegSegment(0xE1, Buffer.alloc(1000))], 10, 20);
         const meta = await jpegMeta(full.subarray(0, 600));
@@ -210,6 +243,11 @@ describe('parseExifOrientation', () => {
 
     it('finds the tag after other IFD0 entries', () => {
         assert.equal(parseExifOrientation(exifPayload(3, 'II', 4)), 3);
+    });
+
+    it('parseTiffOrientation reads a payload without the Exif header', () => {
+        assert.equal(parseTiffOrientation(exifPayload(5, 'MM').subarray(6)), 5);
+        assert.equal(parseTiffOrientation(Buffer.from('Exif\0\0')), undefined);
     });
 
     it('rejects non-EXIF, malformed or out-of-range data', () => {
@@ -247,6 +285,30 @@ function exifPayload(orientation: number, order: 'II' | 'MM', before = 0): Buffe
 
 function exifSegment(orientation: number, order: 'II' | 'MM'): Buffer {
     return jpegSegment(0xE1, exifPayload(orientation, order));
+}
+
+function makePng(width: number, height: number, before: Buffer[], after: Buffer[] = []): Buffer {
+    const ihdr = Buffer.alloc(13);
+    ihdr.writeUInt32BE(width, 0);
+    ihdr.writeUInt32BE(height, 4);
+    ihdr[8] = 8; // bit depth
+    ihdr[9] = 2; // RGB
+    return Buffer.concat([
+        Buffer.from([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]),
+        pngChunk('IHDR', ihdr),
+        ...before,
+        pngChunk('IDAT', Buffer.alloc(4)),
+        ...after,
+        pngChunk('IEND', Buffer.alloc(0)),
+    ]);
+}
+
+function physChunk(ppm: number): Buffer {
+    const d = Buffer.alloc(9);
+    d.writeUInt32BE(ppm, 0);
+    d.writeUInt32BE(ppm, 4);
+    d[8] = 1;
+    return pngChunk('pHYs', d);
 }
 
 function jpegSegment(marker: number, data: Buffer): Buffer {

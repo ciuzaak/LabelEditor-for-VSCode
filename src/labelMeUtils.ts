@@ -20,12 +20,12 @@ export interface ImageMetadata {
     bitDepth?: number;
     dpiX?: number;
     dpiY?: number;
-    // Display dimensions: for JPEGs whose EXIF orientation rotates by 90°
+    // Display dimensions: for JPEG / PNG images whose EXIF orientation rotates by 90°
     // (5–8) these are the stored dimensions swapped, matching what the
     // browser, OpenCV and YOLO/LabelMe tooling use for coordinates.
     width?: number;
     height?: number;
-    orientation?: number; // EXIF orientation tag (1–8), JPEG only
+    orientation?: number; // EXIF orientation tag (1–8), JPEG APP1 or PNG eXIf
 }
 
 const IMAGE_EXTENSIONS = ['.jpg', '.jpeg', '.png', '.bmp'];
@@ -226,6 +226,12 @@ export async function getImageMetadata(filePath: string): Promise<ImageMetadata>
                 await readBmpMetadata(fd, result);
             }
 
+            // Orientations 5–8 transpose the image: the displayed width is the stored height.
+            if (result.orientation !== undefined && result.orientation >= 5
+                && result.width !== undefined && result.height !== undefined) {
+                [result.width, result.height] = [result.height, result.width];
+            }
+
             if (isPng || isJpeg || isBmp) {
                 if (result.dpiX === undefined) result.dpiX = 96;
                 if (result.dpiY === undefined) result.dpiY = 96;
@@ -266,15 +272,25 @@ async function readPngMetadata(fd: fs.FileHandle, fileSize: number, result: Imag
         else if (colorType === 6) result.bitDepth = header[24] * 4;
     }
 
+    // Ancillary chunks before the image data: pHYs (DPI) and eXIf (orientation,
+    // which Chromium and OpenCV both apply to PNGs as they do to JPEGs).
     let offset = 33;
     const chunkHeader = Buffer.alloc(8);
-    while (offset < 65536 && offset + 12 <= fileSize) {
+    for (let chunks = 0; chunks < 4096 && offset + 12 <= fileSize; chunks++) {
         const { bytesRead: chRead } = await fd.read(chunkHeader, 0, 8, offset);
         if (chRead < 8) break;
         const chunkLen = chunkHeader.readUInt32BE(0);
         if (chunkLen > 0x7FFFFFFF || offset + 12 + chunkLen > fileSize) break;
         const chunkType = chunkHeader.toString('ascii', 4, 8);
         if (chunkType === 'IDAT' || chunkType === 'IEND') break;
+        if (chunkType === 'eXIf' && result.orientation === undefined && chunkLen <= 1 << 20) {
+            const exif = Buffer.alloc(chunkLen);
+            const { bytesRead: n } = await fd.read(exif, 0, chunkLen, offset + 8);
+            // Raw TIFF per the PNG spec; some writers keep the JPEG "Exif\0\0" prefix.
+            result.orientation = exif.toString('ascii', 0, 6) === 'Exif\0\0'
+                ? parseExifOrientation(exif.subarray(0, n))
+                : parseTiffOrientation(exif.subarray(0, n));
+        }
         if (chunkType === 'pHYs' && chunkLen === 9) {
             const phys = Buffer.alloc(9);
             const { bytesRead: phRead } = await fd.read(phys, 0, 9, offset + 8);
@@ -287,7 +303,6 @@ async function readPngMetadata(fd: fs.FileHandle, fileSize: number, result: Imag
                     result.dpiY = Math.round(ppmY / 39.3701);
                 }
             }
-            break;
         }
         offset += 12 + chunkLen;
     }
@@ -300,19 +315,28 @@ async function readPngMetadata(fd: fs.FileHandle, fileSize: number, result: Imag
  */
 export function parseExifOrientation(app1: Buffer): number | undefined {
     if (app1.length < 14 || app1.toString('ascii', 0, 6) !== 'Exif\0\0') return undefined;
-    const tiff = 6;
-    const order = app1.toString('ascii', tiff, tiff + 2);
+    return parseTiffOrientation(app1.subarray(6));
+}
+
+/**
+ * Orientation tag from raw TIFF-structured EXIF data (byte-order mark first),
+ * as stored in a PNG eXIf chunk or after the "Exif\0\0" header of a JPEG APP1.
+ */
+export function parseTiffOrientation(tiffData: Buffer): number | undefined {
+    const buf = tiffData;
+    if (buf.length < 8) return undefined;
+    const order = buf.toString('ascii', 0, 2);
     if (order !== 'II' && order !== 'MM') return undefined;
     const le = order === 'II';
-    const u16 = (o: number) => le ? app1.readUInt16LE(o) : app1.readUInt16BE(o);
-    const u32 = (o: number) => le ? app1.readUInt32LE(o) : app1.readUInt32BE(o);
-    if (u16(tiff + 2) !== 42) return undefined;
-    const ifd0 = tiff + u32(tiff + 4);
-    if (ifd0 + 2 > app1.length) return undefined;
+    const u16 = (o: number) => le ? buf.readUInt16LE(o) : buf.readUInt16BE(o);
+    const u32 = (o: number) => le ? buf.readUInt32LE(o) : buf.readUInt32BE(o);
+    if (u16(2) !== 42) return undefined;
+    const ifd0 = u32(4);
+    if (ifd0 + 2 > buf.length) return undefined;
     const count = u16(ifd0);
     for (let e = 0; e < count; e++) {
         const entry = ifd0 + 2 + e * 12;
-        if (entry + 12 > app1.length) return undefined;
+        if (entry + 12 > buf.length) return undefined;
         if (u16(entry) !== 0x0112) continue;
         // SHORT (type 3), count 1: the value sits in the first 2 bytes of the value field.
         if (u16(entry + 2) !== 3) return undefined;
@@ -378,12 +402,6 @@ async function readJpegMetadata(fd: fs.FileHandle, fileSize: number, result: Ima
         }
 
         offset += 2 + segLen;
-    }
-
-    // Orientations 5–8 transpose the image: the displayed width is the stored height.
-    if (result.orientation !== undefined && result.orientation >= 5
-        && result.width !== undefined && result.height !== undefined) {
-        [result.width, result.height] = [result.height, result.width];
     }
 
     if (!result.bitDepth) result.bitDepth = 24;
