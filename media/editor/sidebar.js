@@ -5,53 +5,93 @@
 // --- Sidebar Logic ---
 // --- Keyboard access for the Instances / Labels lists ---
 // A roving tabindex keeps each list a single Tab stop (a Tab stop per row is
-// unusable with hundreds of shapes). Arrow keys / Home / End move between
-// rows and Enter / Space activate the focused row like a click. Row actions
-// have keyboard equivalents on the selection (Delete, Ctrl+R, Ctrl+H), so the
-// small per-row icons are not separate Tab stops.
+// unusable with hundreds of shapes). ↑/↓/Home/End move between rows and
+// Enter/Space activate the focused row like a click. → steps into the row's
+// icon buttons (visibility, rename, delete, colour, ...), ←/→ move between
+// them, Enter/Space press one, and ← on the first or Esc returns to the row.
 
-// Swap a list's rows for `fragment`, keeping keyboard focus on the same row
-// position when the list had focus (activating a row re-renders the list).
-// Otherwise the tabbable row is `preferredIndex`, or the previous one.
+function rowControls(row) {
+    return [...row.querySelectorAll('[role="button"]')];
+}
+
+// Where focus sits in a roving list, as a position that survives the list
+// being re-rendered (most row actions re-render it). control -1 = the row.
+function rovingFocusPosition(listEl, el) {
+    if (!listEl || !el || !listEl.contains(el)) return null;
+    const rows = [...listEl.children];
+    const row = rows.findIndex(r => r.contains(el));
+    if (row === -1) return null;
+    return { listEl, row, control: rowControls(rows[row]).indexOf(el) };
+}
+
+function focusRovingPosition(pos) {
+    const rows = [...pos.listEl.children];
+    if (rows.length === 0) return false;
+    const row = rows[Math.min(pos.row, rows.length - 1)];
+    rows.forEach(r => { r.tabIndex = r === row ? 0 : -1; });
+    const target = (pos.control >= 0 && rowControls(row)[pos.control]) || row;
+    if (target !== row) target.tabIndex = -1; // focusable, not a Tab stop
+    target.focus();
+    return true;
+}
+
+// Swap a list's rows for `fragment`, keeping keyboard focus at the same
+// position when it was inside the list. Otherwise the tabbable row is
+// `preferredIndex`, or the previously tabbable one.
 function replaceRovingRows(listEl, fragment, preferredIndex) {
     const oldRows = [...listEl.children];
-    const focusedIndex = oldRows.indexOf(document.activeElement);
+    const focusPos = rovingFocusPosition(listEl, document.activeElement);
     const previousTabIndex = oldRows.findIndex(r => r.tabIndex === 0);
     listEl.innerHTML = '';
     listEl.appendChild(fragment);
     const rows = [...listEl.children];
     if (rows.length === 0) return;
-    let index = focusedIndex !== -1 ? focusedIndex
-        : (preferredIndex >= 0 ? preferredIndex : previousTabIndex);
+    if (focusPos && focusRovingPosition(focusPos)) return;
+    let index = preferredIndex >= 0 ? preferredIndex : previousTabIndex;
     index = Math.min(Math.max(index, 0), rows.length - 1);
     rows.forEach((row, i) => { row.tabIndex = i === index ? 0 : -1; });
-    if (focusedIndex !== -1) rows[index].focus();
 }
 
 function enableRovingRows(listEl) {
     if (!listEl) return;
     listEl.addEventListener('keydown', (e) => {
+        const pos = rovingFocusPosition(listEl, document.activeElement);
+        if (!pos || e.ctrlKey || e.metaKey || e.altKey) return;
         const rows = [...listEl.children];
-        const i = rows.indexOf(document.activeElement);
-        if (i === -1) return;
-        let next;
+        const controls = rowControls(rows[pos.row]);
+        const onControl = pos.control >= 0;
+        const go = (row, control) => focusRovingPosition({ listEl, row, control });
         switch (e.key) {
-            case 'ArrowDown': next = Math.min(rows.length - 1, i + 1); break;
-            case 'ArrowUp':   next = Math.max(0, i - 1); break;
-            case 'Home':      next = 0; break;
-            case 'End':       next = rows.length - 1; break;
+            case 'ArrowDown': go(Math.min(rows.length - 1, pos.row + 1), -1); break;
+            case 'ArrowUp':   go(Math.max(0, pos.row - 1), -1); break;
+            case 'Home':      go(0, -1); break;
+            case 'End':       go(rows.length - 1, -1); break;
+            case 'ArrowRight':
+                if (controls.length === 0) return;
+                go(pos.row, Math.min(controls.length - 1, pos.control + 1));
+                break;
+            case 'ArrowLeft':
+                if (!onControl) return;
+                go(pos.row, pos.control - 1);
+                break;
+            case 'Escape':
+                if (!onControl) return; // let Esc clear the selection as usual
+                go(pos.row, -1);
+                break;
             case 'Enter':
             case ' ':
-                e.preventDefault();
-                rows[i].click();
-                return;
+                (onControl ? controls[pos.control] : rows[pos.row]).click();
+                break;
             default:
                 return;
         }
         e.preventDefault();
-        rows.forEach((row, k) => { row.tabIndex = k === next ? 0 : -1; });
-        rows[next].focus();
-        rows[next].scrollIntoView({ block: 'nearest' });
+        // Handled here; don't let document-level handlers act on it too
+        // (e.g. Enter that just opened a dialog would also confirm it).
+        e.stopPropagation();
+        if (e.key.startsWith('Arrow') || e.key === 'Home' || e.key === 'End') {
+            document.activeElement.scrollIntoView({ block: 'nearest' });
+        }
     });
 }
 enableRovingRows(shapeList);
@@ -411,9 +451,16 @@ function showColorPicker(label) {
         colorOption.className = 'color-option';
         colorOption.style.backgroundColor = color;
         colorOption.dataset.color = color;
+        colorOption.setAttribute('role', 'radio');
+        colorOption.setAttribute('aria-checked', 'false');
+        colorOption.setAttribute('aria-label', color);
+        colorOption.tabIndex = -1;
         fragment.appendChild(colorOption);
     });
     palette.appendChild(fragment);
+    palette.setAttribute('role', 'radiogroup');
+    const pickerTitle = colorPickerModal.querySelector('h3');
+    if (pickerTitle && pickerTitle.id) palette.setAttribute('aria-labelledby', pickerTitle.id);
 
     // 移除旧的事件处理器（如果存在）。两个 handler 都要清理，
     // 否则每次打开 color picker 都会累积一个匿名 dblclick 监听器。
@@ -428,8 +475,7 @@ function showColorPicker(label) {
     paletteClickHandler = (e) => {
         const target = e.target;
         if (target.classList.contains('color-option')) {
-            palette.querySelectorAll('.color-option').forEach(opt => opt.classList.remove('selected'));
-            target.classList.add('selected');
+            selectPaletteOption(palette, target);
             customColorInput.value = target.dataset.color;
         }
     };
@@ -461,9 +507,47 @@ function showColorPicker(label) {
         }
     }
 
+    // Pre-select the swatch of the current colour (if it is a preset); it,
+    // or the first swatch, is the palette's single Tab stop.
+    const options = [...palette.querySelectorAll('.color-option')];
+    const current = options.find(opt => opt.dataset.color.toUpperCase() === customColorInput.value.toUpperCase());
+    if (current) selectPaletteOption(palette, current);
+    else if (options[0]) options[0].tabIndex = 0;
+
     // 显示模态框
     colorPickerModal.style.display = 'flex';
     customColorInput.focus();
+}
+
+// Mark one palette swatch as the chosen one (visual, ARIA, roving tabindex).
+function selectPaletteOption(palette, option) {
+    for (const opt of palette.querySelectorAll('.color-option')) {
+        const chosen = opt === option;
+        opt.classList.toggle('selected', chosen);
+        opt.setAttribute('aria-checked', chosen ? 'true' : 'false');
+        opt.tabIndex = chosen ? 0 : -1;
+    }
+}
+
+// Arrow keys move through the palette grid and pick the colour (radio-group
+// behaviour); Enter then confirms via the dialog's Enter handler.
+if (colorPickerModal) {
+    const palette = colorPickerModal.querySelector('.color-palette');
+    if (palette) palette.addEventListener('keydown', (e) => {
+        const options = [...palette.querySelectorAll('.color-option')];
+        const i = options.indexOf(document.activeElement);
+        if (i === -1) return;
+        // Columns = swatches sharing the first swatch's row in the laid-out grid.
+        const firstTop = options[0].getBoundingClientRect().top;
+        const cols = Math.max(1, options.filter(o => Math.abs(o.getBoundingClientRect().top - firstTop) < 2).length);
+        const moves = { ArrowRight: 1, ArrowLeft: -1, ArrowDown: cols, ArrowUp: -cols };
+        if (!(e.key in moves) && e.key !== ' ') return;
+        e.preventDefault();
+        const next = e.key === ' ' ? i : Math.min(options.length - 1, Math.max(0, i + moves[e.key]));
+        selectPaletteOption(palette, options[next]);
+        customColorInput.value = options[next].dataset.color;
+        options[next].focus();
+    });
 }
 
 // 隐藏颜色选择器

@@ -602,6 +602,11 @@ function renderImageBrowserList() {
         return;
     }
 
+    // The list may have changed (filter, rescan): keep the keyboard cursor in range.
+    if (imageBrowserCursor >= effectiveImages.length) {
+        imageBrowserCursor = effectiveImages.length - 1;
+    }
+
     // Create virtual scroll container structure
     // We need a container that maintains the full scroll height
     const totalHeight = effectiveImages.length * VIRTUAL_ITEM_HEIGHT;
@@ -692,28 +697,107 @@ function updateVirtualScroll() {
         // Store data attribute for click handling
         li.dataset.imagePath = imagePath;
         li.dataset.index = i;
+        li.id = 'imageBrowserRow-' + i;
+        li.setAttribute('role', 'option');
+        li.setAttribute('aria-selected', imagePath === currentImageRelativePathMutable ? 'true' : 'false');
 
-        li.onclick = () => {
-            // Save scroll position
-            const state = vscode.getState() || {};
-            state.savedScrollTop = imageBrowserList.scrollTop;
-            state.skipNextScroll = true;
-            vscode.setState(state);
-
-            vscode.postMessage({
-                command: 'navigateToImage',
-                imagePath: imagePath
-            });
-        };
+        li.onclick = () => openImageFromBrowser(imagePath);
 
         fragment.appendChild(li);
     }
 
     spacer.appendChild(fragment);
+    syncImageBrowserCursor();
 
     // Bind rich tooltips to the freshly-rendered virtual rows. attach() is
     // idempotent so it tolerates being called every scroll tick.
     if (window.tooltip && window.TIPS) window.tooltip.attach(spacer, window.TIPS);
+}
+
+// --- Keyboard navigation in the image browser ---
+// The list is virtualised (only rows near the viewport exist), so rows can't
+// hold focus: the list element is the single Tab stop and tracks a keyboard
+// cursor index, exposed to assistive tech via aria-activedescendant.
+// ↑/↓/PageUp/PageDown/Home/End move the cursor; Enter/Space open the image.
+let imageBrowserCursor = -1;
+
+// Open an image from the browser list, keeping the list's scroll position.
+function openImageFromBrowser(imagePath) {
+    const state = vscode.getState() || {};
+    state.savedScrollTop = imageBrowserList.scrollTop;
+    state.skipNextScroll = true;
+    vscode.setState(state);
+
+    vscode.postMessage({
+        command: 'navigateToImage',
+        imagePath: imagePath
+    });
+}
+
+function syncImageBrowserCursor() {
+    if (!imageBrowserList) return;
+    let cursorRow = null;
+    for (const row of imageBrowserList.querySelectorAll('.image-browser-item')) {
+        const isCursor = Number(row.dataset.index) === imageBrowserCursor;
+        row.classList.toggle('kbd-cursor', isCursor);
+        if (isCursor) cursorRow = row;
+    }
+    if (cursorRow) imageBrowserList.setAttribute('aria-activedescendant', cursorRow.id);
+    else imageBrowserList.removeAttribute('aria-activedescendant');
+}
+
+function moveImageBrowserCursor(index) {
+    const count = getEffectiveImageList().length;
+    if (count === 0) return;
+    imageBrowserCursor = Math.max(0, Math.min(count - 1, index));
+    // Scroll just enough to show the cursor row, then render synchronously so
+    // the row exists for Enter and aria-activedescendant.
+    const top = imageBrowserCursor * VIRTUAL_ITEM_HEIGHT;
+    const bottom = top + VIRTUAL_ITEM_HEIGHT;
+    if (top < imageBrowserList.scrollTop) {
+        imageBrowserList.scrollTop = top;
+    } else if (bottom > imageBrowserList.scrollTop + imageBrowserList.clientHeight) {
+        imageBrowserList.scrollTop = bottom - imageBrowserList.clientHeight;
+    }
+    updateVirtualScroll();
+    syncImageBrowserCursor();
+}
+
+if (imageBrowserList) {
+    imageBrowserList.tabIndex = 0;
+    imageBrowserList.setAttribute('role', 'listbox');
+    imageBrowserList.setAttribute('aria-label', tt('section.images'));
+    imageBrowserList.addEventListener('focus', () => {
+        if (imageBrowserCursor < 0) {
+            const current = getEffectiveImageList().indexOf(currentImageRelativePathMutable);
+            moveImageBrowserCursor(current >= 0 ? current : 0);
+        } else {
+            syncImageBrowserCursor();
+        }
+    });
+    imageBrowserList.addEventListener('keydown', (e) => {
+        if (e.target !== imageBrowserList || e.ctrlKey || e.metaKey || e.altKey) return;
+        const page = Math.max(1, Math.floor(imageBrowserList.clientHeight / VIRTUAL_ITEM_HEIGHT) - 1);
+        const cursor = Math.max(0, imageBrowserCursor);
+        switch (e.key) {
+            case 'ArrowDown': moveImageBrowserCursor(cursor + 1); break;
+            case 'ArrowUp':   moveImageBrowserCursor(cursor - 1); break;
+            case 'PageDown':  moveImageBrowserCursor(cursor + page); break;
+            case 'PageUp':    moveImageBrowserCursor(cursor - page); break;
+            case 'Home':      moveImageBrowserCursor(0); break;
+            case 'End':       moveImageBrowserCursor(getEffectiveImageList().length - 1); break;
+            case 'Enter':
+            case ' ': {
+                const imagePath = getEffectiveImageList()[imageBrowserCursor];
+                if (imagePath) openImageFromBrowser(imagePath);
+                break;
+            }
+            default:
+                return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+    });
 }
 
 // Scroll handler for virtual scrolling (throttled)

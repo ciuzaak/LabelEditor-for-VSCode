@@ -2,6 +2,17 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [Unreleased]
+
+### Accessibility
+- **Image browser from the keyboard**: the image list is one Tab stop; ↑/↓/PageUp/PageDown/Home/End move a highlighted cursor (scrolling the virtual list as needed) and Enter/Space open the image. Screen readers get it as a list box with the cursor row as the active option.
+- **Row buttons from the keyboard**: in the Instances and Labels lists, → moves from a row into its buttons (visibility, rename, delete, label colour, colour reset), ←/→ move between them, Enter/Space press one, and ← / Esc return to the row. Focus stays put when the action re-renders the list.
+- **Colour picker from the keyboard**: the preset palette is a radio group — arrow keys move through the grid and pick the colour, Enter confirms; the current colour is pre-selected. Focus returns to the label's colour button afterwards.
+
+### Fixed
+- **Rotated PNGs**: EXIF orientation stored in a PNG `eXIf` chunk is now honoured, like JPEG EXIF (the editor and OpenCV already displayed such PNGs rotated, so YOLO labels on them loaded in the wrong place).
+- **Leftover temp files**: a save interrupted by a crash or forced quit left a hidden `.<file>.<random>.tmp` next to the annotation. The next save of that file now removes such leftovers once they are over 10 minutes old.
+
 ## [1.5.0] - 2026-09-27
 
 A hardening release: security fixes for the webview and the Python tools; data-safety fixes (image mix-ups during fast navigation, unreadable annotation files being overwritten, EXIF-rotated photos, crash-safe saves); much faster redraws with many shapes; keyboard and screen-reader access; and CI, linting and a modular webview codebase behind it all.

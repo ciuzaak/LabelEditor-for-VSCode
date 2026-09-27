@@ -42,6 +42,7 @@ function modalFocusables(modal) {
         }
         let isOpen = modal.style.display === 'flex';
         let returnFocusTo = null;
+        let returnListPos = null; // same spot in a list, if the list re-renders meanwhile
         new MutationObserver(() => {
             const nowOpen = modal.style.display === 'flex';
             if (nowOpen === isOpen) return;
@@ -50,6 +51,8 @@ function modalFocusables(modal) {
                 returnFocusTo = modal.contains(document.activeElement)
                     ? lastFocusOutsideModals
                     : document.activeElement;
+                returnListPos = rovingFocusPosition(shapeList, returnFocusTo)
+                    || rovingFocusPosition(labelsList, returnFocusTo);
                 setTimeout(() => {
                     if (modal.style.display !== 'flex' || modal.contains(document.activeElement)) return;
                     const first = modalFocusables(modal).find(el => !el.classList.contains('modal-close'))
@@ -58,9 +61,13 @@ function modalFocusables(modal) {
                 }, 0);
             } else {
                 const target = returnFocusTo;
+                const listPos = returnListPos;
                 returnFocusTo = null;
+                returnListPos = null;
                 const focusLost = modal.contains(document.activeElement) || document.activeElement === document.body;
-                if (target && target.isConnected && focusLost && typeof target.focus === 'function') target.focus();
+                if (!focusLost) return;
+                if (target && target.isConnected && typeof target.focus === 'function') target.focus();
+                else if (listPos) focusRovingPosition(listPos);
             }
         }).observe(modal, { attributes: true, attributeFilter: ['style'] });
     }

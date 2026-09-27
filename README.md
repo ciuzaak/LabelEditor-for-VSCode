@@ -171,7 +171,8 @@ The webview editor lives in `media/editor/*.js`; `build/bundle-webview.js` conca
 - **D**: Next image
 - **Ctrl+S** (`Cmd+S` on Mac): Save annotations
 - **Delete/Backspace**: Delete selected shape
-- **↑ / ↓ / Home / End, Enter / Space** (in the Instances or Labels list): Move between rows and select
+- **↑ / ↓ / Home / End, Enter / Space** (in the Instances, Labels or image list): Move between rows and select / open
+- **→ / ←** (on an Instances or Labels row): Step into the row's buttons (visibility, rename, delete, colour); Enter presses one, Esc returns to the row
 - **Ctrl+D** (in label modal, New in v0.14.1): Reveal chip shortcut badges, then press a digit (`1`-`9`, or `0` for the 10th) to commit that label
 
 ### Toolbar Buttons
