@@ -119,6 +119,10 @@ let selectedShapeIndices = new Set(); // Multi-selection set
 let hoveredShapeIndex = -1;                       // index of the would-be-selected shape under the cursor (-1 = none)
 let overlapCycleState = { members: [], pos: -1 }; // current click-to-cycle stack + position within it
 let isBatchRenaming = false; // Whether label modal is renaming multiple shapes
+// Description shown when the batch-rename modal opened (the shared one, or ''
+// when the selection's descriptions differ). Descriptions are only rewritten
+// if the user changes the field, so renaming never wipes them by accident.
+let batchRenameInitialDescription = '';
 // Box selection state (view mode drag-to-select)
 let isBoxSelecting = false;
 let boxSelectStart = null;   // {x, y} in image coords
@@ -221,6 +225,10 @@ const colorCache = new Map(); // 颜色计算缓存
 
 // Image load request ID to prevent stale callbacks
 let currentImageLoadId = 0;
+// True between switching img.src and the new image loading. The element keeps
+// the previous picture until then, so drawing would overlay the new image's
+// shapes on the old image at the old zoom.
+let imageLoadPending = false;
 
 // Image metadata for info popup (initialImageMetadata is injected via HTML script tag)
 let currentImageMetadata = (typeof initialImageMetadata !== 'undefined') ? initialImageMetadata : null;
@@ -939,6 +947,10 @@ function saveHistory() {
         if (savedHistoryIndex > historyIndex) {
             savedHistoryIndex = -1;
         }
+        // Same for a save still in flight: its snapshot slot is about to be reused.
+        if (pendingSaveHistoryIndex > historyIndex) {
+            pendingSaveHistoryIndex = -1;
+        }
     }
 
     // 添加新快照
@@ -951,9 +963,25 @@ function saveHistory() {
         if (savedHistoryIndex >= 0) {
             savedHistoryIndex--;
         }
+        // Keep an in-flight save's index pointing at the same snapshot, or
+        // saveComplete would mark a newer, unsaved snapshot clean.
+        if (pendingSaveHistoryIndex >= 0) {
+            pendingSaveHistoryIndex--;
+        }
     } else {
         historyIndex++;
     }
+}
+
+// Visibility is view state (never saved, never its own undo step), so an
+// undo/redo keeps what the user currently sees instead of rolling it back to
+// whatever the snapshot captured. Shapes with no current counterpart (e.g. one
+// an undo brings back) follow their label's visibility toggle, if any.
+function restoreHistorySnapshot(snapshot) {
+    return carryOverVisibility(shapes, structuredClone(snapshot), shape =>
+        labelVisibilityState.has(shape.label)
+            ? labelVisibilityState.get(shape.label)
+            : shape.visible !== false);
 }
 
 function undo() {
@@ -962,10 +990,7 @@ function undo() {
         if (isEditingShape) exitShapeEditMode(false);
 
         historyIndex--;
-        shapes = structuredClone(history[historyIndex]);
-
-        // Reapply label-level visibility overrides (not recorded in history)
-        applyLabelVisibilityState();
+        shapes = restoreHistorySnapshot(history[historyIndex]);
 
         clearSelection();
         // 检查是否恢复到保存时的状态
@@ -986,10 +1011,7 @@ function redo() {
         if (isEditingShape) exitShapeEditMode(false);
 
         historyIndex++;
-        shapes = structuredClone(history[historyIndex]);
-
-        // Reapply label-level visibility overrides (not recorded in history)
-        applyLabelVisibilityState();
+        shapes = restoreHistorySnapshot(history[historyIndex]);
 
         clearSelection();
         // 检查是否恢复到保存时的状态
@@ -1144,8 +1166,19 @@ window.addEventListener('message', event => {
             break;
         }
         case 'requestSave':
-            saveTriggeredByNavigation = true;
-            save();
+            // The extension's "unsaved changes" prompt is non-modal, so by the
+            // time "Save" is clicked the user may already have saved (Ctrl+S).
+            if (isSaving) {
+                // A save is in flight: navigate once it completes.
+                saveTriggeredByNavigation = true;
+            } else if (!isDirty) {
+                // Nothing left to write; save() would be a no-op and the
+                // navigation would otherwise never happen (or fire later).
+                vscode.postMessage({ command: 'navigateAfterSave' });
+            } else {
+                saveTriggeredByNavigation = true;
+                save();
+            }
             break;
         case 'saveComplete': {
             // Mark clean at the exact history snapshot that was saved
@@ -1318,8 +1351,10 @@ function handleImageUpdate(message) {
     boxSelectCurrent = null;
     editingShapeIndex = -1;
     isBatchRenaming = false;
+    hoveredShapeIndex = -1; // indexes into the old image's shapes
     if (isMergePending) clearMergePendingState();
     hideLabelModal();
+    samResetForNewImage();
 
     // Reset brightness/contrast if not locked (independently)
     if (!brightnessLocked) {
@@ -1406,6 +1441,7 @@ function handleImageUpdate(message) {
 
     // If no image URL is provided (e.g., empty folder), clear the canvas and UI
     if (!newImageUrl) {
+        imageLoadPending = false;
         img.src = '';
         shapes = [];
         currentPoints = [];
@@ -1424,9 +1460,11 @@ function handleImageUpdate(message) {
     }
 
     // Load new image with stale callback protection
+    imageLoadPending = true;
     img.onload = function () {
         // Check if this callback is for the current load request
         if (thisLoadId !== currentImageLoadId) return;
+        imageLoadPending = false;
 
         // Clear the persistent "image error" sticky if a previous load failed.
         if (window.notifyBus) window.notifyBus.clearSticky('image.error');
@@ -1446,6 +1484,7 @@ function handleImageUpdate(message) {
     img.onerror = function () {
         // Check if this callback is for the current load request
         if (thisLoadId !== currentImageLoadId) return;
+        imageLoadPending = false;
 
         handleImageError();
     };
@@ -1565,13 +1604,16 @@ function updateImageBrowserHighlight(newRelativePath) {
 
 // --- Shortcuts ---
 
+// True while any dialog (.modal overlay) is shown. Canvas shortcuts must not
+// act on the shapes behind it.
+function isAnyModalOpen() {
+    return [...document.querySelectorAll('.modal')].some(m => m.style.display === 'flex');
+}
+
 // Track Shift press for eraser/negative-point feedback (cursor + status bar).
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Shift' && !shiftPressed) {
-        if (labelModal.style.display === 'flex') return;
-        if (samConfigModal && samConfigModal.style.display === 'flex') return;
-        if (colorPickerModal && colorPickerModal.style.display === 'flex') return;
-        if (onnxInferModal && onnxInferModal.style.display === 'flex') return;
+        if (isAnyModalOpen()) return;
         const focusedTag = document.activeElement?.tagName;
         if (focusedTag === 'INPUT' || focusedTag === 'TEXTAREA' || focusedTag === 'SELECT') return;
         if (eraserActive) return;
@@ -1604,34 +1646,29 @@ window.addEventListener('blur', () => {
 // per-action behaviour lives in handleAction() so the settings UI can rebind
 // without touching the dispatcher.
 document.addEventListener('keydown', (e) => {
-    // Ignore shortcuts if any modal is open (except Enter/Esc handled in input)
-    if (labelModal.style.display === 'flex') return;
-    if (onnxInferModal && onnxInferModal.style.display === 'flex') return;
-    if (colorPickerModal && colorPickerModal.style.display === 'flex') return;
-    if (samConfigModal && samConfigModal.style.display === 'flex') return;
-    if (exportDatasetModal && exportDatasetModal.style.display === 'flex') return;
-    if (moreSettingsModal && moreSettingsModal.style.display === 'flex') return;
+    // Ignore shortcuts while a dialog is open (its Enter/Esc are handled below).
+    if (isAnyModalOpen()) return;
 
     // Capture mode owns the next press — the row in the settings UI is waiting
     // to bind it. The capture handler attaches/detaches itself; this is just a
     // belt-and-braces guard so a stray key doesn't fall through to actions.
     if (keybindingsCapture) return;
 
-    // Skip most shortcuts when an input/textarea/select is focused,
-    // allowing text editing keys to work normally. Only Ctrl-prefixed
-    // shortcuts (Ctrl+S, Ctrl+Z, Ctrl+A, Ctrl+F) are still processed.
-    const focusedTag = document.activeElement?.tagName;
-    if ((focusedTag === 'INPUT' || focusedTag === 'TEXTAREA' || focusedTag === 'SELECT')
-        && !(e.ctrlKey || e.metaKey)) {
-        return;
-    }
-
     const kb = window.keybindings;
     if (!kb) return;
     const actionId = kb.matchAction(e, currentBindings, kb.ALT_BINDINGS);
-    if (actionId) {
-        handleAction(actionId, e);
+    if (!actionId) return;
+
+    // While a form field has focus, keys belong to it: Ctrl+Z / Ctrl+A must
+    // undo / select the text, not the shapes. Only Save and image search
+    // still work from inside a field.
+    const focusedTag = document.activeElement?.tagName;
+    if ((focusedTag === 'INPUT' || focusedTag === 'TEXTAREA' || focusedTag === 'SELECT')
+        && actionId !== 'edit.save' && actionId !== 'browser.find') {
+        return;
     }
+
+    handleAction(actionId, e);
 });
 
 function handleAction(id, e) {
@@ -3141,6 +3178,19 @@ document.addEventListener('mousemove', (e) => {
     }
 });
 
+// End of a whole-shape or vertex drag: record it as an edit only if the
+// points actually changed — a click without moving must not mark the file
+// dirty or add a no-op undo step.
+function commitShapeEditDrag() {
+    if (shapeBeingEdited === -1) return;
+    const current = shapes[shapeBeingEdited].points;
+    if (originalEditPoints && pointsArrayEqual(current, originalEditPoints)) return;
+    // Update originalEditPoints to current position for the next drag
+    originalEditPoints = JSON.parse(JSON.stringify(current));
+    markDirty();
+    saveHistory();
+}
+
 document.addEventListener('mouseup', (e) => {
     if (isDraggingWholeShape) {
         isDraggingWholeShape = false;
@@ -3149,22 +3199,12 @@ document.addEventListener('mouseup', (e) => {
         if (!shiftPressed) {
             canvasWrapper.style.cursor = 'default';
         }
-        // Update originalEditPoints to current position for next drag
-        if (shapeBeingEdited !== -1) {
-            originalEditPoints = JSON.parse(JSON.stringify(shapes[shapeBeingEdited].points));
-        }
-        markDirty();
-        saveHistory();
+        commitShapeEditDrag();
     }
     if (isDraggingVertex) {
         isDraggingVertex = false;
         activeVertexIndex = -1;
-        // Update originalEditPoints to current position
-        if (shapeBeingEdited !== -1) {
-            originalEditPoints = JSON.parse(JSON.stringify(shapes[shapeBeingEdited].points));
-        }
-        markDirty();
-        saveHistory();
+        commitShapeEditDrag();
     }
 
     // --- Eraser: determine polygon vs rectangle on mouseup ---
@@ -3439,6 +3479,10 @@ function performErase(eraserPolygon) {
 
     for (let i = 0; i < shapes.length; i++) {
         const shape = shapes[i];
+
+        // Hidden shapes are out of play, as for click and box selection —
+        // hiding a class is how the user protects it while erasing others.
+        if (shape.visible === false) continue;
 
         if (shape.shape_type === 'point') {
             // Point: delete if inside eraser polygon
@@ -3994,7 +4038,9 @@ function showBatchRenameModal() {
     // Pre-fill with the label of the first selected shape
     const firstIdx = [...selectedShapeIndices][0];
     labelInput.value = firstIdx !== undefined ? shapes[firstIdx].label : '';
-    descriptionInput.value = '';
+    const descriptions = new Set([...selectedShapeIndices].map(i => shapes[i].description || ''));
+    batchRenameInitialDescription = descriptions.size === 1 ? [...descriptions][0] : '';
+    descriptionInput.value = batchRenameInitialDescription;
     labelInput.focus();
     labelInput.select();
     renderRecentLabels();
@@ -4148,9 +4194,11 @@ function confirmLabel() {
     const description = descriptionInput.value.trim();
 
     if (isBatchRenaming) {
-        // Batch rename all selected shapes
+        // Batch rename all selected shapes; descriptions only if edited.
+        const descriptionEdited = description !== batchRenameInitialDescription.trim();
         for (const idx of selectedShapeIndices) {
             shapes[idx].label = label;
+            if (!descriptionEdited) continue;
             if (description) {
                 shapes[idx].description = description;
             } else {
@@ -4434,6 +4482,29 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             submitExportDataset();
+        }
+        return;
+    }
+    // Export SVG modal — Enter exports, Escape cancels (same as Export Dataset).
+    if (exportSvgModal && exportSvgModal.style.display === 'flex') {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            hideExportSvgModal();
+        } else if (e.key === 'Enter' && activeTag !== 'BUTTON') {
+            e.preventDefault();
+            e.stopPropagation();
+            submitExportSvg();
+        }
+        return;
+    }
+    // Advanced search modal — Escape closes. (An open class combobox consumes
+    // Escape on its input first; Enter is left to the form's own controls.)
+    if (advancedSearchModal && advancedSearchModal.style.display === 'flex') {
+        if (e.key === 'Escape') {
+            e.preventDefault();
+            e.stopPropagation();
+            hideAdvancedSearchModal();
         }
         return;
     }
@@ -4759,16 +4830,6 @@ function syncLabelsActiveState() {
         const active = !!stat && stat.count > 0 && selectedByLabel.get(label) === stat.count;
         li.classList.toggle('active', active);
     }
-}
-
-// Reapply label-level visibility state onto current shapes
-// Called after undo/redo to ensure label-level toggles (which are not in history) stay consistent
-function applyLabelVisibilityState() {
-    shapes.forEach(shape => {
-        if (labelVisibilityState.has(shape.label)) {
-            shape.visible = labelVisibilityState.get(shape.label);
-        }
-    });
 }
 
 // 切换指定标签的所有实例的可见性
@@ -5126,6 +5187,7 @@ function updateModeButtons() {
 
 // --- Drawing Logic ---
 function draw(mouseEvent) {
+    if (imageLoadPending) return; // img.onload redraws
     // Canvas只绘制图片
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -5142,6 +5204,7 @@ function draw(mouseEvent) {
 }
 
 function drawSVGAnnotations(mouseEvent) {
+    if (imageLoadPending) return; // img.onload redraws
     // 清除SVG内容
     svgOverlay.innerHTML = '';
 
@@ -9032,9 +9095,17 @@ if (samModeBtn) {
     samModeBtn.addEventListener('click', () => setMode('sam'));
 }
 
-// When image changes, clear SAM prompts (encoder cache will be refreshed on next interaction)
-const originalHandleImageUpdate = handleImageUpdate;
-window._samOnImageUpdate = function () {
+// When the image changes, drop SAM prompts and any pending click (encoder
+// cache is refreshed lazily on the next interaction). Called from
+// handleImageUpdate.
+function samResetForNewImage() {
+    // A click on the old image whose 200 ms single-click timer hasn't fired
+    // yet would otherwise add a prompt to — and decode on — the new image.
+    if (samClickTimer) {
+        clearTimeout(samClickTimer);
+        samClickTimer = null;
+    }
+    samPendingClick = null;
     if (currentMode === 'sam') {
         samDecodeVersion++;  // Invalidate any in-flight decode
         samPrompts = [];
@@ -9050,13 +9121,7 @@ window._samOnImageUpdate = function () {
         samCurrentImagePath = null;
         updateShiftFeedback();
     }
-};
-// Patch handleImageUpdate
-const _origHandleImageUpdate = handleImageUpdate;
-handleImageUpdate = function (message) {
-    _origHandleImageUpdate(message);
-    if (window._samOnImageUpdate) window._samOnImageUpdate();
-};
+}
 
 // --- SAM SVG Drawing ---
 

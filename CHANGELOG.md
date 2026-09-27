@@ -24,6 +24,15 @@ Security hardening: data read from disk (file names, annotation JSON) and messag
   - Closing the terminal or pressing Ctrl+C in it stops the process. A SAM service is stopped when the last LabelEditor panel closes or VS Code shuts down, freeing its model and GPU memory.
   - Because no shell is used, `python` is resolved from VS Code's environment rather than your terminal profile — if you relied on an environment activated only in the terminal, set the Python path in the ONNX/SAM settings.
 - **Crash-safe saves**: annotation files (LabelMe `.json`, YOLO `.txt`), `data.yaml` when adding a class, and the files written by ONNX batch inference are now written to a temporary file and renamed into place, so a crash, forced quit or full disk mid-save leaves the previous version instead of a truncated file. Symlinked files stay symlinks and file permissions are kept.
+- **Overlap click picks the smallest shape again**: a same-named helper in the webview made polygon areas negative for counter-clockwise polygons, so clicking a small shape inside a large polygon could select the large one.
+- **Batch rename keeps descriptions**: renaming several shapes (`Ctrl+R` with a multi-selection) no longer deletes their descriptions. The field is pre-filled when the shapes share one, and descriptions change only if you edit it.
+- **Undo/redo no longer changes visibility**: hiding or showing shapes isn't an undo step, and undoing an edit no longer unhides (or hides) shapes as a side effect.
+- **Unsaved-changes prompt**: choosing *Save* after already saving (e.g. `Ctrl+S` while the prompt was open) now navigates right away, instead of doing nothing and jumping to that image after a later save.
+- **Dialogs block canvas shortcuts**: with Advanced Search or Export SVG open, keys like `Delete`, `A`/`D` no longer act on the shapes behind the dialog, and `Esc` closes both dialogs (`Enter` runs the SVG export). In a text field, `Ctrl+A`/`Ctrl+Z` now select/undo the text instead of the shapes; only Save and image search still fire from a field.
+- **No phantom edits**: clicking a shape or vertex in edit mode without dragging no longer marks the file as modified or adds an undo step.
+- **Save state with a full undo history**: making an edit while a save was in flight could mark the file clean once the undo history reached its 50-step limit.
+- **Eraser skips hidden shapes**, matching click and box selection, so hiding a class protects it while erasing others.
+- **Switching images**: a SAM click made just before switching no longer adds a prompt to the new image, a stale hover outline no longer appears, and the new image's shapes are no longer briefly drawn over the previous image while it loads.
 
 ## [1.4.2] - 2026-06-18
 

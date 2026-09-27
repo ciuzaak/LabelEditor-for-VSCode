@@ -127,6 +127,30 @@ function resolveOverlapSelection({ ordered, prevMembers, prevPos, currentSelecte
     return { targetIndex: ordered[pos], members: ordered, pos };
 }
 
+// Carry per-shape visibility across an undo/redo snapshot swap. Each shape
+// in `nextShapes` takes the visibility of the matching shape in `prevShapes`
+// (same label, type and points); failing that, when the counts are equal
+// (moves, renames, vertex edits) the shape at the same index; otherwise
+// `fallback(shape)`. Returns new shape objects with a boolean `visible`.
+function carryOverVisibility(prevShapes, nextShapes, fallback) {
+    const keyOf = s => [s.label, s.shape_type, JSON.stringify(s.points)].join('\u0000');
+    const byKey = new Map();
+    for (const s of prevShapes) {
+        const k = keyOf(s);
+        if (!byKey.has(k)) byKey.set(k, []);
+        byKey.get(k).push(s.visible !== false);
+    }
+    const sameCount = prevShapes.length === nextShapes.length;
+    return nextShapes.map((s, i) => {
+        const queue = byKey.get(keyOf(s));
+        let visible;
+        if (queue && queue.length) visible = queue.shift();
+        else if (sameCount) visible = prevShapes[i].visible !== false;
+        else visible = !!fallback(s);
+        return { ...s, visible };
+    });
+}
+
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { allowSelectByClick, contourToBBoxRect, labelAnchorFromPoints, shapeArea, sortOverlapCandidates, resolveOverlapSelection };
+    module.exports = { allowSelectByClick, contourToBBoxRect, labelAnchorFromPoints, shapeArea, sortOverlapCandidates, resolveOverlapSelection, carryOverVisibility };
 }

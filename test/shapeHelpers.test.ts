@@ -4,7 +4,7 @@ import * as path from 'node:path';
 
 // Test runs from out-test/test/, so resolve to <repo-root>/media/shapeHelpers.js
 const helpers = require(path.resolve(__dirname, '..', '..', 'media', 'shapeHelpers.js'));
-const { allowSelectByClick, contourToBBoxRect, labelAnchorFromPoints, shapeArea, sortOverlapCandidates, resolveOverlapSelection } = helpers;
+const { allowSelectByClick, contourToBBoxRect, labelAnchorFromPoints, shapeArea, sortOverlapCandidates, resolveOverlapSelection, carryOverVisibility } = helpers;
 
 describe('allowSelectByClick', () => {
     it('always allows selection in view mode, regardless of the guard', () => {
@@ -137,5 +137,50 @@ describe('resolveOverlapSelection', () => {
     it('returns no target for an empty candidate list', () => {
         const r = resolveOverlapSelection({ ordered: [], prevMembers: [], prevPos: -1, currentSelectedIndex: -1 });
         assert.deepEqual(r, { targetIndex: -1, members: [], pos: -1 });
+    });
+});
+
+describe('carryOverVisibility', () => {
+    const rect = (label: string, x: number, visible?: boolean) =>
+        ({ label, shape_type: 'rectangle', points: [[x, 0], [x + 10, 10]], ...(visible === undefined ? {} : { visible }) });
+    const never = () => { throw new Error('fallback should not be used'); };
+
+    it('keeps the current visibility when undo restores an older snapshot of the same shapes', () => {
+        // User hid B after the last edit; undoing that edit must not unhide it.
+        const current = [rect('a', 0, true), rect('b', 20, false)];
+        const snapshot = [rect('a', 0, true), rect('b', 20, true)];
+        const out = carryOverVisibility(current, snapshot, never);
+        assert.deepEqual(out.map((s: any) => s.visible), [true, false]);
+    });
+
+    it('matches by content when the undo adds or removes shapes', () => {
+        // Undoing a delete of 'mid' brings it back; the others keep their state.
+        const current = [rect('a', 0, false), rect('c', 40, true)];
+        const snapshot = [rect('a', 0, true), rect('mid', 20, true), rect('c', 40, true)];
+        const out = carryOverVisibility(current, snapshot, (s: any) => s.label !== 'mid');
+        assert.deepEqual(out.map((s: any) => s.visible), [false, false, true]);
+    });
+
+    it('falls back to the same index when a shape was moved (points differ, count equal)', () => {
+        const current = [rect('a', 5, false), rect('b', 20, true)];
+        const snapshot = [rect('a', 0, true), rect('b', 20, true)];
+        const out = carryOverVisibility(current, snapshot, never);
+        assert.deepEqual(out.map((s: any) => s.visible), [false, true]);
+    });
+
+    it('treats a missing visible flag as visible and does not mutate its inputs', () => {
+        const current = [rect('a', 0)];
+        const snapshot = [rect('a', 0, false)];
+        const out = carryOverVisibility(current, snapshot, never);
+        assert.equal(out[0].visible, true);
+        assert.equal(snapshot[0].visible, false);
+        assert.notEqual(out[0], snapshot[0]);
+    });
+
+    it('pairs identical duplicates in order', () => {
+        const current = [rect('a', 0, false), rect('a', 0, true)];
+        const snapshot = [rect('a', 0), rect('a', 0), rect('z', 99)];
+        const out = carryOverVisibility(current, snapshot, () => true);
+        assert.deepEqual(out.map((s: any) => s.visible), [false, true, true]);
     });
 });
