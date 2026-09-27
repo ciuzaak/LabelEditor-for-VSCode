@@ -23,6 +23,7 @@ Security hardening: data read from disk (file names, annotation JSON) and messag
   - The temporary image-list / class-name files are deleted afterwards (they were never removed before).
   - Closing the terminal or pressing Ctrl+C in it stops the process. A SAM service is stopped when the last LabelEditor panel closes or VS Code shuts down, freeing its model and GPU memory.
   - Because no shell is used, `python` is resolved from VS Code's environment rather than your terminal profile — if you relied on an environment activated only in the terminal, set the Python path in the ONNX/SAM settings.
+- **Crash-safe saves**: annotation files (LabelMe `.json`, YOLO `.txt`), `data.yaml` when adding a class, and the files written by ONNX batch inference are now written to a temporary file and renamed into place, so a crash, forced quit or full disk mid-save leaves the previous version instead of a truncated file. Symlinked files stay symlinks and file permissions are kept.
 
 ## [1.4.2] - 2026-06-18
 

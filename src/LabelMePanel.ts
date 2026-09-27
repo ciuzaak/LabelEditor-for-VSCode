@@ -39,6 +39,7 @@ import {
 } from './webviewSecurity';
 import * as crypto from 'crypto';
 import { runPythonInTerminal, PythonRun, PythonExit } from './pythonProcess';
+import { writeFileAtomic } from './atomicWrite';
 
 export class LabelMePanel {
     public static readonly panels: Set<LabelMePanel> = new Set();
@@ -1937,7 +1938,7 @@ export class LabelMePanel {
         this._isSaving = true;
         try {
             await this._backupIfLossy(jsonPath);
-            await fs.writeFile(jsonPath, JSON.stringify(labelMeData, null, 2), 'utf8');
+            await writeFileAtomic(jsonPath, JSON.stringify(labelMeData, null, 2));
             this._lossyLoadPath = undefined;
             // Keep the search index fresh for the just-saved image without a full rescan.
             this._updateIndexForCurrentImage(data.shapes || []);
@@ -1997,7 +1998,7 @@ export class LabelMePanel {
         try {
             await fs.mkdir(path.dirname(labelPath), { recursive: true });
             await this._backupIfLossy(labelPath);
-            await fs.writeFile(labelPath, text, 'utf8');
+            await writeFileAtomic(labelPath, text);
             this._lossyLoadPath = undefined;
             // Keep the class search index fresh without a full rescan.
             this._updateIndexForCurrentImage(data.shapes || []);
@@ -2049,7 +2050,7 @@ export class LabelMePanel {
         try {
             const text = await fs.readFile(this._yamlUri.fsPath, 'utf8');
             const { text: newText, index } = appendClassToYaml(text, label);
-            await fs.writeFile(this._yamlUri.fsPath, newText, 'utf8');
+            await writeFileAtomic(this._yamlUri.fsPath, newText);
             this._yoloClasses = [...this._yoloClasses, label];
             this._safePost({ command: 'yoloClassAdded', classes: this._yoloClasses, index, label });
         } catch (err) {

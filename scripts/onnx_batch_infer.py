@@ -8,12 +8,40 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
+import tempfile
 
 import cv2
 import numpy as np
 import onnxruntime as ort
 from tqdm import tqdm
+
+
+def write_text_atomic(path, text):
+    """Replace `path` with `text` without ever leaving a truncated file.
+
+    Writes a temp file in the same directory, flushes it to disk and renames
+    it over the target, so an interrupted run (Ctrl+C, crash, full disk)
+    leaves either the old annotation or the new one. Follows a symlinked
+    target and keeps an existing file's permissions.
+    """
+    dest = os.path.realpath(path)
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(dest), prefix="." + os.path.basename(dest) + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+            f.flush()
+            os.fsync(f.fileno())
+        if os.path.exists(dest):
+            shutil.copymode(dest, tmp)
+        os.replace(tmp, dest)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
 
 
 def imread_unicode(img_path, flags=cv2.IMREAD_COLOR):
@@ -277,8 +305,7 @@ def main():
             else:
                 content = "\n".join(new_lines) + ("\n" if new_lines else "")
             os.makedirs(os.path.dirname(out_path), exist_ok=True)
-            with open(out_path, "w", encoding="utf-8") as f:
-                f.write(content)
+            write_text_atomic(out_path, content)
             processed += 1
             continue
 
@@ -306,8 +333,7 @@ def main():
             "imageWidth": w,
         }
 
-        with open(out_path, "w", encoding="utf-8") as f:
-            json.dump(labelme_data, f, ensure_ascii=False, indent=2)
+        write_text_atomic(out_path, json.dumps(labelme_data, ensure_ascii=False, indent=2))
 
         processed += 1
 
