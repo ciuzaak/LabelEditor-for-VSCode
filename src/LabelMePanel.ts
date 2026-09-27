@@ -54,6 +54,14 @@ export class LabelMePanel {
     private _yoloClasses: string[] = [];
     private _isDirty = false;
     private _isSaving = false;
+    // Incremented per image load; a load that finishes after a newer one
+    // started is dropped so a fast-navigating user never sees image B with
+    // image C's annotations.
+    private _imageLoadSeq = 0;
+    // Annotation file of the current image that existed but could not be
+    // fully loaded (unparsable, unreadable, or YOLO lines skipped). Saving over
+    // it first makes a backup, since the editor never showed its full content.
+    private _lossyLoadPath: string | undefined;
     private _pendingNavigation: number | undefined;
     private _pendingNavigationPath: string | undefined;
     private _workspaceImages: string[] = [];
@@ -873,22 +881,25 @@ export class LabelMePanel {
      * format: LabelMe reads the .json sidecar; YOLO reads the .txt label file and
      * converts normalized coords to pixels using image dimensions.
      */
-    private async _loadExistingAnnotation(meta?: ImageMetadata): Promise<any> {
+    private async _loadExistingAnnotation(
+        imagePath: string,
+        meta?: ImageMetadata
+    ): Promise<{ data: any; lossyPath?: string }> {
         if (this._format === 'yolo') {
+            const labelPath = imageToLabelPath(imagePath);
             let w = meta?.width || 0;
             let h = meta?.height || 0;
             if (!w || !h) {
-                const m = await getImageMetadata(this._imageUri.fsPath);
+                const m = await getImageMetadata(imagePath);
                 w = m.width || 0;
                 h = m.height || 0;
             }
             if (!w || !h) {
                 this._notify('warn', 'Cannot read image dimensions; YOLO labels not loaded', { key: 'yolo.noDims' });
-                return null;
+                return { data: null, lossyPath: existsSync(labelPath) ? labelPath : undefined };
             }
-            const labelPath = imageToLabelPath(this._imageUri.fsPath);
             if (!existsSync(labelPath)) {
-                return { shapes: [], imageWidth: w, imageHeight: h };
+                return { data: { shapes: [], imageWidth: w, imageHeight: h } };
             }
             try {
                 const txt = await fs.readFile(labelPath, 'utf8');
@@ -896,29 +907,38 @@ export class LabelMePanel {
                 if (warnings.length) {
                     this._notify('warn', `YOLO import: ${warnings.length} issue(s) in ${path.basename(labelPath)}`, { key: 'yolo.importWarn' });
                 }
-                return { shapes, imageWidth: w, imageHeight: h };
+                // Some warnings (e.g. a class index missing from data.yaml) keep
+                // the line; only lines the parser dropped make a save lossy.
+                const dataLines = txt.split(/\r?\n/).filter(l => l.trim()).length;
+                return {
+                    data: { shapes, imageWidth: w, imageHeight: h },
+                    lossyPath: shapes.length < dataLines ? labelPath : undefined
+                };
             } catch (e) {
                 this._notify('warn', `Failed to read ${path.basename(labelPath)}: ${(e as Error).message}`);
-                return { shapes: [], imageWidth: w, imageHeight: h };
+                return { data: { shapes: [], imageWidth: w, imageHeight: h }, lossyPath: labelPath };
             }
         }
 
         // LabelMe
-        const jsonPath = this._imageUri.fsPath.replace(/\.[^/.]+$/, "") + ".json";
+        const jsonPath = imagePath.replace(/\.[^/.]+$/, "") + ".json";
         if (existsSync(jsonPath)) {
             try {
                 const jsonContent = await fs.readFile(jsonPath, 'utf8');
-                return JSON.parse(jsonContent);
+                return { data: JSON.parse(jsonContent) };
             } catch (e) {
                 this._notify('warn', `Failed to load annotation file: ${(e as Error).message}`,
                     { i18nKey: 'status.loadJsonFailed', i18nParams: { err: (e as Error).message } });
+                return { data: null, lossyPath: jsonPath };
             }
         }
-        return null;
+        return { data: null };
     }
 
     private async _sendImageUpdate() {
         if (path.basename(this._imageUri.fsPath) === '__no_image__') {
+            ++this._imageLoadSeq; // supersede any real-image load still in flight
+            this._lossyLoadPath = undefined;
             this._safePost({
                 command: 'updateImage',
                 imageUrl: '',
@@ -930,27 +950,30 @@ export class LabelMePanel {
             });
             return; // No real image to send or load JSON for
         }
-        const webview = this._panel.webview;
-
-        // Image URI for webview
-        const imageUri = webview.asWebviewUri(this._imageUri);
-
-        // Calculate current image relative path
-        let currentImageRelativePath = '';
-        currentImageRelativePath = path.relative(this._rootPath, this._imageUri.fsPath);
+        // Snapshot the target: this._imageUri can change while we await below
+        // (the user keeps navigating), and every field of the message must
+        // describe the same image.
+        const seq = ++this._imageLoadSeq;
+        const target = this._imageUri;
+        const imageUri = this._panel.webview.asWebviewUri(target);
+        const currentImageRelativePath = path.relative(this._rootPath, target.fsPath);
 
         // Get image file metadata (size, bit depth, DPI)
-        const imageMetadata = await this._getImageMetadata(this._imageUri.fsPath);
+        const imageMetadata = await this._getImageMetadata(target.fsPath);
 
         // Load existing annotation (format-aware: .json for LabelMe, .txt for YOLO)
-        const existingData = await this._loadExistingAnnotation(imageMetadata);
+        const { data: existingData, lossyPath } = await this._loadExistingAnnotation(target.fsPath, imageMetadata);
+
+        // A newer navigation started while we were loading; its own load will post.
+        if (seq !== this._imageLoadSeq) return;
+        this._lossyLoadPath = lossyPath;
 
         // Send update message to webview
         this._safePost({
             command: 'updateImage',
             imageUrl: imageUri.toString(),
-            imageName: path.basename(this._imageUri.fsPath),
-            imagePath: this._imageUri.fsPath,
+            imageName: path.basename(target.fsPath),
+            imagePath: target.fsPath,
             currentImageRelativePath: currentImageRelativePath,
             imageMetadata: imageMetadata,
             existingData: existingData
@@ -1107,7 +1130,9 @@ export class LabelMePanel {
 
         let existingData = null;
         if (!isDummyImage) {
-            existingData = await this._loadExistingAnnotation(imageMetadata || undefined);
+            const loaded = await this._loadExistingAnnotation(this._imageUri.fsPath, imageMetadata || undefined);
+            existingData = loaded.data;
+            this._lossyLoadPath = loaded.lossyPath;
         }
 
         // Persisted settings are re-validated on read so a value stored by an
@@ -1876,6 +1901,20 @@ export class LabelMePanel {
     }
 
     private async saveAnnotation(data: any) {
+        // The shapes belong to the image the webview was showing when it saved.
+        // If the extension has already moved on (navigation in flight), writing
+        // them to this._imageUri would put one image's labels in another's file.
+        if (!data || data.imagePath !== this._imageUri.fsPath) {
+            this._notify(
+                'error',
+                'The image changed before the save was processed; nothing was written. Please save again.',
+                { i18nKey: 'status.saveImageMismatch' }
+            );
+            this._pendingNavigation = undefined;
+            this._pendingNavigationPath = undefined;
+            this._safePost({ command: 'saveFailed' });
+            return;
+        }
         if (this._format === 'yolo') {
             return this._saveYoloAnnotation(data);
         }
@@ -1885,7 +1924,9 @@ export class LabelMePanel {
 
         this._isSaving = true;
         try {
+            await this._backupIfLossy(jsonPath);
             await fs.writeFile(jsonPath, JSON.stringify(labelMeData, null, 2), 'utf8');
+            this._lossyLoadPath = undefined;
             // Keep the search index fresh for the just-saved image without a full rescan.
             this._updateIndexForCurrentImage(data.shapes || []);
             this._notify(
@@ -1915,6 +1956,26 @@ export class LabelMePanel {
         }
     }
 
+    /**
+     * Before overwriting an annotation file the editor could not fully load,
+     * copy it aside (`<file>.bak`, or a timestamped name if that exists). Throws
+     * if the copy fails, which aborts the save rather than lose the original.
+     */
+    private async _backupIfLossy(targetPath: string): Promise<void> {
+        if (this._lossyLoadPath !== targetPath || !existsSync(targetPath)) return;
+        let backupPath = targetPath + '.bak';
+        if (existsSync(backupPath)) {
+            const stamp = new Date().toISOString().replace(/[-:]/g, '').replace(/\..*$/, '').replace('T', '-');
+            backupPath = `${targetPath}.${stamp}.bak`;
+        }
+        await fs.copyFile(targetPath, backupPath);
+        this._notify(
+            'warn',
+            `${path.basename(targetPath)} could not be fully loaded; the original was backed up to ${path.basename(backupPath)}.`,
+            { i18nKey: 'status.backedUpUnreadable', i18nParams: { file: path.basename(targetPath), backup: path.basename(backupPath) } }
+        );
+    }
+
     private async _saveYoloAnnotation(data: any) {
         const labelPath = imageToLabelPath(this._imageUri.fsPath);
         const { text, warnings } = buildYoloTxt(
@@ -1923,7 +1984,9 @@ export class LabelMePanel {
         this._isSaving = true;
         try {
             await fs.mkdir(path.dirname(labelPath), { recursive: true });
+            await this._backupIfLossy(labelPath);
             await fs.writeFile(labelPath, text, 'utf8');
+            this._lossyLoadPath = undefined;
             // Keep the class search index fresh without a full rescan.
             this._updateIndexForCurrentImage(data.shapes || []);
             this._notify('success', 'Annotation saved to ' + path.basename(labelPath),

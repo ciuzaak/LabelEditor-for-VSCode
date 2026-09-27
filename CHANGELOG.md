@@ -15,6 +15,8 @@ Security hardening: data read from disk (file names, annotation JSON) and messag
 ### Fixed
 - **macOS: Cmd shortcuts**: shortcuts listed as `Ctrl+…` (save, undo/redo, select all, merge, rename, …) now also fire with `Cmd` on macOS and are shown as `Cmd+…` in tooltips and the Keyboard Shortcuts settings; recording a shortcut with `Cmd` stores it as the primary modifier.
 - **JPEG dimensions past 64 KB**: image size is now read by walking the JPEG segments instead of scanning only the first 64 KB, so photos with large EXIF/XMP/ICC blocks no longer lose their dimensions (which left YOLO labels unloaded).
+- **Fast navigation could mix images**: holding the next/previous key could show one image with another image's annotations, and a save in that window wrote them to the wrong file. Image loads are now sequenced (a stale load is dropped), and each save carries the image path — a save that no longer matches the current image is refused with a message instead of being written.
+- **Unreadable annotations are backed up before being overwritten**: if an existing annotation file could not be fully loaded (invalid LabelMe JSON, an unreadable file, YOLO lines the parser had to drop, or unknown image dimensions), the first save now copies the original to `<file>.bak` (timestamped if that exists) before writing, instead of silently replacing it.
 
 ## [1.4.2] - 2026-06-18
 

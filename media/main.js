@@ -5634,6 +5634,8 @@ function save() {
     vscode.postMessage({
         command: 'save',
         data: {
+            // Lets the extension reject a save that raced with navigation.
+            imagePath: currentAbsoluteImagePath,
             shapes: shapesToSave,
             imageHeight: img.height,
             imageWidth: img.width
