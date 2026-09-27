@@ -3,7 +3,7 @@ import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { writeFileAtomic, renameWithRetry } from '../src/atomicWrite';
+import { writeFileAtomic, renameWithRetry, removeStaleTemps } from '../src/atomicWrite';
 
 let dir: string;
 beforeEach(async () => { dir = await fs.mkdtemp(path.join(os.tmpdir(), 'labeleditor-atomic-')); });
@@ -93,5 +93,35 @@ describe('renameWithRetry', () => {
             { code: 'ENOENT' }
         );
         assert.equal(calls, 1);
+    });
+});
+
+describe('removeStaleTemps', () => {
+    const age = async (file: string, minutes: number) => {
+        const t = new Date(Date.now() - minutes * 60_000);
+        await fs.utimes(file, t, t);
+    };
+
+    it('removes only old temp files belonging to the target', async () => {
+        const target = path.join(dir, 'a.json');
+        await fs.writeFile(target, '{}');
+        const stale = path.join(dir, '.a.json.1a2b3c4d5e6f.tmp');      // writeFileAtomic
+        const stalePy = path.join(dir, '.a.json.k_9x2mzq.tmp');        // Python mkstemp
+        const fresh = path.join(dir, '.a.json.ffffffffffff.tmp');      // write in progress
+        const other = path.join(dir, '.b.json.1a2b3c4d5e6f.tmp');      // another file's
+        const lookalike = path.join(dir, '.a.json.not a temp.tmp');
+        for (const f of [stale, stalePy, fresh, other, lookalike]) await fs.writeFile(f, 'x');
+        for (const f of [stale, stalePy, other, lookalike]) await age(f, 60);
+
+        const removed = await removeStaleTemps(target);
+
+        assert.deepEqual(removed.sort(), [stale, stalePy].sort());
+        assert.deepEqual((await entries()).sort(), [
+            '.a.json.ffffffffffff.tmp', '.a.json.not a temp.tmp', '.b.json.1a2b3c4d5e6f.tmp', 'a.json',
+        ].sort());
+    });
+
+    it('ignores a missing directory', async () => {
+        assert.deepEqual(await removeStaleTemps(path.join(dir, 'missing', 'a.json')), []);
     });
 });

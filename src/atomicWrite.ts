@@ -30,6 +30,42 @@ export async function renameWithRetry(
     }
 }
 
+// Leftover temp files younger than this may belong to a write in progress
+// (e.g. a batch inference run), so they are left alone.
+const STALE_TEMP_MS = 10 * 60 * 1000;
+
+/**
+ * Remove temp files that an interrupted write left next to `dest`: the
+ * `.<name>.<random>.tmp` files of writeFileAtomic and of the Python tools'
+ * write_text_atomic, once older than STALE_TEMP_MS. Best effort; returns the
+ * paths removed.
+ */
+export async function removeStaleTemps(dest: string, now = Date.now()): Promise<string[]> {
+    const dir = path.dirname(dest);
+    const prefix = `.${path.basename(dest)}.`;
+    let names: string[];
+    try {
+        names = await fs.readdir(dir);
+    } catch {
+        return [];
+    }
+    const removed: string[] = [];
+    for (const name of names) {
+        if (!name.startsWith(prefix) || !name.endsWith('.tmp')) continue;
+        if (!/^[A-Za-z0-9_]+$/.test(name.slice(prefix.length, -'.tmp'.length))) continue;
+        const file = path.join(dir, name);
+        try {
+            const st = await fs.lstat(file);
+            if (!st.isFile() || now - st.mtimeMs < STALE_TEMP_MS) continue;
+            await fs.rm(file);
+            removed.push(file);
+        } catch {
+            // Raced with another cleanup or unreadable: skip.
+        }
+    }
+    return removed;
+}
+
 /**
  * Replace `target` so that readers (and a crash or full disk mid-write) only
  * ever see the old or the new content, never a truncated file: the data goes
@@ -40,6 +76,8 @@ export async function renameWithRetry(
  *   link survives.
  * - An existing file's permission bits are kept.
  * - On failure the temp file is removed and the original is left untouched.
+ * - After success, stale temp files from earlier interrupted writes of the
+ *   same file are cleaned up in the background.
  */
 export async function writeFileAtomic(target: string, data: string | Uint8Array): Promise<void> {
     let dest = target;
@@ -69,4 +107,5 @@ export async function writeFileAtomic(target: string, data: string | Uint8Array)
         await fs.rm(tmp, { force: true }).catch(() => undefined);
         throw err;
     }
+    void removeStaleTemps(dest);
 }
