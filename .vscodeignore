@@ -18,3 +18,4 @@ package-lock.json
 docs/**
 .claude/**
 *.log
+**/__pycache__/**

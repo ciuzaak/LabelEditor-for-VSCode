@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import * as vm from 'node:vm';
 
 // The webview loads media/*.js as classic <script>s that share one global
 // scope, so a top-level declaration in one file silently replaces a
@@ -39,5 +40,26 @@ describe('webview scripts', () => {
             });
         }
         assert.deepEqual(offenders, []);
+    });
+
+    it('parse as valid JavaScript', () => {
+        // The webview scripts are not compiled, so nothing else catches a syntax
+        // error before the panel loads blank.
+        const mediaDir = path.resolve(__dirname, '..', '..', 'media');
+        for (const file of fs.readdirSync(mediaDir).filter(f => f.endsWith('.js'))) {
+            assert.doesNotThrow(
+                () => new vm.Script(fs.readFileSync(path.join(mediaDir, file), 'utf8'), { filename: file }),
+                file
+            );
+        }
+    });
+
+    it('ship the same polygon-clipping build as the pinned npm package', () => {
+        // media/polygon-clipping.umd.min.js is vendored (webviews cannot load
+        // node_modules); `npm run vendor` refreshes it after a version bump.
+        const root = path.resolve(__dirname, '..', '..');
+        const vendored = fs.readFileSync(path.join(root, 'media', 'polygon-clipping.umd.min.js'));
+        const upstream = fs.readFileSync(path.join(root, 'node_modules', 'polygon-clipping', 'dist', 'polygon-clipping.umd.min.js'));
+        assert.ok(vendored.equals(upstream), 'media/polygon-clipping.umd.min.js differs from node_modules — run `npm run vendor`');
     });
 });

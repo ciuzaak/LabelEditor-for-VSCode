@@ -4,6 +4,7 @@
 [![VS Marketplace Installs](https://vsmarketplacebadges.dev/installs/ciuzaak.labeleditor-vscode.png)](https://marketplace.visualstudio.com/items?itemName=ciuzaak.labeleditor-vscode)
 [![Open VSX](https://raster.shields.io/open-vsx/v/ciuzaak/labeleditor-vscode?label=Open%20VSX)](https://open-vsx.org/extension/ciuzaak/labeleditor-vscode)
 [![Open VSX Downloads](https://raster.shields.io/open-vsx/dt/ciuzaak/labeleditor-vscode?label=OVSX%20Downloads)](https://open-vsx.org/extension/ciuzaak/labeleditor-vscode)
+[![CI](https://github.com/ciuzaak/LabelEditor-for-VSCode/actions/workflows/ci.yml/badge.svg)](https://github.com/ciuzaak/LabelEditor-for-VSCode/actions/workflows/ci.yml)
 
 Annotate images directly in VS Code — polygon, rectangle, line, point, and **SAM AI-assisted** masks — and save in the LabelMe JSON format used by most ML pipelines, or work **natively in YOLO format** (open a `data.yaml`, edit, save `.txt`). No extra app, no context switch.
 
@@ -106,9 +107,11 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 
 ### From Source
 1. Clone this repository
-2. Run `npm install`
+2. Run `npm ci` (installs the exact versions pinned in `package-lock.json`)
 3. Run `npm run compile`
 4. Press F5 to open Extension Development Host
+
+Run `npm test` for the unit tests (Node 22+). `media/polygon-clipping.umd.min.js` is a vendored copy of the `polygon-clipping` package; after bumping its version run `npm run vendor` (a test checks the two match).
 
 ## 🚀 Usage
 

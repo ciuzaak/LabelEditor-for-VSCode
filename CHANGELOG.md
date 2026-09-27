@@ -38,6 +38,12 @@ Security hardening: data read from disk (file names, annotation JSON) and messag
 - **Eraser skips hidden shapes**, matching click and box selection, so hiding a class protects it while erasing others.
 - **Switching images**: a SAM click made just before switching no longer adds a prompt to the new image, a stale hover outline no longer appears, and the new image's shapes are no longer briefly drawn over the previous image while it loads.
 
+### Development
+- **CI**: GitHub Actions builds, type-checks and runs the unit tests on Linux, Windows and macOS, byte-compiles the Python scripts, and packages the VSIX as a build artifact.
+- **Reproducible installs**: `package-lock.json` is now committed (it was git-ignored); use `npm ci`.
+- `polygon-clipping` moved to `devDependencies`: the webview uses the vendored `media/polygon-clipping.umd.min.js`, which a test now checks against the pinned package (`npm run vendor` refreshes it).
+- Publishing cleans `out/` first so compiled files of deleted sources can't ship, and `npm test` cleans `out-test/` so deleted tests don't keep running. A test also syntax-checks every webview script.
+
 ## [1.4.2] - 2026-06-18
 
 Labels-panel selection, selection-clearing polish, and advanced search that preserves the image browser's order. Codex-reviewed.
