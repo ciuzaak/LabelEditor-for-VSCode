@@ -62,9 +62,25 @@
         'browser.find':       'Search Image Browser'
     };
 
+    // On macOS a binding's `ctrl` is the platform's primary modifier: it is
+    // satisfied by Cmd or Ctrl and shown as "Cmd", following the usual
+    // Ctrl-on-Windows / Cmd-on-Mac convention. A legacy `meta` flag (recorded
+    // by older versions on Mac) means the same thing there.
+    let isMac = typeof navigator !== 'undefined'
+        && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
+
+    function setMac(value) { isMac = !!value; }
+
     function normKey(k) {
         if (!k) return '';
         return k.length === 1 ? k.toUpperCase() : k;
+    }
+
+    function sameModifiers(a, b) {
+        if (!!a.shift !== !!b.shift) return false;
+        if (!!a.alt   !== !!b.alt)   return false;
+        if (isMac) return !!(a.ctrl || a.meta) === !!(b.ctrl || b.meta);
+        return !!a.ctrl === !!b.ctrl && !!a.meta === !!b.meta;
     }
 
     function matches(event, b) {
@@ -72,11 +88,10 @@
         // any event. This is how Override and Reset propagate a cleared row.
         if (!b || typeof b.key !== 'string') return false;
         if (normKey(event.key) !== normKey(b.key)) return false;
-        if (!!event.ctrlKey  !== !!b.ctrl)  return false;
-        if (!!event.shiftKey !== !!b.shift) return false;
-        if (!!event.altKey   !== !!b.alt)   return false;
-        if (!!event.metaKey  !== !!b.meta)  return false;
-        return true;
+        return sameModifiers(
+            { ctrl: event.ctrlKey, shift: event.shiftKey, alt: event.altKey, meta: event.metaKey },
+            b
+        );
     }
 
     function matchAction(event, bindings, alts) {
@@ -101,10 +116,14 @@
     function display(b) {
         if (!b) return '';
         const parts = [];
-        if (b.ctrl) parts.push('Ctrl');
+        if (isMac) {
+            if (b.ctrl || b.meta) parts.push('Cmd');
+        } else if (b.ctrl) {
+            parts.push('Ctrl');
+        }
         if (b.shift) parts.push('Shift');
-        if (b.alt) parts.push('Alt');
-        if (b.meta) parts.push('Meta');
+        if (b.alt) parts.push(isMac ? 'Option' : 'Alt');
+        if (b.meta && !isMac) parts.push('Meta');
         let k = b.key;
         if (k === ' ') k = 'Space';
         else if (k === 'ArrowUp')    k = '↑';
@@ -119,11 +138,7 @@
         if (a === null && b === null) return true; // both disabled
         if (!a || !b) return false;
         if (typeof a.key !== 'string' || typeof b.key !== 'string') return false;
-        return normKey(a.key) === normKey(b.key)
-            && !!a.ctrl === !!b.ctrl
-            && !!a.shift === !!b.shift
-            && !!a.alt === !!b.alt
-            && !!a.meta === !!b.meta;
+        return normKey(a.key) === normKey(b.key) && sameModifiers(a, b);
     }
 
     function findConflict(actionId, binding, bindings) {
@@ -162,10 +177,14 @@
     function eventToBinding(event) {
         if (isModifierOnly(event)) return null;
         const b = { key: normKey(event.key) };
-        if (event.ctrlKey)  b.ctrl  = true;
+        if (isMac) {
+            if (event.ctrlKey || event.metaKey) b.ctrl = true;
+        } else {
+            if (event.ctrlKey) b.ctrl = true;
+            if (event.metaKey) b.meta = true;
+        }
         if (event.shiftKey) b.shift = true;
         if (event.altKey)   b.alt   = true;
-        if (event.metaKey)  b.meta  = true;
         return b;
     }
 
@@ -173,7 +192,8 @@
         DEFAULTS, ALT_BINDINGS, ACTION_NAMES,
         matches, matchAction, display,
         bindingsEqual, findConflict,
-        mergeWithDefaults, isModifierOnly, eventToBinding
+        mergeWithDefaults, isModifierOnly, eventToBinding,
+        setMac
     };
     if (typeof module !== 'undefined' && module.exports) {
         module.exports = api;

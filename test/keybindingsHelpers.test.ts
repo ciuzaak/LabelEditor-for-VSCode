@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import * as assert from 'node:assert/strict';
 import * as path from 'node:path';
 
@@ -17,7 +17,12 @@ const kb = require(path.resolve(__dirname, '..', '..', 'media', 'keybindings.js'
     mergeWithDefaults(saved: Record<string, any> | null): Record<string, any>;
     isModifierOnly(event: any): boolean;
     eventToBinding(event: any): any;
+    setMac(value: boolean): void;
 };
+
+// Node exposes a global `navigator`, so platform auto-detection would follow
+// the host OS. Pin the non-Mac behaviour; the macOS suite flips it explicitly.
+kb.setMac(false);
 
 function ev(key: string, mods: { ctrl?: boolean; shift?: boolean; alt?: boolean; meta?: boolean } = {}) {
     return {
@@ -149,5 +154,41 @@ describe('keybindings.eventToBinding / isModifierOnly', () => {
     });
     it('eventToBinding returns null for modifier-only presses', () => {
         assert.equal(kb.eventToBinding(ev('Shift')), null);
+    });
+});
+
+describe('keybindings on macOS', () => {
+    before(() => kb.setMac(true));
+    after(() => kb.setMac(false));
+
+    it('matches a Ctrl binding with Cmd or Ctrl', () => {
+        const undo = kb.DEFAULTS['edit.undo'];
+        assert.equal(kb.matches(ev('z', { meta: true }), undo), true);
+        assert.equal(kb.matches(ev('z', { ctrl: true }), undo), true);
+        assert.equal(kb.matches(ev('z'), undo), false);
+        assert.equal(kb.matches(ev('z', { meta: true, shift: true }), undo), false);
+    });
+
+    it('dispatches Cmd+S / Cmd+Shift+Z to the default actions', () => {
+        const bindings = kb.mergeWithDefaults(null);
+        assert.equal(kb.matchAction(ev('s', { meta: true }), bindings, kb.ALT_BINDINGS), 'edit.save');
+        assert.equal(kb.matchAction(ev('Z', { meta: true, shift: true }), bindings, kb.ALT_BINDINGS), 'edit.redo');
+        assert.equal(kb.matchAction(ev('y', { meta: true }), bindings, kb.ALT_BINDINGS), 'edit.redo');
+    });
+
+    it('treats a legacy meta binding like a Ctrl binding', () => {
+        assert.equal(kb.matches(ev('k', { meta: true }), { key: 'K', meta: true }), true);
+        assert.equal(kb.bindingsEqual({ key: 'K', meta: true }, { key: 'K', ctrl: true }), true);
+    });
+
+    it('records Cmd as the primary modifier and displays it as Cmd', () => {
+        assert.deepEqual(kb.eventToBinding(ev('k', { meta: true })), { key: 'K', ctrl: true });
+        assert.equal(kb.display({ key: 'Z', ctrl: true, shift: true }), 'Cmd+Shift+Z');
+        assert.equal(kb.display({ key: 'X', alt: true }), 'Option+X');
+    });
+
+    it('reports a conflict between Cmd+Z and the default Ctrl+Z undo', () => {
+        const bindings = kb.mergeWithDefaults(null);
+        assert.equal(kb.findConflict('edit.save', { key: 'Z', ctrl: true }, bindings), 'edit.undo');
     });
 });

@@ -12,6 +12,9 @@ Security hardening: data read from disk (file names, annotation JSON) and messag
 - **Webview message validation**: `saveGlobalSettings` accepts only known keys with correctly typed values (stored values are re-checked on load), and image navigation only accepts images from the scanned list — a path like `../../x` is ignored.
 - **SAM service access control**: the extension passes a per-install token to the service it launches (`LABELEDITOR_SAM_TOKEN`); `/encode` and `/decode` reject requests without it, CORS no longer allows every origin, and oversized request bodies are refused. A service started by hand without a token only accepts VS Code webview origins. **Restart a SAM service left running from an older version** — it does not accept the new token header.
 
+### Fixed
+- **macOS: Cmd shortcuts**: shortcuts listed as `Ctrl+…` (save, undo/redo, select all, merge, rename, …) now also fire with `Cmd` on macOS and are shown as `Cmd+…` in tooltips and the Keyboard Shortcuts settings; recording a shortcut with `Cmd` stores it as the primary modifier.
+
 ## [1.4.2] - 2026-06-18
 
 Labels-panel selection, selection-clearing polish, and advanced search that preserves the image browser's order. Codex-reviewed.

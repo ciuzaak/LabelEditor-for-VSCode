@@ -89,7 +89,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - 24 preset colors + custom hex, with per-label reset; colors persist globally
 
 ### Workspace & UX
-- **Rebindable keyboard shortcuts** (Settings → Keyboard Shortcuts) with conflict detection and per-row / global reset; `Ctrl+Y` and `Backspace` stay as secondary Redo / Delete
+- **Rebindable keyboard shortcuts** (Settings → Keyboard Shortcuts) with conflict detection and per-row / global reset; `Ctrl+Y` and `Backspace` stay as secondary Redo / Delete. On macOS, `Cmd` works wherever `Ctrl` is listed
 - **Multi-language**: English / 简体中文 (Settings → Language) — strings live in `media/i18n.js`, PRs for more locales welcome
 - **In-webview notifications**: status messages appear inline in the toolbar (severity-colored) instead of stacking as native popups; native dialogs are reserved for Save / Discard / Cancel prompts
 - **Rich hover tooltips** on every control (title, description, and the live keyboard shortcut)
