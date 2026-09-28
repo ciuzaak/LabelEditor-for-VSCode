@@ -150,24 +150,28 @@ function getEffectiveImageList() {
 // Update image count display with current position: (current/total) or (current/filtered/total)
 function updateImageCount() {
     const imageCountEl = document.getElementById('imageCount');
-    if (!imageCountEl) return;
+    const topCountEl = document.getElementById('topImageCount');
+    if (!imageCountEl && !topCountEl) return;
 
     const effectiveImages = getEffectiveImageList();
     const total = typeof workspaceImages !== 'undefined' ? workspaceImages.length : 0;
     const currentIndex = effectiveImages.indexOf(currentImageRelativePathMutable);
 
     const filteredMode = advancedFilterActive || !!searchQuery;
+    let text;
     if (currentIndex === -1) {
         // Position unknown — show count only
-        imageCountEl.textContent = filteredMode
+        text = filteredMode
             ? `(${effectiveImages.length}/${total})`
             : `(${total})`;
     } else {
         const currentPos = currentIndex + 1;
-        imageCountEl.textContent = filteredMode
+        text = filteredMode
             ? `(${currentPos}/${effectiveImages.length}/${total})`
             : `(${currentPos}/${total})`;
     }
+    if (imageCountEl) imageCountEl.textContent = text;
+    if (topCountEl) topCountEl.textContent = text;
 }
 
 // Filter images based on search query

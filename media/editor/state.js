@@ -133,6 +133,14 @@ let boxSelectStart = null;   // {x, y} in image coords
 let boxSelectCurrent = null; // {x, y} in image coords
 let editingShapeIndex = -1;
 let recentLabels = initialGlobalSettings.recentLabels || [];
+let managedLabels = initialGlobalSettings.managedLabels || []; // user-added preset labels (may have 0 instances)
+let activeLabel = null; // default category for new shapes (★ row in the Labels panel)
+
+// --- Crosshair guide state (drawing modes) ---
+let crosshairPos = null;   // {x, y} image coords while the mouse is over the canvas
+let crosshairRafId = null; // rAF throttle for crosshair hover redraws
+let crosshairEnabled = initialGlobalSettings.crosshairEnabled !== false; // More Settings toggle
+const DRAWING_MODES = ['point', 'line', 'polygon', 'rectangle', 'circle'];
 
 // Dirty State
 let isDirty = false;
@@ -181,7 +189,7 @@ let eraserIsDragging = false;      // Whether mouse has moved enough to be a dra
 let eraserDragCurrent = null;      // {x, y} current drag position for rectangle preview during initial drag
 let eraserRectSecondClick = false; // Whether we're waiting for second click after long-press/drag to complete rectangle
 const ERASER_LONG_PRESS_MS = 300;  // Long-press threshold (ms)
-const ERASER_DRAG_THRESHOLD = 5;   // Drag threshold (px in image coords)
+const ERASER_DRAG_THRESHOLD = 5;   // Drag threshold (screen px; divide by zoomLevel when comparing image coords)
 
 // Zoom & Pan variables
 let zoomLevel = 1;
@@ -271,7 +279,12 @@ let lastClickTime = 0;
 let lastClickX = 0;
 let lastClickY = 0;
 const CLICK_THRESHOLD_TIME = 500; // 500ms内视为同一位置的连续点击
-const CLICK_THRESHOLD_DISTANCE = 5; // 5px内视为同一位置
+const CLICK_THRESHOLD_DISTANCE = 5; // 5 screen px内视为同一位置（图像坐标比较时需除以 zoomLevel）
+// True when an Enter keydown only confirms an IME composition (Chinese input
+// selecting a candidate) — text inputs must not treat it as submit.
+function isImeEnter(e) {
+    return e.key === 'Enter' && (e.isComposing || e.keyCode === 229);
+}
 
 // 光标状态追踪 - 避免频繁更新样式
 let currentCursor = 'default';

@@ -61,6 +61,13 @@ canvasWrapper.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return; // Only left click
 
     if (isEditingShape && shapeBeingEdited !== -1) {
+        // Mid-draw or erasing — editing must not intercept; save and exit, and
+        // let the main handler process this click normally
+        if (isDrawing || eraserActive || eraserMouseDownPos) {
+            exitShapeEditMode(true);
+            return;
+        }
+
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
@@ -81,6 +88,18 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         // Check if clicked on the shape itself (for whole shape dragging)
         const clickedIndex = findShapeIndexAt(x, y);
         if (clickedIndex === shapeBeingEdited) {
+            // Repeated click at the same spot over stacked shapes: exit edit
+            // mode and let the main handler cycle through overlapping shapes
+            const overlaps = findAllShapesAt(x, y);
+            const distToLast = Math.hypot(x - lastClickX, y - lastClickY);
+            const isCycling = !e.ctrlKey && !e.metaKey && overlaps.length > 1 &&
+                distToLast < CLICK_THRESHOLD_DISTANCE / zoomLevel &&
+                (Date.now() - lastClickTime) < CLICK_THRESHOLD_TIME;
+            if (isCycling) {
+                exitShapeEditMode(true);
+                return;
+            }
+
             isDraggingWholeShape = true;
             dragStartPoint = { x, y };
             // Don't overwrite the Shift feedback cursor; it'll be cleared on Shift-up.
@@ -92,13 +111,39 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             return;
         }
 
-        // Clicked outside the shape - exit edit mode without saving (like ESC)
-        exitShapeEditMode(false);
-        e.stopPropagation();
-        e.preventDefault();
-        return;
+        // Clicked elsewhere — keep the edits and fall through (no stopPropagation)
+        // so the main handler selects the clicked shape / clears selection /
+        // starts box selection as usual, without needing a second click
+        exitShapeEditMode(true);
     }
 }, true); // Use capture phase to intercept before other handlers
+
+// Double-click a shape to enter vertex edit mode (every tool mode — e.g.
+// right after drawing a box). Manual mousedown detection covers the normal
+// case; this listener is the jitter-tolerant fallback when the browser does
+// fire dblclick.
+canvasWrapper.addEventListener('dblclick', (e) => {
+    if (e.button !== 0) return;
+    if (currentMode === 'sam' || isDrawing || eraserActive || eraserMouseDownPos) return;
+    if (labelModal && labelModal.style.display === 'flex') return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / zoomLevel;
+    const y = (e.clientY - rect.top) / zoomLevel;
+    let idx = findShapeIndexAt(x, y);
+    if (idx === -1) {
+        const m = 10 / zoomLevel;
+        for (const [dx, dy] of [[m, 0], [-m, 0], [0, m], [0, -m], [m, m], [-m, -m], [m, -m], [-m, m]]) {
+            idx = findShapeIndexAt(x + dx, y + dy);
+            if (idx !== -1) break;
+        }
+    }
+    if (idx !== -1) {
+        enterShapeEditMode(idx);
+        renderShapeList();
+        draw();
+    }
+});
 
 document.addEventListener('mousemove', (e) => {
     if (!isEditingShape || shapeBeingEdited === -1) return;
@@ -438,5 +483,12 @@ function isPointNearLinestrip(point, vs, threshold) {
 
 function finishPolygon() {
     isDrawing = false;
-    showLabelModal();
+    if (activeLabel && window.annotationFormat !== 'yolo') {
+        // Default label exists: create the shape immediately without the modal
+        labelInput.value = activeLabel;
+        descriptionInput.value = '';
+        confirmLabel();
+    } else {
+        showLabelModal();
+    }
 }

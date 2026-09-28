@@ -68,6 +68,16 @@ function selectShape(index) {
     }
 }
 
+// Select a shape and show its vertex handles (view mode only — in drawing
+// modes auto-entering edit mode would intercept the next draw click)
+function selectShapeAndEdit(index) {
+    if (index !== -1 && currentMode === 'view') {
+        enterShapeEditMode(index);
+    } else {
+        selectShape(index);
+    }
+}
+
 function toggleShapeSelection(index) {
     // Exit edit mode — multi-selection is incompatible with vertex editing
     if (isEditingShape) exitShapeEditMode(true);
