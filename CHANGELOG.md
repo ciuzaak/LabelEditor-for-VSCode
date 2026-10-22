@@ -2,6 +2,28 @@
 
 All notable changes to the "LabelEditor for VSCode" extension will be documented in this file.
 
+## [1.6.0] - 2026-10-22
+
+Preset categories, explicit default labels, optional drawing guides, and quicker editing from the Instances list, while keeping canvas selection and drawing gestures consistent.
+
+### Added
+- **Preset categories**: use **+** in the Labels panel to create a category before drawing. Double-click a category name or choose **Rename Label** from its right-click menu to rename its instances in the current image; unused presets can be removed.
+- **Explicit default labels**: right-click a category and choose **Set as Default Label**; a **★** marks it. Right-click that category again and choose **Clear Default Label** to clear it. The default lasts for the current editor session and does not change existing annotations.
+- **Optional dialog skipping**: a default label normally only prefills the label dialog. Enable **More Settings → Annotation Behavior → Skip label dialog with a default label** to create manual annotations immediately. This is off by default; without a default the dialog still opens, and **YOLO and SAM always retain confirmation**.
+- **Optional crosshair guide**: adaptive dashed guides follow the cursor in drawing modes and adjust their color to image brightness. Enable them under **More Settings → Annotation Behavior**; they are off by default.
+- **Instances-list double-click editing**: double-click an instance row to edit its vertices, or use the existing right-click **Edit** action. Canvas clicks continue selecting/cycling instances; double-clicking the canvas does not enter editing. Line completion and SAM confirmation retain their existing gestures.
+- **Image position counter** next to the filename in the top toolbar, following the current search/filter order.
+
+### Fixed
+- **IME-safe dialog confirmation**: Enter used to confirm a Chinese input-method candidate no longer also submits the label, color, inference, SAM configuration, or dataset-export dialog.
+- **Editing and selection cooperate**: Ctrl/Cmd-click keeps toggling selection while editing, Shift erasing and Draw Over Instances keep their drawing behavior, and switching the edited instance clears stale drag state.
+- **Stacked instances**: a right-click retains the instance selected by overlap cycling; explicit editing can drag a larger instance even where a smaller instance overlaps it.
+- **Category rename safety**: unknown YOLO classes are registered before shapes are changed; cancelled or stale replies do not rename or create shapes. Existing target color/visibility preferences and source preferences used by other images or undo are preserved. Clicking inside an inline rename field no longer discards typed text.
+- **Guide and interaction consistency**: crosshair colors follow the display's brightness/contrast order and refresh after CLAHE clip-limit changes; click/drag thresholds stay consistent in screen pixels at different zoom levels. Preset, guide, and dialog-skipping preferences are persisted with type validation.
+
+### Contributors
+- Thanks to **@lizongnan** for the annotation workflow contribution in [PR #4](https://github.com/ciuzaak/LabelEditor-for-VSCode/pull/4).
+
 ## [1.5.1] - 2026-09-27
 
 Keyboard access everywhere that was still mouse-only — the image browser, the per-row buttons of the Instances / Labels lists, and the colour picker — plus correct orientation for EXIF-rotated PNGs and cleanup of temp files left by interrupted saves.
