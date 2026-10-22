@@ -638,7 +638,7 @@ export class LabelMePanel {
                         this._cancelIndexBuild();
                         return;
                     case 'yoloConfirmAddClass':
-                        await this._handleYoloConfirmAddClass(message.label);
+                        await this._handleYoloConfirmAddClass(message.label, message.categoryRenameId);
                         return;
                 }
             },
@@ -1144,7 +1144,8 @@ export class LabelMePanel {
             samOutputFormat: setting('samOutputFormat', 'polygon'),
             samAuthToken: this._getSamAuthToken(),
             drawClickThrough: setting('drawClickThrough', false),
-            crosshairEnabled: setting('crosshairEnabled', true),
+            crosshairEnabled: setting('crosshairEnabled', false),
+            skipLabelDialog: setting('skipLabelDialog', false),
             showShapeLabels: setting('showShapeLabels', false),
             samGpuIndex: setting('samGpuIndex', -1),
             onnxGpuIndex: setting('onnxGpuIndex', -1),
@@ -1633,7 +1634,11 @@ export class LabelMePanel {
                         </div>
                         <div class="more-settings-row">
                             <label data-i18n="label.crosshairGuide">Crosshair guide</label>
-                            <button id="crosshairToggleBtn" class="channel-btn" data-tip-id="behavior.crosshair">On</button>
+                            <button id="crosshairToggleBtn" class="channel-btn" data-tip-id="behavior.crosshair">Off</button>
+                        </div>
+                        <div class="more-settings-row">
+                            <label data-i18n="label.skipLabelDialog">Skip label dialog with a default label</label>
+                            <button id="skipLabelDialogToggleBtn" class="channel-btn" data-tip-id="behavior.skipLabelDialog">Off</button>
                         </div>
 
                         <div class="settings-group-header" data-i18n="settings.keyboardShortcuts">Keyboard Shortcuts</div>
@@ -1982,9 +1987,9 @@ export class LabelMePanel {
      * native modal, append it to the yaml on disk (taking the last index), and
      * reply with the updated class list so the webview can finish creating the shape.
      */
-    private async _handleYoloConfirmAddClass(label: string) {
+    private async _handleYoloConfirmAddClass(label: string, categoryRenameId?: number) {
         if (!this._yamlUri || !label) {
-            this._safePost({ command: 'yoloAddClassCancelled', label });
+            this._safePost({ command: 'yoloAddClassCancelled', label, categoryRenameId });
             return;
         }
         if (this._yoloClasses.includes(label)) {
@@ -1992,7 +1997,8 @@ export class LabelMePanel {
                 command: 'yoloClassAdded',
                 classes: this._yoloClasses,
                 index: this._yoloClasses.indexOf(label),
-                label
+                label,
+                categoryRenameId
             });
             return;
         }
@@ -2002,7 +2008,7 @@ export class LabelMePanel {
             'Add'
         );
         if (choice !== 'Add') {
-            this._safePost({ command: 'yoloAddClassCancelled', label });
+            this._safePost({ command: 'yoloAddClassCancelled', label, categoryRenameId });
             return;
         }
         try {
@@ -2010,10 +2016,10 @@ export class LabelMePanel {
             const { text: newText, index } = appendClassToYaml(text, label);
             await writeFileAtomic(this._yamlUri.fsPath, newText);
             this._yoloClasses = [...this._yoloClasses, label];
-            this._safePost({ command: 'yoloClassAdded', classes: this._yoloClasses, index, label });
+            this._safePost({ command: 'yoloClassAdded', classes: this._yoloClasses, index, label, categoryRenameId });
         } catch (err) {
             this._notify('error', 'Failed to update data.yaml: ' + (err as Error).message);
-            this._safePost({ command: 'yoloAddClassCancelled', label });
+            this._safePost({ command: 'yoloAddClassCancelled', label, categoryRenameId });
         }
     }
 

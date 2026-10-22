@@ -67,11 +67,6 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         }
 
         if (!isDrawing) {
-            const now = Date.now();
-
-            // (Same-location detection for selection cycling was replaced by the
-            // candidate-set cycle group in resolveOverlapSelection.)
-
             // 获取点击位置的所有重叠实例
             const overlappingShapes = allowSelectByClick(currentMode, drawClickThrough)
                 ? findAllShapesAt(x, y)
@@ -85,9 +80,6 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     hideCycleBadge();
                 } else {
                     // Smallest-first selection; repeat clicks on the same stack cycle down
-                    const prevSelected = selectedShapeIndex;
-                    const sameSpot = Math.hypot(x - lastClickX, y - lastClickY) < CLICK_THRESHOLD_DISTANCE / zoomLevel &&
-                        (now - lastClickTime) < CLICK_THRESHOLD_TIME;
                     const r = resolveOverlapSelection({
                         ordered: overlappingShapes,
                         prevMembers: overlapCycleState.members,
@@ -97,26 +89,10 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     selectShape(r.targetIndex);
                     overlapCycleState = { members: r.members, pos: r.pos };
                     updateCycleBadge(e.clientX, e.clientY, r.pos, r.members.length);
-                    // View mode: selecting a shape shows its vertex handles right
-                    // away. Other tool modes: a second click on the same single
-                    // shape (manual double-click — the browser's dblclick is
-                    // unreliable because draw() replaces the SVG target between
-                    // clicks) enters edit mode, e.g. to adjust a just-drawn box.
-                    if (currentMode === 'view') {
-                        enterShapeEditMode(r.targetIndex);
-                    } else if (sameSpot && overlappingShapes.length === 1 && r.targetIndex === prevSelected) {
-                        enterShapeEditMode(r.targetIndex);
-                    }
                 }
-
-                // 更新点击位置和时间。时间戳在重绘完成后记录：处理器自身的
-                // 渲染耗时不应侵占双击判定的 500ms 窗口（慢机器/大图时尤其明显）
-                lastClickX = x;
-                lastClickY = y;
 
                 renderShapeList();
                 draw();
-                lastClickTime = Date.now();
                 return;
             } else {
                 // Click on empty area
@@ -183,8 +159,6 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     } else {
                         // Add new point
                         currentPoints.push(clampImageCoords(x, y));
-                        lastClickX = x;
-                        lastClickY = y;
                         lastClickTime = now;
                     }
                 }
@@ -314,7 +288,12 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             const x = mx / zoomLevel;
             const y = my / zoomLevel;
 
-            const clickedShapeIndex = findShapeIndexAt(x, y);
+            // Keep the instance the user cycled to when opening its menu.
+            // Otherwise a right-click on a stack would jump back to the smallest.
+            const candidates = findAllShapesAt(x, y);
+            const clickedShapeIndex = candidates.includes(selectedShapeIndex)
+                ? selectedShapeIndex
+                : (candidates.find(isShapeSelected) ?? candidates[0] ?? -1);
             if (clickedShapeIndex !== -1) {
                 // If right-clicked shape is not already selected, select it (preserving multi-select if applicable)
                 if (!isShapeSelected(clickedShapeIndex)) {

@@ -165,9 +165,6 @@ function confirmLabel() {
     // 持久化到全局状态（同时保存到vscodeState和extension globalState）
     saveGlobalSettings('recentLabels', recentLabels);
 
-    // Remember this label as the active/default for subsequent new shapes
-    activeLabel = label;
-
     const description = descriptionInput.value.trim();
 
     if (isBatchRenaming) {

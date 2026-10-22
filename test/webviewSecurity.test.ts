@@ -73,6 +73,17 @@ describe('isValidGlobalSetting', () => {
 });
 
 describe('sanitizeStoredSetting', () => {
+    it('persists annotation presets and crosshair preferences with their expected types', () => {
+        assert.equal(isValidGlobalSetting('managedLabels', ['cat', 'dog']), true);
+        assert.equal(isValidGlobalSetting('managedLabels', ['cat', 1]), false);
+        assert.equal(isValidGlobalSetting('crosshairEnabled', false), true);
+        assert.equal(isValidGlobalSetting('crosshairEnabled', 'false'), false);
+        assert.equal(isValidGlobalSetting('skipLabelDialog', false), true);
+        assert.equal(isValidGlobalSetting('skipLabelDialog', 'false'), false);
+        assert.deepEqual(sanitizeStoredSetting('managedLabels', ['cat'], []), ['cat']);
+        assert.equal(sanitizeStoredSetting('crosshairEnabled', false, true), false);
+    });
+
     it('returns the stored value when valid, the fallback otherwise', () => {
         assert.equal(sanitizeStoredSetting('theme', 'light', 'auto'), 'light');
         assert.equal(sanitizeStoredSetting('theme', 'x";alert(1);"', 'auto'), 'auto');

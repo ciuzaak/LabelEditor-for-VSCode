@@ -480,7 +480,7 @@ let crosshairColorCache = null;
 function getCrosshairColor(cx, cy) {
     const sig = `${Math.round(cx / CROSSHAIR_BUCKET)}_${Math.round(cy / CROSSHAIR_BUCKET)}_` +
         `${currentImageLoadId}_${img.width}x${img.height}_` +
-        `${brightness}_${contrast}_${selectedChannel}_${claheEnabled}`;
+        `${brightness}_${contrast}_${selectedChannel}_${claheEnabled}_${claheClipLimit}`;
     if (crosshairColorCache && crosshairColorCache.sig === sig) {
         return crosshairColorCache.color;
     }
@@ -500,7 +500,7 @@ function getCrosshairColor(cx, cy) {
         }
         if (n > 0) lum = (sum / n) / 255;
     } catch (e) { /* tainted canvas or read failure: use mid gray */ }
-    lum = Math.min(1, Math.max(0, ((lum - 0.5) * (contrast / 100) + 0.5) * (brightness / 100)));
+    lum = Math.min(1, Math.max(0, ((lum * (brightness / 100) - 0.5) * (contrast / 100) + 0.5)));
     const color = lum > 0.5 ? 'rgba(0, 110, 40, 0.95)' : 'rgba(0, 255, 120, 0.95)';
     crosshairColorCache = { sig, color };
     return color;

@@ -71,6 +71,7 @@ const GLOBAL_SETTING_VALIDATORS: Record<string, Validator> = {
     borderWidth: isFiniteNumber,
     fillOpacity: isFiniteNumber,
     recentLabels: isStringArray,
+    managedLabels: isStringArray,
     theme: oneOf('auto', 'light', 'dark'),
     brightness: isFiniteNumber,
     contrast: isFiniteNumber,
@@ -98,6 +99,8 @@ const GLOBAL_SETTING_VALIDATORS: Record<string, Validator> = {
     samOutputFormat: oneOf('polygon', 'rectangle'),
     samGpuIndex: isIntInRange(-1, 1024),
     drawClickThrough: isBool,
+    crosshairEnabled: isBool,
+    skipLabelDialog: isBool,
     showShapeLabels: isBool,
     svgExportScope: oneOf('current', 'all'),
     keyboardBindings: v => v === null || (isPlainObject(v) && Object.values(v).every(

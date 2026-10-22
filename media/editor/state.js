@@ -135,11 +135,12 @@ let editingShapeIndex = -1;
 let recentLabels = initialGlobalSettings.recentLabels || [];
 let managedLabels = initialGlobalSettings.managedLabels || []; // user-added preset labels (may have 0 instances)
 let activeLabel = null; // default category for new shapes (★ row in the Labels panel)
+let skipLabelDialog = initialGlobalSettings.skipLabelDialog === true;
 
 // --- Crosshair guide state (drawing modes) ---
 let crosshairPos = null;   // {x, y} image coords while the mouse is over the canvas
 let crosshairRafId = null; // rAF throttle for crosshair hover redraws
-let crosshairEnabled = initialGlobalSettings.crosshairEnabled !== false; // More Settings toggle
+let crosshairEnabled = initialGlobalSettings.crosshairEnabled === true; // Opt in through More Settings
 const DRAWING_MODES = ['point', 'line', 'polygon', 'rectangle', 'circle'];
 
 // Dirty State
@@ -274,11 +275,9 @@ let labelMeasureCtx = null;
 // Image metadata for info popup (initialImageMetadata is injected via HTML script tag)
 let currentImageMetadata = (typeof initialImageMetadata !== 'undefined') ? initialImageMetadata : null;
 
-// 点击位置追踪 - 用于支持点击叠加实例时的循环选择
+// Double-click timing for finishing a line; overlap cycling has no time limit.
 let lastClickTime = 0;
-let lastClickX = 0;
-let lastClickY = 0;
-const CLICK_THRESHOLD_TIME = 500; // 500ms内视为同一位置的连续点击
+const CLICK_THRESHOLD_TIME = 500;
 const CLICK_THRESHOLD_DISTANCE = 5; // 5 screen px内视为同一位置（图像坐标比较时需除以 zoomLevel）
 // True when an Enter keydown only confirms an IME composition (Chinese input
 // selecting a candidate) — text inputs must not treat it as submit.

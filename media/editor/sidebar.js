@@ -112,6 +112,7 @@ function renderShapeList() {
         labelSpan.setAttribute('data-tip-id', 'shape.rename');
         // Click label text to rename directly (no right-click menu needed)
         labelSpan.onclick = (e) => {
+            if (e.ctrlKey || e.metaKey || e.shiftKey) return;
             e.stopPropagation();
             hideShapeContextMenu();
             if (selectedShapeIndices.size > 1 && isShapeSelected(index)) {
@@ -154,7 +155,7 @@ function renderShapeList() {
                 // Shift+click: range select
                 selectShapeRange(selectedShapeIndex, index);
             } else {
-                selectShapeAndEdit(index);
+                selectShape(index);
             }
             renderShapeList();
             draw();
@@ -162,6 +163,7 @@ function renderShapeList() {
 
         // Double-click a row to enter vertex edit mode
         li.ondblclick = (e) => {
+            if (e.ctrlKey || e.metaKey || e.shiftKey || e.target.closest('[role="button"]')) return;
             e.preventDefault();
             selectShape(index);
             enterShapeEditMode(index);
@@ -324,6 +326,7 @@ function renderLabelsList() {
     // 按标签名称排序（形状标签 ∪ 用户预设标签）
     const allLabelNames = new Set(labelsStats.keys());
     managedLabels.forEach(l => allLabelNames.add(l));
+    if (activeLabel) allLabelNames.add(activeLabel);
     const sortedLabels = Array.from(allLabelNames).sort();
 
     sortedLabels.forEach(label => {
@@ -346,6 +349,7 @@ function renderLabelsList() {
 
         // Double-click renames the whole category; right-click opens the menu
         li.ondblclick = (e) => {
+            if (e.ctrlKey || e.metaKey || e.shiftKey) return;
             if (e.target !== li && !e.target.classList.contains('label-name')) return;
             e.preventDefault();
             startLabelRename(label);
@@ -457,10 +461,17 @@ const labelContextMenuSetDefault = document.getElementById('labelContextMenuSetD
 const labelContextMenuRename = document.getElementById('labelContextMenuRename');
 const labelContextMenuRemove = document.getElementById('labelContextMenuRemove');
 let labelContextMenuTarget = null;
+let pendingLabelCategoryRename = null;
+let labelCategoryRenameRequestId = 0;
 
 function showLabelContextMenu(clientX, clientY, label) {
     if (!labelContextMenu) return;
     labelContextMenuTarget = label;
+    if (labelContextMenuSetDefault) {
+        const key = label === activeLabel ? 'label.clearDefault' : 'label.setDefault';
+        labelContextMenuSetDefault.setAttribute('data-i18n', key);
+        labelContextMenuSetDefault.textContent = tt(key);
+    }
     if (labelContextMenuRemove) {
         const used = shapes.some(s => s.label === label);
         labelContextMenuRemove.style.display = (!used && managedLabels.includes(label)) ? '' : 'none';
@@ -483,7 +494,7 @@ if (labelContextMenuSetDefault) {
         const label = labelContextMenuTarget;
         hideLabelContextMenu();
         if (label) {
-            activeLabel = label;
+            activeLabel = activeLabel === label ? null : label;
             renderLabelsList();
         }
     };
@@ -524,6 +535,16 @@ function renameLabelCategory(oldName, rawNewName) {
     const newName = (rawNewName || '').trim();
     if (!newName || newName === oldName) { renderLabelsList(); return; }
 
+    // Register a new YOLO class before touching shapes: unknown names are
+    // skipped by the serializer, so renaming first would lose annotations.
+    if (window.annotationFormat === 'yolo' && !window.yoloClasses.includes(newName)) {
+        const requestId = ++labelCategoryRenameRequestId;
+        pendingLabelCategoryRename = { oldName, newName, requestId, imageLoadId: currentImageLoadId };
+        vscode.postMessage({ command: 'yoloConfirmAddClass', label: newName, categoryRenameId: requestId });
+        renderLabelsList();
+        return;
+    }
+
     let shapesChanged = false;
     shapes.forEach(s => {
         if (s.label === oldName) { s.label = newName; shapesChanged = true; }
@@ -533,15 +554,15 @@ function renameLabelCategory(oldName, rawNewName) {
         managedLabels = [...new Set(managedLabels.map(l => l === oldName ? newName : l))];
         saveGlobalSettings('managedLabels', managedLabels);
     }
-    if (customColors.has(oldName)) {
+    // Keep source preferences for other images and undo. An existing target
+    // category keeps its own preferences when categories are merged.
+    if (customColors.has(oldName) && !customColors.has(newName)) {
         customColors.set(newName, customColors.get(oldName));
-        customColors.delete(oldName);
         saveGlobalSettings('customColors', Object.fromEntries(customColors));
         invalidateColorCache();
     }
-    if (labelVisibilityState.has(oldName)) {
+    if (labelVisibilityState.has(oldName) && !labelVisibilityState.has(newName)) {
         labelVisibilityState.set(newName, labelVisibilityState.get(oldName));
-        labelVisibilityState.delete(oldName);
         saveState();
     }
     const ri = recentLabels.indexOf(oldName);
@@ -561,6 +582,21 @@ function renameLabelCategory(oldName, rawNewName) {
     draw();
 }
 
+// Class registration replies must not fall through to confirmLabel(), which
+// creates/edits an individual shape. Ignore replies for replaced requests or
+// for an image the user has already left.
+function resolveLabelCategoryRename(message, accepted) {
+    const pending = pendingLabelCategoryRename;
+    if (!pending || pending.requestId !== message.categoryRenameId) return;
+    pendingLabelCategoryRename = null;
+    if (pending.imageLoadId !== currentImageLoadId) return;
+    if (accepted && message.label === pending.newName && window.yoloClasses.includes(pending.newName)) {
+        renameLabelCategory(pending.oldName, pending.newName);
+    } else {
+        renderLabelsList();
+    }
+}
+
 // Turn a Labels-list row into an inline rename editor (IME-safe Enter commits,
 // Esc cancels, blur commits)
 function startLabelRename(oldLabel) {
@@ -571,6 +607,11 @@ function startLabelRename(oldLabel) {
     hideLabelContextMenu();
     li.innerHTML = '';
     li.classList.add('label-rename-row');
+    // The existing row handlers select and rebuild the list. Keep clicks in
+    // the input available for caret placement and text selection instead.
+    li.onclick = (e) => e.stopPropagation();
+    li.ondblclick = (e) => e.stopPropagation();
+    li.oncontextmenu = null;
     const input = document.createElement('input');
     input.type = 'text';
     input.value = oldLabel;
@@ -614,7 +655,6 @@ if (addLabelBtn && labelsList) {
                 managedLabels.push(name);
                 saveGlobalSettings('managedLabels', managedLabels);
             }
-            activeLabel = name; // newly added label becomes the default
             renderLabelsList();
         };
         const cancel = () => {
