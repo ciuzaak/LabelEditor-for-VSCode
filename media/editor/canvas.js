@@ -67,11 +67,6 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         }
 
         if (!isDrawing) {
-            const now = Date.now();
-
-            // (Same-location detection for selection cycling was replaced by the
-            // candidate-set cycle group in resolveOverlapSelection.)
-
             // 获取点击位置的所有重叠实例
             const overlappingShapes = allowSelectByClick(currentMode, drawClickThrough)
                 ? findAllShapesAt(x, y)
@@ -95,11 +90,6 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     overlapCycleState = { members: r.members, pos: r.pos };
                     updateCycleBadge(e.clientX, e.clientY, r.pos, r.members.length);
                 }
-
-                // 更新点击位置和时间
-                lastClickX = x;
-                lastClickY = y;
-                lastClickTime = now;
 
                 renderShapeList();
                 draw();
@@ -161,7 +151,7 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     // Double-click detection on last point (within threshold distance and time)
                     const now = Date.now();
                     const timeDiff = now - lastClickTime;
-                    const isDoubleClickOnLast = distanceToLast < CLICK_THRESHOLD_DISTANCE && timeDiff < CLICK_THRESHOLD_TIME;
+                    const isDoubleClickOnLast = distanceToLast < CLICK_THRESHOLD_DISTANCE / zoomLevel && timeDiff < CLICK_THRESHOLD_TIME;
 
                     if (isDoubleClickOnLast && currentPoints.length >= 2) {
                         // Double-click on last point - finish the line
@@ -169,8 +159,6 @@ canvasWrapper.addEventListener('mousedown', (e) => {
                     } else {
                         // Add new point
                         currentPoints.push(clampImageCoords(x, y));
-                        lastClickX = x;
-                        lastClickY = y;
                         lastClickTime = now;
                     }
                 }
@@ -300,7 +288,12 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             const x = mx / zoomLevel;
             const y = my / zoomLevel;
 
-            const clickedShapeIndex = findShapeIndexAt(x, y);
+            // Keep the instance the user cycled to when opening its menu.
+            // Otherwise a right-click on a stack would jump back to the smallest.
+            const candidates = findAllShapesAt(x, y);
+            const clickedShapeIndex = candidates.includes(selectedShapeIndex)
+                ? selectedShapeIndex
+                : (candidates.find(isShapeSelected) ?? candidates[0] ?? -1);
             if (clickedShapeIndex !== -1) {
                 // If right-clicked shape is not already selected, select it (preserving multi-select if applicable)
                 if (!isShapeSelected(clickedShapeIndex)) {
@@ -317,6 +310,22 @@ canvasWrapper.addEventListener('mousedown', (e) => {
 });
 
 canvasWrapper.addEventListener('mousemove', (e) => {
+    // --- Update crosshair guide position (rendered in drawSVGAnnotations) ---
+    if (crosshairEnabled) {
+        const chRect = canvas.getBoundingClientRect();
+        crosshairPos = {
+            x: (e.clientX - chRect.left) / zoomLevel,
+            y: (e.clientY - chRect.top) / zoomLevel
+        };
+        if (!isDrawing && !isBoxSelecting && !eraserActive && !eraserMouseDownPos &&
+            DRAWING_MODES.includes(currentMode) && crosshairRafId === null) {
+            crosshairRafId = requestAnimationFrame(() => {
+                crosshairRafId = null;
+                draw();
+            });
+        }
+    }
+
     // --- Eraser mousemove handling ---
     // Phase 1: During initial mousedown-hold (before mouseup determines mode)
     if (eraserMouseDownPos && !eraserActive) {
@@ -325,7 +334,7 @@ canvasWrapper.addEventListener('mousemove', (e) => {
         const y = (e.clientY - rect.top) / zoomLevel;
         const dx = x - eraserMouseDownPos.x;
         const dy = y - eraserMouseDownPos.y;
-        if (Math.sqrt(dx * dx + dy * dy) > ERASER_DRAG_THRESHOLD) {
+        if (Math.sqrt(dx * dx + dy * dy) > ERASER_DRAG_THRESHOLD / zoomLevel) {
             eraserIsDragging = true;
         }
         eraserDragCurrent = { x, y };
@@ -435,6 +444,10 @@ canvasWrapper.addEventListener('mousemove', (e) => {
 });
 
 canvasWrapper.addEventListener('mouseleave', () => {
+    if (crosshairPos) {
+        crosshairPos = null;
+        if (DRAWING_MODES.includes(currentMode)) draw();
+    }
     if (hoveredShapeIndex !== -1) {
         hoveredShapeIndex = -1;
         draw();
@@ -451,7 +464,7 @@ document.addEventListener('mouseup', (e) => {
             const dx = boxSelectCurrent.x - boxSelectStart.x;
             const dy = boxSelectCurrent.y - boxSelectStart.y;
             // Only select if dragged enough (not a simple click)
-            if (Math.sqrt(dx * dx + dy * dy) > CLICK_THRESHOLD_DISTANCE) {
+            if (Math.sqrt(dx * dx + dy * dy) > CLICK_THRESHOLD_DISTANCE / zoomLevel) {
                 const found = findShapesInRect(boxSelectStart.x, boxSelectStart.y, boxSelectCurrent.x, boxSelectCurrent.y);
                 if (e.ctrlKey || e.metaKey) {
                     // Ctrl+drag: add to existing selection

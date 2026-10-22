@@ -63,11 +63,19 @@ window.addEventListener('message', event => {
             break;
         case 'yoloClassAdded':
             window.yoloClasses = message.classes || window.yoloClasses;
+            if (message.categoryRenameId !== undefined) {
+                resolveLabelCategoryRename(message, true);
+                break;
+            }
             // The label is now a valid class — re-run confirm to create/edit the shape.
             labelInput.value = message.label;
             confirmLabel();
             break;
         case 'yoloAddClassCancelled':
+            if (message.categoryRenameId !== undefined) {
+                resolveLabelCategoryRename(message, false);
+                break;
+            }
             // User declined; keep the modal open so they can pick an existing class.
             if (labelModal.style.display === 'flex') labelInput.focus();
             break;

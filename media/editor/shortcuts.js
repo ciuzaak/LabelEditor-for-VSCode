@@ -236,6 +236,10 @@ function handleAction(id, e) {
                 hideShapeContextMenu();
                 return;
             }
+            if (labelContextMenu && labelContextMenu.style.display !== 'none') {
+                hideLabelContextMenu();
+                return;
+            }
             if (isBoxSelecting) {
                 isBoxSelecting = false;
                 boxSelectStart = null;

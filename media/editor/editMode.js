@@ -4,9 +4,11 @@
 
 // --- Unified Edit Mode Functions ---
 function enterShapeEditMode(shapeIndex) {
+    if (!shapes[shapeIndex]) return;
+    if (isEditingShape) exitShapeEditMode(true);
+    selectShape(shapeIndex);
     isEditingShape = true;
     shapeBeingEdited = shapeIndex;
-    selectShape(shapeIndex);
     originalEditPoints = JSON.parse(JSON.stringify(shapes[shapeIndex].points));
     draw();
 }
@@ -61,6 +63,15 @@ canvasWrapper.addEventListener('mousedown', (e) => {
     if (e.button !== 0) return; // Only left click
 
     if (isEditingShape && shapeBeingEdited !== -1) {
+        // Modified clicks belong to selection/eraser handling, even over a
+        // vertex. Let the main handler receive them instead of starting a drag.
+        if (isDrawing || eraserActive || eraserMouseDownPos || e.ctrlKey || e.metaKey ||
+            (drawClickThrough && currentMode !== 'view') ||
+            (e.shiftKey && currentMode !== 'view')) {
+            exitShapeEditMode(true);
+            return;
+        }
+
         const rect = canvas.getBoundingClientRect();
         const mx = e.clientX - rect.left;
         const my = e.clientY - rect.top;
@@ -79,8 +90,8 @@ canvasWrapper.addEventListener('mousedown', (e) => {
         }
 
         // Check if clicked on the shape itself (for whole shape dragging)
-        const clickedIndex = findShapeIndexAt(x, y);
-        if (clickedIndex === shapeBeingEdited) {
+        // Explicit editing owns this instance even if a smaller one overlaps it.
+        if (findAllShapesAt(x, y).includes(shapeBeingEdited)) {
             isDraggingWholeShape = true;
             dragStartPoint = { x, y };
             // Don't overwrite the Shift feedback cursor; it'll be cleared on Shift-up.
@@ -92,11 +103,10 @@ canvasWrapper.addEventListener('mousedown', (e) => {
             return;
         }
 
-        // Clicked outside the shape - exit edit mode without saving (like ESC)
-        exitShapeEditMode(false);
-        e.stopPropagation();
-        e.preventDefault();
-        return;
+        // Clicked elsewhere — keep the edits and fall through (no stopPropagation)
+        // so the main handler selects the clicked shape / clears selection /
+        // starts box selection as usual, without needing a second click
+        exitShapeEditMode(true);
     }
 }, true); // Use capture phase to intercept before other handlers
 
@@ -438,5 +448,12 @@ function isPointNearLinestrip(point, vs, threshold) {
 
 function finishPolygon() {
     isDrawing = false;
-    showLabelModal();
+    if (activeLabel && skipLabelDialog && window.annotationFormat !== 'yolo' && currentMode !== 'sam') {
+        // Explicit fast-annotation opt-in: create with the chosen default label.
+        labelInput.value = activeLabel;
+        descriptionInput.value = '';
+        confirmLabel();
+    } else {
+        showLabelModal();
+    }
 }

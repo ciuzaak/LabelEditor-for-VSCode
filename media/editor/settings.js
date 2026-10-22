@@ -49,6 +49,8 @@ function showMoreSettingsModal() {
     if (settingsMenuDropdown) settingsMenuDropdown.style.display = 'none';
     if (!moreSettingsModal) return;
     updateDrawClickThroughToggleUI();
+    updateCrosshairToggleUI();
+    updateSkipLabelDialogToggleUI();
     updateShowShapeLabelsToggleUI();
     moreSettingsModal.style.display = 'flex';
 }
@@ -269,6 +271,8 @@ if (languageSelect && window.i18n) {
         updateImageInfoPopup();
         updateClaheToggleUI();
         updateDrawClickThroughToggleUI();
+        updateCrosshairToggleUI();
+        updateSkipLabelDialogToggleUI();
         updateShowShapeLabelsToggleUI();
         draw();
         vscode.postMessage({ command: 'saveGlobalSettings', key: 'locale', value: e.target.value });
@@ -634,6 +638,39 @@ if (drawClickThroughToggleBtn) {
         overlapCycleState = { members: [], pos: -1 };
         hideCycleBadge();
         draw();
+    };
+}
+
+// Crosshair guide toggle button
+const crosshairToggleBtn = document.getElementById('crosshairToggleBtn');
+function updateCrosshairToggleUI() {
+    if (!crosshairToggleBtn) return;
+    const tt = (window.i18n && window.i18n.t) ? window.i18n.t.bind(window.i18n) : (k) => k;
+    crosshairToggleBtn.textContent = crosshairEnabled ? tt('toggle.on') : tt('toggle.off');
+    crosshairToggleBtn.classList.toggle('active', crosshairEnabled);
+}
+if (crosshairToggleBtn) {
+    crosshairToggleBtn.onclick = () => {
+        crosshairEnabled = !crosshairEnabled;
+        updateCrosshairToggleUI();
+        saveGlobalSettings('crosshairEnabled', crosshairEnabled);
+        if (!crosshairEnabled) crosshairPos = null;
+        draw();
+    };
+}
+
+// Optional dialog skipping requires a separately selected default category.
+const skipLabelDialogToggleBtn = document.getElementById('skipLabelDialogToggleBtn');
+function updateSkipLabelDialogToggleUI() {
+    if (!skipLabelDialogToggleBtn) return;
+    skipLabelDialogToggleBtn.textContent = tt(skipLabelDialog ? 'toggle.on' : 'toggle.off');
+    skipLabelDialogToggleBtn.classList.toggle('active', skipLabelDialog);
+}
+if (skipLabelDialogToggleBtn) {
+    skipLabelDialogToggleBtn.onclick = () => {
+        skipLabelDialog = !skipLabelDialog;
+        updateSkipLabelDialogToggleUI();
+        saveGlobalSettings('skipLabelDialog', skipLabelDialog);
     };
 }
 

@@ -19,6 +19,7 @@ Annotate images directly in VS Code — polygon, rectangle, line, point, and **S
 - **Undo / redo** with up to 50 history states
 
 ### Selecting & Editing Instances
+- **Explicit vertex editing**: double-click an instance row in the **Instances list**, or choose **Edit** from its right-click menu. Canvas clicks keep selecting/cycling instances; canvas double-click does not enter editing (line completion and SAM confirmation keep their existing gestures)
 - **Smart overlap selection**: clicking overlapping instances picks the **smallest / most specific** one (points and lines before filled shapes); click again in place to **cycle down** the stack with an `N / M` badge; hovering shows a dashed outline of what a click would select
 - **Multi-select**: Ctrl+Click to toggle (canvas or list), Shift+Click to range-select in the list, Ctrl+A for all, drag a box in View mode (Ctrl+Drag to add)
 - **Clear selection**: press Esc, or click empty space — on the canvas, or the blank area of the Labels / Instances panels
@@ -136,12 +137,17 @@ The webview editor lives in `media/editor/*.js`; `build/bundle-webview.js` conca
 
 ### Labels Management
 - Click a **label name** to select all of its instances (Ctrl/Cmd-click to add the group to the current selection)
+- Click **+** to create a preset category without drawing an instance; double-click a category name or use its right-click **Rename Label** action to rename that category in the current image. In YOLO mode, a new name must be registered in `data.yaml` before instances are changed
+- **Set a default label**: right-click a category and choose **Set as Default Label**. A **★** marks the current default; adding a preset or confirming a shape's label does not automatically set it as the default
+- **Clear the default**: right-click the category marked **★** and choose **Clear Default Label**. Setting or clearing a default does not relabel existing annotations; the choice lasts for the current editor session
+- By default, a chosen default only **prefills the label dialog**. To create manual annotations immediately, also enable **More Settings → Annotation Behavior → Skip label dialog with a default label** (off by default). Without a default, the dialog still opens; **YOLO and SAM always retain confirmation**
 - Click the **color indicator** to customize label colors
 - Click **eye icon** to toggle visibility for all instances of a label
 - Click **reset icon** (↻) to restore default color
 
 ### Advanced Options
 - Click the **⚙️ icon** to open advanced settings
+- **Crosshair guide** is optional and off by default; enable it under **More Settings → Annotation Behavior** for adaptive dashed guides while drawing
 - Choose **theme**: Light (☀️), Dark (🌙), or Auto (◐)
 - Adjust **brightness** and **contrast** with sliders (display only, lock to preserve across images)
 - Adjust **border width** and **fill opacity** with sliders

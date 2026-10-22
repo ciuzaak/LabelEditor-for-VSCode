@@ -109,6 +109,24 @@ function renderShapeList() {
         const labelSpan = document.createElement('span');
         labelSpan.className = 'shape-label-text';
         labelSpan.textContent = shape.label;
+        labelSpan.setAttribute('data-tip-id', 'shape.rename');
+        // Click label text to rename directly (no right-click menu needed)
+        labelSpan.onclick = (e) => {
+            if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+            e.stopPropagation();
+            hideShapeContextMenu();
+            if (selectedShapeIndices.size > 1 && isShapeSelected(index)) {
+                showBatchRenameModal();
+            } else {
+                if (!isShapeSelected(index)) {
+                    selectShape(index);
+                    renderShapeList();
+                    draw();
+                }
+                showLabelModal(index);
+            }
+        };
+        labelSpan.ondblclick = (e) => e.stopPropagation();
         li.appendChild(labelSpan);
 
         // Description subtitle (if present)
@@ -139,6 +157,16 @@ function renderShapeList() {
             } else {
                 selectShape(index);
             }
+            renderShapeList();
+            draw();
+        };
+
+        // Double-click a row to enter vertex edit mode
+        li.ondblclick = (e) => {
+            if (e.ctrlKey || e.metaKey || e.shiftKey || e.target.closest('[role="button"]')) return;
+            e.preventDefault();
+            selectShape(index);
+            enterShapeEditMode(index);
             renderShapeList();
             draw();
         };
@@ -295,13 +323,19 @@ function renderLabelsList() {
     const labelsStats = getLabelsStats();
     const fragment = document.createDocumentFragment();
 
-    // 按标签名称排序
-    const sortedLabels = Array.from(labelsStats.keys()).sort();
+    // 按标签名称排序（形状标签 ∪ 用户预设标签）
+    const allLabelNames = new Set(labelsStats.keys());
+    managedLabels.forEach(l => allLabelNames.add(l));
+    if (activeLabel) allLabelNames.add(activeLabel);
+    const sortedLabels = Array.from(allLabelNames).sort();
 
     sortedLabels.forEach(label => {
-        const stat = labelsStats.get(label);
+        const stat = labelsStats.get(label) || { count: 0, allHidden: false };
         const li = document.createElement('li');
         li.dataset.label = label; // lets syncLabelsActiveState() map rows back to labels
+
+        // Mark the default label for new shapes with a star
+        li.classList.toggle('default-label', label === activeLabel);
 
         // Clicking the row selects every shape with this label. Ctrl/Cmd-click
         // unions/toggles the group into the current selection. The per-row
@@ -311,6 +345,19 @@ function renderLabelsList() {
             renderShapeList();
             renderLabelsList();
             draw();
+        };
+
+        // Double-click renames the whole category; right-click opens the menu
+        li.ondblclick = (e) => {
+            if (e.ctrlKey || e.metaKey || e.shiftKey) return;
+            if (e.target !== li && !e.target.classList.contains('label-name')) return;
+            e.preventDefault();
+            startLabelRename(label);
+        };
+        li.oncontextmenu = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showLabelContextMenu(e.clientX, e.clientY, label);
         };
 
         // 颜色指示器
@@ -336,19 +383,22 @@ function renderLabelsList() {
         labelCount.className = 'label-count';
         labelCount.textContent = `(${stat.count})`;
 
-        // 可见性切换按钮
-        const visibilityBtn = document.createElement('span');
-        visibilityBtn.className = 'label-visibility-btn';
-        visibilityBtn.innerHTML = '&#128065;'; // Eye icon
-        visibilityBtn.setAttribute('data-tip-id', 'label.toggleVisible');
-        visibilityBtn.setAttribute('role', 'button');
-        if (stat.allHidden) {
-            visibilityBtn.classList.add('all-hidden');
+        // 可见性切换按钮（预设空标签无实例，不显示）
+        let visibilityBtn = null;
+        if (stat.count > 0) {
+            visibilityBtn = document.createElement('span');
+            visibilityBtn.className = 'label-visibility-btn';
+            visibilityBtn.innerHTML = '&#128065;'; // Eye icon
+            visibilityBtn.setAttribute('data-tip-id', 'label.toggleVisible');
+            visibilityBtn.setAttribute('role', 'button');
+            if (stat.allHidden) {
+                visibilityBtn.classList.add('all-hidden');
+            }
+            visibilityBtn.onclick = (e) => {
+                e.stopPropagation();
+                toggleLabelVisibility(label);
+            };
         }
-        visibilityBtn.onclick = (e) => {
-            e.stopPropagation();
-            toggleLabelVisibility(label);
-        };
 
         // Reset按钮（只在有自定义颜色时显示）
         const resetBtn = document.createElement('span');
@@ -364,11 +414,26 @@ function renderLabelsList() {
             resetLabelColor(label);
         };
 
+        // 删除按钮（仅未被使用的预设标签）
+        let removeBtn = null;
+        if (stat.count === 0 && managedLabels.includes(label)) {
+            removeBtn = document.createElement('span');
+            removeBtn.className = 'label-remove-btn';
+            removeBtn.textContent = '×';
+            removeBtn.title = 'Remove preset label';
+            removeBtn.setAttribute('role', 'button');
+            removeBtn.onclick = (e) => {
+                e.stopPropagation();
+                removeManagedLabel(label);
+            };
+        }
+
         li.appendChild(colorIndicator);
         li.appendChild(labelName);
         li.appendChild(labelCount);
-        li.appendChild(visibilityBtn);
+        if (visibilityBtn) li.appendChild(visibilityBtn);
         li.appendChild(resetBtn);
+        if (removeBtn) li.appendChild(removeBtn);
         fragment.appendChild(li);
     });
 
@@ -387,6 +452,227 @@ function renderLabelsList() {
     }
 
     syncLabelsActiveState();
+}
+
+// --- Labels panel: context menu, category rename, add/remove presets ---
+
+const labelContextMenu = document.getElementById('labelContextMenu');
+const labelContextMenuSetDefault = document.getElementById('labelContextMenuSetDefault');
+const labelContextMenuRename = document.getElementById('labelContextMenuRename');
+const labelContextMenuRemove = document.getElementById('labelContextMenuRemove');
+let labelContextMenuTarget = null;
+let pendingLabelCategoryRename = null;
+let labelCategoryRenameRequestId = 0;
+
+function showLabelContextMenu(clientX, clientY, label) {
+    if (!labelContextMenu) return;
+    labelContextMenuTarget = label;
+    if (labelContextMenuSetDefault) {
+        const key = label === activeLabel ? 'label.clearDefault' : 'label.setDefault';
+        labelContextMenuSetDefault.setAttribute('data-i18n', key);
+        labelContextMenuSetDefault.textContent = tt(key);
+    }
+    if (labelContextMenuRemove) {
+        const used = shapes.some(s => s.label === label);
+        labelContextMenuRemove.style.display = (!used && managedLabels.includes(label)) ? '' : 'none';
+    }
+    labelContextMenu.style.display = 'block';
+    const mw = labelContextMenu.offsetWidth;
+    const mh = labelContextMenu.offsetHeight;
+    labelContextMenu.style.left = Math.min(clientX, window.innerWidth - mw - 4) + 'px';
+    labelContextMenu.style.top = Math.min(clientY, window.innerHeight - mh - 4) + 'px';
+}
+
+function hideLabelContextMenu() {
+    if (labelContextMenu) labelContextMenu.style.display = 'none';
+    labelContextMenuTarget = null;
+}
+
+if (labelContextMenuSetDefault) {
+    labelContextMenuSetDefault.onclick = (e) => {
+        e.stopPropagation();
+        const label = labelContextMenuTarget;
+        hideLabelContextMenu();
+        if (label) {
+            activeLabel = activeLabel === label ? null : label;
+            renderLabelsList();
+        }
+    };
+}
+if (labelContextMenuRename) {
+    labelContextMenuRename.onclick = (e) => {
+        e.stopPropagation();
+        const label = labelContextMenuTarget;
+        hideLabelContextMenu();
+        if (label) startLabelRename(label);
+    };
+}
+if (labelContextMenuRemove) {
+    labelContextMenuRemove.onclick = (e) => {
+        e.stopPropagation();
+        const label = labelContextMenuTarget;
+        hideLabelContextMenu();
+        if (label) removeManagedLabel(label);
+    };
+}
+
+document.addEventListener('mousedown', (e) => {
+    if (labelContextMenu && labelContextMenu.style.display !== 'none' && !labelContextMenu.contains(e.target)) {
+        hideLabelContextMenu();
+    }
+});
+
+function removeManagedLabel(label) {
+    managedLabels = managedLabels.filter(l => l !== label);
+    saveGlobalSettings('managedLabels', managedLabels);
+    if (activeLabel === label) activeLabel = null;
+    renderLabelsList();
+}
+
+// Rename an entire label category: all shapes with the old name, plus the
+// preset list, custom color, visibility state and recent-labels entry.
+function renameLabelCategory(oldName, rawNewName) {
+    const newName = (rawNewName || '').trim();
+    if (!newName || newName === oldName) { renderLabelsList(); return; }
+
+    // Register a new YOLO class before touching shapes: unknown names are
+    // skipped by the serializer, so renaming first would lose annotations.
+    if (window.annotationFormat === 'yolo' && !window.yoloClasses.includes(newName)) {
+        const requestId = ++labelCategoryRenameRequestId;
+        pendingLabelCategoryRename = { oldName, newName, requestId, imageLoadId: currentImageLoadId };
+        vscode.postMessage({ command: 'yoloConfirmAddClass', label: newName, categoryRenameId: requestId });
+        renderLabelsList();
+        return;
+    }
+
+    let shapesChanged = false;
+    shapes.forEach(s => {
+        if (s.label === oldName) { s.label = newName; shapesChanged = true; }
+    });
+
+    if (managedLabels.includes(oldName)) {
+        managedLabels = [...new Set(managedLabels.map(l => l === oldName ? newName : l))];
+        saveGlobalSettings('managedLabels', managedLabels);
+    }
+    // Keep source preferences for other images and undo. An existing target
+    // category keeps its own preferences when categories are merged.
+    if (customColors.has(oldName) && !customColors.has(newName)) {
+        customColors.set(newName, customColors.get(oldName));
+        saveGlobalSettings('customColors', Object.fromEntries(customColors));
+        invalidateColorCache();
+    }
+    if (labelVisibilityState.has(oldName) && !labelVisibilityState.has(newName)) {
+        labelVisibilityState.set(newName, labelVisibilityState.get(oldName));
+        saveState();
+    }
+    const ri = recentLabels.indexOf(oldName);
+    if (ri !== -1) {
+        recentLabels.splice(ri, 1);
+        if (!recentLabels.includes(newName)) recentLabels.unshift(newName);
+        saveGlobalSettings('recentLabels', recentLabels);
+    }
+    if (activeLabel === oldName) activeLabel = newName;
+
+    if (shapesChanged) {
+        markDirty();
+        saveHistory();
+        renderShapeList();
+    }
+    renderLabelsList();
+    draw();
+}
+
+// Class registration replies must not fall through to confirmLabel(), which
+// creates/edits an individual shape. Ignore replies for replaced requests or
+// for an image the user has already left.
+function resolveLabelCategoryRename(message, accepted) {
+    const pending = pendingLabelCategoryRename;
+    if (!pending || pending.requestId !== message.categoryRenameId) return;
+    pendingLabelCategoryRename = null;
+    if (pending.imageLoadId !== currentImageLoadId) return;
+    if (accepted && message.label === pending.newName && window.yoloClasses.includes(pending.newName)) {
+        renameLabelCategory(pending.oldName, pending.newName);
+    } else {
+        renderLabelsList();
+    }
+}
+
+// Turn a Labels-list row into an inline rename editor (IME-safe Enter commits,
+// Esc cancels, blur commits)
+function startLabelRename(oldLabel) {
+    if (!labelsList) return;
+    const li = [...labelsList.querySelectorAll('li')].find(
+        l => l.querySelector('.label-name')?.textContent === oldLabel);
+    if (!li || li.querySelector('input')) return;
+    hideLabelContextMenu();
+    li.innerHTML = '';
+    li.classList.add('label-rename-row');
+    // The existing row handlers select and rebuild the list. Keep clicks in
+    // the input available for caret placement and text selection instead.
+    li.onclick = (e) => e.stopPropagation();
+    li.ondblclick = (e) => e.stopPropagation();
+    li.oncontextmenu = null;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = oldLabel;
+    let done = false;
+    const finish = (commit) => {
+        if (done) return;
+        done = true;
+        if (commit) renameLabelCategory(oldLabel, input.value);
+        else renderLabelsList();
+    };
+    input.onkeydown = (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' && !isImeEnter(e)) finish(true);
+        else if (e.key === 'Escape') finish(false);
+    };
+    input.onblur = () => { if (labelsList.contains(input)) finish(true); };
+    li.appendChild(input);
+    input.focus();
+    input.select();
+}
+
+// "Add label" button: inline input at the top of the Labels list
+const addLabelBtn = document.getElementById('addLabelBtn');
+if (addLabelBtn && labelsList) {
+    addLabelBtn.onclick = () => {
+        if (labelsList.querySelector('.add-label-row')) return; // already open
+        hideLabelContextMenu();
+        const row = document.createElement('li');
+        row.className = 'add-label-row';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.placeholder = tt('label.newPlaceholder');
+        let committed = false;
+        const commit = () => {
+            if (committed) return;
+            committed = true;
+            const name = input.value.trim();
+            row.remove();
+            if (!name) { renderLabelsList(); return; }
+            if (!managedLabels.includes(name) && !shapes.some(s => s.label === name)) {
+                managedLabels.push(name);
+                saveGlobalSettings('managedLabels', managedLabels);
+            }
+            renderLabelsList();
+        };
+        const cancel = () => {
+            if (committed) return;
+            committed = true;
+            row.remove();
+            renderLabelsList();
+        };
+        input.onkeydown = (e) => {
+            e.stopPropagation();
+            if (e.key === 'Enter' && !isImeEnter(e)) commit();
+            else if (e.key === 'Escape') cancel();
+        };
+        input.onblur = () => { if (row.parentNode) commit(); };
+        row.appendChild(input);
+        labelsList.prepend(row);
+        input.focus();
+    };
 }
 
 // Toggle the .active highlight on each Labels row. A label is active when every

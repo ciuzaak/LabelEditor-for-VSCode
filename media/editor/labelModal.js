@@ -27,7 +27,8 @@ function showLabelModal(editIndex = -1) {
         labelInput.value = shapes[editIndex].label;
         descriptionInput.value = shapes[editIndex].description || '';
     } else {
-        labelInput.value = '';
+        // New shape: default to the label selected in the Labels list
+        labelInput.value = activeLabel || '';
         descriptionInput.value = '';
     }
 
@@ -378,7 +379,7 @@ document.querySelectorAll('.modal-close').forEach((btn) => {
 
 // 在labelInput上监听Enter键
 labelInput.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !isImeEnter(e)) {
         e.preventDefault();
         e.stopPropagation();
         confirmLabel();
@@ -395,7 +396,7 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             cancelLabelInput();
-        } else if (e.key === 'Enter' && activeTag !== 'TEXTAREA' && activeTag !== 'BUTTON') {
+        } else if (e.key === 'Enter' && !isImeEnter(e) && activeTag !== 'TEXTAREA' && activeTag !== 'BUTTON') {
             e.preventDefault();
             e.stopPropagation();
             confirmLabel();
@@ -408,7 +409,7 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             hideColorPicker();
-        } else if (e.key === 'Enter' && activeTag !== 'BUTTON') {
+        } else if (e.key === 'Enter' && !isImeEnter(e) && activeTag !== 'BUTTON') {
             e.preventDefault();
             e.stopPropagation();
             confirmColorPicker();
@@ -421,7 +422,7 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             hideOnnxInferModal();
-        } else if (e.key === 'Enter' && activeTag !== 'BUTTON') {
+        } else if (e.key === 'Enter' && !isImeEnter(e) && activeTag !== 'BUTTON') {
             e.preventDefault();
             e.stopPropagation();
             submitOnnxInfer();
@@ -434,7 +435,7 @@ document.addEventListener('keydown', (e) => {
             e.preventDefault();
             e.stopPropagation();
             hideSamConfigModal();
-        } else if (e.key === 'Enter' && activeTag !== 'BUTTON') {
+        } else if (e.key === 'Enter' && !isImeEnter(e) && activeTag !== 'BUTTON') {
             e.preventDefault();
             e.stopPropagation();
             submitSamConfig();
@@ -450,6 +451,7 @@ document.addEventListener('keydown', (e) => {
             e.stopPropagation();
             hideExportDatasetModal();
         } else if (e.key === 'Enter'
+                   && !isImeEnter(e)
                    && activeTag !== 'BUTTON'
                    && document.activeElement !== exportAddClassInput) {
             e.preventDefault();
